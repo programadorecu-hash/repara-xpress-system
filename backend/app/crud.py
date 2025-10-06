@@ -180,3 +180,18 @@ def clock_out(db: Session, user_id: int):
         db.commit()
         db.refresh(active_shift)
     return active_shift
+
+# --- VENTAS PERDIDAS ---
+
+def create_lost_sale_log(db: Session, log: schemas.LostSaleLogCreate, user_id: int):
+    db_log = models.LostSaleLog(
+        **log.model_dump(),
+        user_id=user_id
+    )
+    db.add(db_log)
+    db.commit()
+    db.refresh(db_log)
+    return db_log
+
+def get_lost_sale_logs(db: Session, skip: int = 0, limit: int = 100):
+    return db.query(models.LostSaleLog).order_by(models.LostSaleLog.timestamp.desc()).offset(skip).limit(limit).all()

@@ -114,3 +114,22 @@ class InventoryMovement(InventoryMovementBase):
 # --- SCHEMA PIN
 class UserSetPin(BaseModel):
     pin: str
+
+
+# --- Schemas para Ventas Perdidas ---
+
+class LostSaleLogBase(BaseModel):
+    product_name: str
+    reason: str
+    location_id: int
+
+class LostSaleLogCreate(LostSaleLogBase):
+    pass
+
+class LostSaleLog(LostSaleLogBase):
+    id: int
+    timestamp: datetime
+    user: UserSimple # Usamos la versión simple del usuario
+
+    class Config:
+        from_attributes = True

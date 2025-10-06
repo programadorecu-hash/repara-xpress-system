@@ -46,6 +46,9 @@ class Location(Base):
 
     shifts = relationship("Shift", back_populates="location")
 
+    # --- VENTAS PERDIDAS AQUÍ MIJIN
+    lost_sale_logs = relationship("LostSaleLog", back_populates="location")
+
 
 # --- CLASE STOCK
 
@@ -82,6 +85,8 @@ class User(Base):
 
     shifts = relationship("Shift", back_populates="user")
 
+    lost_sale_logs = relationship("LostSaleLog", back_populates="user")
+
 # --- CLASE NUEVA PARA EL KARDEX ---
 class InventoryMovement(Base):
     __tablename__ = "inventory_movements"
@@ -114,3 +119,20 @@ class Shift(Base):
 
     user = relationship("User", back_populates="shifts")
     location = relationship("Location", back_populates="shifts")
+
+    # --- CLASE NUEVA PARA VENTAS PERDIDAS ---
+class LostSaleLog(Base):
+    __tablename__ = "lost_sale_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    timestamp = Column(DateTime(timezone=True), server_default=func.now())
+    
+    # Lo guardamos como texto simple porque puede ser un producto que no tenemos en el catálogo
+    product_name = Column(String, nullable=False)
+    reason = Column(String, nullable=False) # Ej: "No lo tenemos", "No le gustó el color"
+
+    location_id = Column(Integer, ForeignKey("locations.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+
+    location = relationship("Location", back_populates="lost_sale_logs")
+    user = relationship("User", back_populates="lost_sale_logs")
