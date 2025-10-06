@@ -1,0 +1,10 @@
+fastapi
+uvicorn[standard]
+SQLAlchemy
+psycopg2-binary
+
+# LIBRERÍAS SECU JAJAJA TENGO QUE COMENTARLAS PARA QUE NO SE ME OLVIDEN xD
+passlib==1.7.4
+bcrypt==4.1.2
+python-jose[cryptography]
+python-multipart

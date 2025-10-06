@@ -1,0 +1,30 @@
+services:
+  api:
+    build: ./backend
+    container_name: repara_xpress_api
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend/app:/code/app
+    environment:
+      - DATABASE_URL=postgresql://repara_user:repara_password@db/repara_xpress_inventory_db
+    depends_on:
+      db: # <-- CAMBIO AQUÍ
+        condition: service_healthy # Espera a que la BD esté "sana"
+
+  db:
+    image: postgres:15-alpine
+    container_name: repara_xpress_db
+    volumes:
+      - ./postgres_data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_USER=repara_user
+      - POSTGRES_PASSWORD=repara_password
+      - POSTGRES_DB=repara_xpress_inventory_db
+    healthcheck: # <-- SECCIÓN NUEVA
+      test: ["CMD-SHELL", "pg_isready -U repara_user -d repara_xpress_inventory_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    ports:
+      - "5432:5432"

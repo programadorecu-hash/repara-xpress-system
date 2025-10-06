@@ -1,0 +1,13 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Docker
+postgres_data/
+
+# Virtual environment
+.venv/
+venv/
+ENV/
+env/
