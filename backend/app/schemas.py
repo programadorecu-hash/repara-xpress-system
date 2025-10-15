@@ -1,11 +1,25 @@
 # ME MUERO DE SUEÑO!!!! ES UN MARTES 3AM POR DEEEOOSSS!!! :(
 
 
-from pydantic import BaseModel
-from typing import List
+from pydantic import BaseModel, computed_field
+from typing import List, Dict, Any
 from datetime import datetime
 
 # --- Schemas Base ---
+
+# --- NUEVOS SCHEMAS PARA CATEGORÍAS ---
+class CategoryBase(BaseModel):
+    name: str
+    description: str | None = None
+
+class CategoryCreate(CategoryBase):
+    pass
+
+class Category(CategoryBase):
+    id: int
+    class Config:
+        from_attributes = True
+
 # (Estos no cambian)
 class ProductBase(BaseModel):
     sku: str
@@ -15,6 +29,7 @@ class ProductBase(BaseModel):
     price_2: float
     price_3: float
     is_active: bool = True
+    category_id: int | None = None
 
 class LocationBase(BaseModel):
     name: str
@@ -36,6 +51,27 @@ class UserBase(BaseModel):
     email: str
     role: str
 
+class LostSaleLogBase(BaseModel):
+    product_name: str
+    reason: str
+    location_id: int
+    
+class WorkOrderBase(BaseModel):
+    customer_name: str
+    customer_id_card: str
+    customer_phone: str
+    customer_address: str | None = None
+    device_type: str
+    device_brand: str
+    device_model: str
+    device_serial: str | None = None
+    device_password: str | None = None
+    device_initial_state: Dict[str, Any] | None = None
+    device_physical_state: Dict[str, Any] | None = None
+    reported_issue: str
+    estimated_cost: float
+    deposit_amount: float = 0
+
 # --- Schemas para Creación ---
 # (Estos no cambian)
 class ProductCreate(ProductBase):
@@ -56,11 +92,20 @@ class ShiftCreate(ShiftBase):
     location_id: int
 class UserCreate(UserBase):
     password: str
+class UserSetPin(BaseModel):
+    pin: str
+class LostSaleLogCreate(LostSaleLogBase):
+    pass
+class WorkOrderCreate(WorkOrderBase):
+    pin: str
+class WorkOrderUpdate(BaseModel):
+    status: str | None = None
+    final_cost: float | None = None
 
-# --- Schemas para Lectura (AQUÍ ESTÁ LA CORRECCIÓN) ---
-
+# --- Schemas para Lectura ---
 class Product(ProductBase):
     id: int
+    category: Category | None = None
     class Config:
         from_attributes = True
 
@@ -84,21 +129,25 @@ class Shift(ShiftBase):
     id: int
     start_time: datetime
     end_time: datetime | None = None
-    user: UserSimple         # <-- Usamos la versión simple para evitar el bucle
-    location: LocationSimple # <-- Usamos la versión simple para evitar el bucle
+    user: UserSimple
+    location: LocationSimple
     class Config:
         from_attributes = True
 
-class Location(LocationSimple): # Heredamos de la versión simple
-    shifts: List[Shift] = []    # Y le añadimos la lista de turnos
+class Location(LocationSimple):
+    shifts: List[Shift] = []
+    class Config:
+        from_attributes = True
 
-class User(UserSimple):         # Heredamos de la versión simple
-    shifts: List[Shift] = []    # Y le añadimos la lista de turnos
+class User(UserSimple):
+    shifts: List[Shift] = []
+    class Config:
+        from_attributes = True
 
 class Stock(StockBase):
     id: int
     product: Product
-    location: LocationSimple # Usamos la simple para seguridad
+    location: LocationSimple
     class Config:
         from_attributes = True
 
@@ -106,30 +155,89 @@ class InventoryMovement(InventoryMovementBase):
     id: int
     timestamp: datetime
     product: Product
-    location: LocationSimple # Usamos la simple
-    user: UserSimple         # Usamos la simple
+    location: LocationSimple
+    user: UserSimple
     class Config:
         from_attributes = True
-
-# --- SCHEMA PIN
-class UserSetPin(BaseModel):
-    pin: str
-
-
-# --- Schemas para Ventas Perdidas ---
-
-class LostSaleLogBase(BaseModel):
-    product_name: str
-    reason: str
-    location_id: int
-
-class LostSaleLogCreate(LostSaleLogBase):
-    pass
-
+        
 class LostSaleLog(LostSaleLogBase):
     id: int
     timestamp: datetime
-    user: UserSimple # Usamos la versión simple del usuario
+    user: UserSimple
+    class Config:
+        from_attributes = True
+        
+class WorkOrder(WorkOrderBase):
+    id: int
+    created_at: datetime
+    status: str
+    final_cost: float | None = None
+    user: UserSimple
+    location: LocationSimple
+
+    @computed_field
+    @property
+    def work_order_number(self) -> str:
+        # Formatea el 'id' para que tenga 5 dígitos, rellenando con ceros a la izquierda
+        return f"{self.id:05d}"
+
+    class Config:
+        from_attributes = True
+
+# --- Reconstrucción de Modelos ---
+Location.model_rebuild()
+User.model_rebuild()
+
+# --- Schemas para Ventas ---
+
+class SaleItemBase(BaseModel):
+    product_id: int | None = None # Es opcional, puede ser un servicio
+    description: str
+    quantity: int
+    unit_price: float
+
+class SaleItemCreate(SaleItemBase):
+    pass
+
+class SaleBase(BaseModel):
+    payment_method: str
+    work_order_id: int | None = None
+    items: List[SaleItemCreate]
+
+class SaleCreate(SaleBase):
+    pin: str # ¡Para la seguridad!
+
+class SaleItem(SaleItemBase):
+    id: int
+    line_total: float
+    
+    class Config:
+        from_attributes = True
+
+class Sale(SaleBase):
+    id: int
+    created_at: datetime
+    total_amount: float
+    
+    user: UserSimple
+    location: LocationSimple
+    items: List[SaleItem]
+
+    class Config:
+        from_attributes = True
+
+# --- Schemas para Proveedores ---
+class SupplierBase(BaseModel):
+    name: str
+    contact_person: str | None = None
+    email: str | None = None
+    phone: str | None = None
+
+class SupplierCreate(SupplierBase):
+    pass
+
+class Supplier(SupplierBase):
+    id: int
 
     class Config:
         from_attributes = True

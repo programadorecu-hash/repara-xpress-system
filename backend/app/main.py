@@ -4,9 +4,9 @@ from typing import List
 from sqlalchemy.orm import Session
 
 from . import models, schemas, crud, security
-from .database import SessionLocal, engine, get_db
+from .database import get_db
 
-models.Base.metadata.create_all(bind=engine)
+# models.Base.metadata.create_all(bind=engine) # Jubilamos al constructor antiguo
 
 app = FastAPI(title="API de Inventarios de Repara Xpress")
 
@@ -48,11 +48,7 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
 # ===================================================================
 
 @app.post("/products/", response_model=schemas.Product, status_code=status.HTTP_201_CREATED)
-def create_new_product(
-    product: schemas.ProductCreate, 
-    db: Session = Depends(get_db),
-    _role_check: None = Depends(security.require_role(required_roles=["admin", "inventory_manager"])) # <-- PROTEGIDO
-):
+def create_new_product(product: schemas.ProductCreate, db: Session = Depends(get_db), _role_check: None = Depends(security.require_role(required_roles=["admin", "inventory_manager"]))):
     return crud.create_product(db=db, product=product)
 
 @app.get("/products/", response_model=List[schemas.Product])
@@ -68,23 +64,14 @@ def read_product(product_id: int, db: Session = Depends(get_db)):
     return db_product
 
 @app.put("/products/{product_id}", response_model=schemas.Product)
-def update_product_details(
-    product_id: int, 
-    product: schemas.ProductCreate, 
-    db: Session = Depends(get_db),
-    _role_check: None = Depends(security.require_role(required_roles=["admin", "inventory_manager"])) # <-- PROTEGIDO
-):
+def update_product_details(product_id: int, product: schemas.ProductCreate, db: Session = Depends(get_db), _role_check: None = Depends(security.require_role(required_roles=["admin", "inventory_manager"]))):
     db_product = crud.update_product(db, product_id=product_id, product=product)
     if db_product is None:
         raise HTTPException(status_code=404, detail="Producto no encontrado para actualizar")
     return db_product
 
 @app.delete("/products/{product_id}", response_model=schemas.Product)
-def delete_product_by_id(
-    product_id: int, 
-    db: Session = Depends(get_db),
-    _role_check: None = Depends(security.require_role(required_roles=["admin"])) # <-- PROTEGIDO
-):
+def delete_product_by_id(product_id: int, db: Session = Depends(get_db), _role_check: None = Depends(security.require_role(required_roles=["admin"]))):
     db_product = crud.delete_product(db, product_id=product_id)
     if db_product is None:
         raise HTTPException(status_code=404, detail="Producto no encontrado para eliminar")
@@ -95,11 +82,7 @@ def delete_product_by_id(
 # ===================================================================
 
 @app.post("/locations/", response_model=schemas.Location, status_code=status.HTTP_201_CREATED)
-def create_new_location(
-    location: schemas.LocationCreate, 
-    db: Session = Depends(get_db),
-    _role_check: None = Depends(security.require_role(required_roles=["admin"])) # <-- PROTEGIDO
-):
+def create_new_location(location: schemas.LocationCreate, db: Session = Depends(get_db), _role_check: None = Depends(security.require_role(required_roles=["admin"]))):
     return crud.create_location(db=db, location=location)
 
 @app.get("/locations/", response_model=List[schemas.Location])
@@ -108,11 +91,7 @@ def read_locations(skip: int = 0, limit: int = 100, db: Session = Depends(get_db
     return locations
 
 @app.delete("/locations/{location_id}", response_model=schemas.Location)
-def delete_location_by_id(
-    location_id: int, 
-    db: Session = Depends(get_db),
-    _role_check: None = Depends(security.require_role(required_roles=["admin"])) # <-- PROTEGIDO
-):
+def delete_location_by_id(location_id: int, db: Session = Depends(get_db), _role_check: None = Depends(security.require_role(required_roles=["admin"]))):
     db_location = crud.delete_location(db, location_id=location_id)
     if db_location is None:
         raise HTTPException(status_code=404, detail="Ubicación no encontrada para eliminar")
@@ -126,12 +105,7 @@ def read_location(location_id: int, db: Session = Depends(get_db)):
     return db_location
 
 @app.put("/locations/{location_id}", response_model=schemas.Location)
-def update_location_details(
-    location_id: int, 
-    location: schemas.LocationCreate, 
-    db: Session = Depends(get_db),
-    _role_check: None = Depends(security.require_role(required_roles=["admin", "inventory_manager"])) # <-- PROTEGIDO
-):
+def update_location_details(location_id: int, location: schemas.LocationCreate, db: Session = Depends(get_db), _role_check: None = Depends(security.require_role(required_roles=["admin", "inventory_manager"]))):
     db_location = crud.update_location(db, location_id=location_id, location=location)
     if db_location is None:
         raise HTTPException(status_code=404, detail="Ubicación no encontrada para actualizar")
@@ -141,21 +115,17 @@ def update_location_details(
 # --- ENDPOINTS PARA STOCK ---
 # ===================================================================
 
-@app.post("/stock/", response_model=schemas.Stock)
-def set_product_stock(
-    stock: schemas.StockCreate, 
-    db: Session = Depends(get_db),
-    _role_check: None = Depends(security.require_role(required_roles=["admin"])) # <-- PROTEGIDO (Herramienta de Admin)
-):
+@app.post("/stock/", response_model=schemas.Stock, status_code=status.HTTP_201_CREATED)
+def set_product_stock(stock: schemas.StockCreate, db: Session = Depends(get_db), _role_check: None = Depends(security.require_role(required_roles=["admin"]))):
     return crud.set_stock(db=db, stock=stock)
 
 @app.get("/locations/{location_id}/stock", response_model=List[schemas.Stock])
-def read_stock_for_location(location_id: int, db: Session = Depends(get_db), current_user: schemas.User = Depends(security.get_current_user)): # <-- PROTEGIDO (Login Básico)
+def read_stock_for_location(location_id: int, db: Session = Depends(get_db), current_user: schemas.User = Depends(security.get_current_user)):
     stock = crud.get_stock_by_location(db, location_id=location_id)
     return stock
 
 @app.get("/products/{product_id}/stock", response_model=List[schemas.Stock])
-def read_stock_for_product(product_id: int, db: Session = Depends(get_db), current_user: schemas.User = Depends(security.get_current_user)): # <-- PROTEGIDO (Login Básico)
+def read_stock_for_product(product_id: int, db: Session = Depends(get_db), current_user: schemas.User = Depends(security.get_current_user)):
     stock = crud.get_stock_by_product(db, product_id=product_id)
     return stock
 
@@ -164,21 +134,13 @@ def read_stock_for_product(product_id: int, db: Session = Depends(get_db), curre
 # ===================================================================
 
 @app.post("/movements/", response_model=schemas.InventoryMovement, status_code=status.HTTP_201_CREATED)
-def create_movement(
-    movement: schemas.InventoryMovementCreate, 
-    db: Session = Depends(get_db),
-    current_user: schemas.User = Depends(security.get_current_user)
-):
+def create_movement(movement: schemas.InventoryMovementCreate, db: Session = Depends(get_db), current_user: schemas.User = Depends(security.get_current_user)):
     if not current_user.hashed_pin or not security.verify_password(movement.pin, current_user.hashed_pin):
         raise HTTPException(status_code=403, detail="PIN incorrecto o no establecido")
     return crud.create_inventory_movement(db=db, movement=movement, user_id=current_user.id)
 
 @app.get("/products/{product_id}/movements/", response_model=List[schemas.InventoryMovement])
-def read_movements_for_product(
-    product_id: int, 
-    db: Session = Depends(get_db),
-    _role_check: None = Depends(security.require_role(required_roles=["admin", "inventory_manager"])) # <-- PROTEGIDO
-):
+def read_movements_for_product(product_id: int, db: Session = Depends(get_db), _role_check: None = Depends(security.require_role(required_roles=["admin", "inventory_manager"]))):
     movements = crud.get_movements_by_product(db, product_id=product_id)
     return movements
 
@@ -187,21 +149,14 @@ def read_movements_for_product(
 # ===================================================================
 
 @app.post("/shifts/clock-in", response_model=schemas.Shift, status_code=status.HTTP_201_CREATED)
-def clock_in_user(
-    shift_in: schemas.ShiftClockIn,
-    db: Session = Depends(get_db),
-    current_user: schemas.User = Depends(security.get_current_user)
-):
+def clock_in_user(shift_in: schemas.ShiftClockIn, db: Session = Depends(get_db), current_user: schemas.User = Depends(security.get_current_user)):
     existing_shift = crud.get_active_shift_for_user(db, user_id=current_user.id)
     if existing_shift:
         raise HTTPException(status_code=400, detail="El usuario ya tiene un turno activo.")
     return crud.clock_in(db=db, user_id=current_user.id, location_id=shift_in.location_id)
 
 @app.post("/shifts/clock-out", response_model=schemas.Shift)
-def clock_out_user(
-    db: Session = Depends(get_db),
-    current_user: schemas.User = Depends(security.get_current_user)
-):
+def clock_out_user(db: Session = Depends(get_db), current_user: schemas.User = Depends(security.get_current_user)):
     shift = crud.clock_out(db=db, user_id=current_user.id)
     if not shift:
         raise HTTPException(status_code=404, detail="No se encontró un turno activo para cerrar.")
@@ -212,19 +167,137 @@ def clock_out_user(
 # ===================================================================
 
 @app.post("/lost-sales/", response_model=schemas.LostSaleLog, status_code=status.HTTP_201_CREATED)
-def create_new_lost_sale_log(
-    log: schemas.LostSaleLogCreate,
-    db: Session = Depends(get_db), # <-- CORREGIDO EL TIPO 'get_d b'
-    current_user: schemas.User = Depends(security.get_current_user)
-):
+def create_new_lost_sale_log(log: schemas.LostSaleLogCreate, db: Session = Depends(get_db), current_user: schemas.User = Depends(security.get_current_user)):
     return crud.create_lost_sale_log(db=db, log=log, user_id=current_user.id)
 
 @app.get("/lost-sales/", response_model=List[schemas.LostSaleLog])
-def read_lost_sale_logs(
-    skip: int = 0,
-    limit: int = 100,
+def read_lost_sale_logs(skip: int = 0, limit: int = 100, db: Session = Depends(get_db), _role_check: None = Depends(security.require_role(required_roles=["admin", "inventory_manager"]))):
+    logs = crud.get_lost_sale_logs(db, skip=skip, limit=limit)
+    return logs
+
+# ===================================================================
+# --- ENDPOINTS PARA ÓRDENES DE TRABAJO ---
+# ===================================================================
+
+@app.post("/work-orders/", response_model=schemas.WorkOrder, status_code=status.HTTP_201_CREATED)
+def create_new_work_order(work_order: schemas.WorkOrderCreate, db: Session = Depends(get_db), current_user: schemas.User = Depends(security.get_current_user)):
+    if not current_user.hashed_pin or not security.verify_password(work_order.pin, current_user.hashed_pin):
+        raise HTTPException(status_code=403, detail="PIN incorrecto o no establecido")
+    active_shift = crud.get_active_shift_for_user(db, user_id=current_user.id)
+    if not active_shift:
+        raise HTTPException(status_code=400, detail="El usuario debe tener un turno activo para crear una orden de trabajo.")
+    return crud.create_work_order(db=db, work_order=work_order, user_id=current_user.id, location_id=active_shift.location_id)
+
+@app.patch("/work-orders/{work_order_id}", response_model=schemas.WorkOrder)
+def update_work_order_status(work_order_id: int, work_order_update: schemas.WorkOrderUpdate, db: Session = Depends(get_db), _role_check: None = Depends(security.require_role(required_roles=["admin", "inventory_manager", "warehouse_operator"]))):
+    updated_work_order = crud.update_work_order(db, work_order_id=work_order_id, work_order_update=work_order_update)
+    if not updated_work_order:
+        raise HTTPException(status_code=404, detail="Orden de trabajo no encontrada")
+    return updated_work_order
+
+@app.get("/work-orders/", response_model=List[schemas.WorkOrder])
+def read_work_orders(skip: int = 0, limit: int = 100, db: Session = Depends(get_db), _role_check: None = Depends(security.require_role(required_roles=["admin", "inventory_manager"]))):
+    work_orders = crud.get_work_orders(db, skip=skip, limit=limit)
+    return work_orders
+
+@app.get("/work-orders/{work_order_id}", response_model=schemas.WorkOrder)
+def read_single_work_order(work_order_id: int, db: Session = Depends(get_db), current_user: schemas.User = Depends(security.get_current_user)):
+    db_work_order = crud.get_work_order(db, work_order_id=work_order_id)
+    if db_work_order is None:
+        raise HTTPException(status_code=404, detail="Orden de trabajo no encontrada")
+    return db_work_order
+
+# ===================================================================
+# --- ENDPOINTS PARA VENTAS ---
+# ===================================================================
+
+@app.post("/sales/", response_model=schemas.Sale, status_code=status.HTTP_201_CREATED)
+def create_new_sale(
+    sale: schemas.SaleCreate,
+    db: Session = Depends(get_db),
+    current_user: schemas.User = Depends(security.get_current_user)
+):
+    # 1. Verificación del PIN (la seguridad es lo primero)
+    if not current_user.hashed_pin or not security.verify_password(sale.pin, current_user.hashed_pin):
+        raise HTTPException(status_code=403, detail="PIN incorrecto o no establecido")
+
+    # 2. Verificación del turno activo
+    active_shift = crud.get_active_shift_for_user(db, user_id=current_user.id)
+    if not active_shift:
+        raise HTTPException(status_code=400, detail="El usuario debe tener un turno activo para crear una venta.")
+    
+    # 3. Llamar a la receta maestra
+    return crud.create_sale(
+        db=db, 
+        sale=sale, 
+        user_id=current_user.id,
+        location_id=active_shift.location_id
+    )
+
+# ===================================================================
+# --- ENDPOINTS PARA CATEGORÍAS ---
+# ===================================================================
+
+@app.post("/categories/", response_model=schemas.Category, status_code=status.HTTP_201_CREATED)
+def create_new_category(
+    category: schemas.CategoryCreate,
     db: Session = Depends(get_db),
     _role_check: None = Depends(security.require_role(required_roles=["admin", "inventory_manager"]))
 ):
-    logs = crud.get_lost_sale_logs(db, skip=skip, limit=limit)
-    return logs
+    return crud.create_category(db=db, category=category)
+
+@app.get("/categories/", response_model=List[schemas.Category])
+def read_categories(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+    categories = crud.get_categories(db, skip=skip, limit=limit)
+    return categories
+
+# ===================================================================
+# --- ENDPOINTS PARA PROVEEDORES ---
+# ===================================================================
+
+@app.post("/suppliers/", response_model=schemas.Supplier, status_code=status.HTTP_201_CREATED)
+def create_new_supplier(
+    supplier: schemas.SupplierCreate,
+    db: Session = Depends(get_db),
+    _role_check: None = Depends(security.require_role(required_roles=["admin", "inventory_manager"]))
+):
+    return crud.create_supplier(db=db, supplier=supplier)
+
+@app.get("/suppliers/", response_model=List[schemas.Supplier])
+def read_suppliers(
+    skip: int = 0, limit: int = 100, db: Session = Depends(get_db),
+    _role_check: None = Depends(security.require_role(required_roles=["admin", "inventory_manager"]))
+):
+    suppliers = crud.get_suppliers(db, skip=skip, limit=limit)
+    return suppliers
+
+@app.get("/suppliers/{supplier_id}", response_model=schemas.Supplier)
+def read_single_supplier(
+    supplier_id: int, db: Session = Depends(get_db),
+    _role_check: None = Depends(security.require_role(required_roles=["admin", "inventory_manager"]))
+):
+    db_supplier = crud.get_supplier(db, supplier_id=supplier_id)
+    if db_supplier is None:
+        raise HTTPException(status_code=404, detail="Proveedor no encontrado")
+    return db_supplier
+
+@app.put("/suppliers/{supplier_id}", response_model=schemas.Supplier)
+def update_supplier_details(
+    supplier_id: int, supplier: schemas.SupplierCreate, db: Session = Depends(get_db),
+    _role_check: None = Depends(security.require_role(required_roles=["admin", "inventory_manager"]))
+):
+    db_supplier = crud.update_supplier(db, supplier_id=supplier_id, supplier=supplier)
+    if db_supplier is None:
+        raise HTTPException(status_code=404, detail="Proveedor no encontrado para actualizar")
+    return db_supplier
+
+@app.delete("/suppliers/{supplier_id}", response_model=schemas.Supplier)
+def delete_supplier_by_id(
+    supplier_id: int, db: Session = Depends(get_db),
+    _role_check: None = Depends(security.require_role(required_roles=["admin"])) # Solo admin puede borrar
+):
+    db_supplier = crud.delete_supplier(db, supplier_id=supplier_id)
+    if db_supplier is None:
+        raise HTTPException(status_code=404, detail="Proveedor no encontrado para eliminar")
+    return db_supplier
+

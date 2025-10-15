@@ -5,7 +5,7 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - ./backend/app:/code/app
+      - ./backend:/code
     environment:
       - DATABASE_URL=postgresql://repara_user:repara_password@db/repara_xpress_inventory_db
     depends_on:
