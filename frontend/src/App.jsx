@@ -1,0 +1,25 @@
+import { Routes, Route } from 'react-router-dom';
+import LoginPage from './pages/LoginPage.jsx';
+import DashboardPage from './pages/DashboardPage.jsx';
+import SelectShiftPage from './pages/SelectShiftPage.jsx'; // <-- Importa la nueva página
+import ProtectedRoute from './components/ProtectedRoute.jsx';
+import AppLayout from './components/AppLayout.jsx';
+
+function App() {
+  return (
+    <Routes>
+      {/* Rutas Públicas */}
+      <Route path="/login" element={<LoginPage />} />
+
+      {/* Nueva ruta protegida para iniciar turno */}
+      <Route path="/iniciar-turno" element={<ProtectedRoute><SelectShiftPage /></ProtectedRoute>} />
+
+      {/* Rutas Privadas (protegidas y con el layout principal) */}
+      <Route path="/" element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
+        <Route index element={<DashboardPage />} />
+      </Route>
+    </Routes>
+  );
+}
+
+export default App;

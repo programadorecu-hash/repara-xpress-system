@@ -1,13 +1,34 @@
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from typing import List
 from sqlalchemy.orm import Session
 from datetime import date
+from fastapi import File, UploadFile
+import shutil
+import os
+import uuid
 
 from . import models, schemas, crud, security
 from .database import get_db
 
 app = FastAPI(title="API de Inventarios de Repara Xpress")
+
+# --- MIDELWARE PARA CONECTAR EL FRONTEND ---
+origins = [
+    "http://localhost:5173", # La dirección de nuestro frontend de React
+    "http://localhost",
+    "http://localhost:8080", # Puedes añadir más si es necesario
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 
 # ===================================================================
 # --- ENDPOINT RAÍZ ---
@@ -59,6 +80,17 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
     access_token = security.create_access_token(data={"sub": user.email, "role": user.role})
     return {"access_token": access_token, "token_type": "bearer"}
 
+@app.get("/users/me/profile", response_model=schemas.UserProfile)
+def read_current_user_profile(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(security.get_current_user)
+):
+    active_shift = crud.get_active_shift_for_user(db, user_id=current_user.id)
+    # Creamos un diccionario con los datos y lo pasamos al schema para validación/formato
+    profile_data = current_user.__dict__
+    profile_data['active_shift'] = active_shift
+    return profile_data
+
 # ===================================================================
 # --- ENDPOINTS PARA CATEGORÍAS ---
 # ===================================================================
@@ -101,6 +133,56 @@ def delete_product_by_id(product_id: int, db: Session = Depends(get_db), _role_c
     if db_product is None:
         raise HTTPException(status_code=404, detail="Producto no encontrado para eliminar")
     return db_product
+
+@app.post("/products/{product_id}/upload-image/", response_model=schemas.Product)
+def upload_product_image(
+    product_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    _role_check: None = Depends(security.require_role(required_roles=["admin", "inventory_manager"]))
+):
+    db_product = crud.get_product(db, product_id=product_id)
+    if not db_product:
+        raise HTTPException(status_code=404, detail="Producto no encontrado")
+
+    # --- LÓGICA MEJORADA PARA NOMBRES ÚNICOS ---
+
+    # Obtenemos la extensión del archivo original (ej: '.jpg')
+    file_extension = os.path.splitext(file.filename)[1]
+
+    # Creamos un nombre de archivo único usando un UUID
+    unique_filename = f"{uuid.uuid4()}{file_extension}"
+
+    upload_dir = "/code/uploads"
+    os.makedirs(upload_dir, exist_ok=True)
+
+    # La nueva ruta con el nombre seguro
+    file_path = os.path.join(upload_dir, unique_filename)
+
+    # --- FIN DE LA LÓGICA MEJORADA ---
+
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+
+    image_url = f"/uploads/{unique_filename}"
+    crud.add_product_image(db, product_id=product_id, image_url=image_url)
+
+    db.refresh(db_product)
+    return db_product
+
+@app.delete("/product-images/{image_id}", response_model=schemas.ProductImage)
+def delete_an_image(
+    image_id: int,
+    db: Session = Depends(get_db),
+    _role_check: None = Depends(security.require_role(required_roles=["admin", "inventory_manager"]))
+):
+    db_image = crud.delete_product_image(db, image_id=image_id)
+    if db_image is None:
+        raise HTTPException(status_code=404, detail="Imagen no encontrada para eliminar")
+    
+    # Opcional: Aquí podríamos añadir la lógica para borrar el archivo del disco
+    
+    return db_image
 
 # ===================================================================
 # --- ENDPOINTS PARA UBICACIONES ---
@@ -313,7 +395,7 @@ def read_transactions_for_account(account_id: int, skip: int = 0, limit: int = 1
     return crud.get_cash_transactions_by_account(db, account_id=account_id, skip=skip, limit=limit)
 
 # ===================================================================
-# --- ENDPOINTS PARA REPORTES VENDEDOR DEL MES ---
+# --- ENDPOINTS PARA REPORTES VENDEDOR DEL MES - DASHBOARDS - ETC ---
 # ===================================================================
 @app.get("/reports/top-sellers", response_model=List[schemas.TopSeller])
 def get_top_sellers_report(start_date: date, end_date: date, db: Session = Depends(get_db), _role_check: None = Depends(security.require_role(required_roles=["admin", "inventory_manager"]))):
@@ -322,3 +404,17 @@ def get_top_sellers_report(start_date: date, end_date: date, db: Session = Depen
     for user, total_sales in top_sellers_data:
         response.append(schemas.TopSeller(user=user, total_sales=total_sales))
     return response
+
+@app.get("/reports/dashboard-summary", response_model=schemas.DashboardSummary)
+def get_dashboard_summary_report(
+    db: Session = Depends(get_db),
+    current_user: schemas.User = Depends(security.get_current_user)
+):
+    # Obtenemos la ubicación del turno activo del usuario
+    active_shift = crud.get_active_shift_for_user(db, user_id=current_user.id)
+    if not active_shift:
+        raise HTTPException(status_code=400, detail="El usuario debe tener un turno activo para ver el resumen.")
+    
+    today = date.today()
+    summary = crud.get_dashboard_summary(db, location_id=active_shift.location_id, target_date=today)
+    return summary

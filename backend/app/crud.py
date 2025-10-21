@@ -53,6 +53,23 @@ def delete_product(db: Session, product_id: int):
         db.commit()
     return db_product
 
+def add_product_image(db: Session, product_id: int, image_url: str):
+    db_image = models.ProductImage(product_id=product_id, image_url=image_url)
+    db.add(db_image)
+    db.commit()
+    db.refresh(db_image)
+    return db_image
+
+def get_product_image(db: Session, image_id: int):
+    return db.query(models.ProductImage).filter(models.ProductImage.id == image_id).first()
+
+def delete_product_image(db: Session, image_id: int):
+    db_image = get_product_image(db, image_id=image_id)
+    if db_image:
+        db.delete(db_image)
+        db.commit()
+    return db_image
+
 # ===================================================================
 # --- UBICACIONES ---
 # ===================================================================
@@ -404,16 +421,64 @@ def get_cash_transactions_by_account(db: Session, account_id: int, skip: int = 0
 # ===================================================================
 # --- REPORTES ---
 # ===================================================================
-def get_top_sellers(db: Session, start_date: date, end_date: date):
-    return db.query(
-        models.User,
-        func.sum(models.Sale.total_amount).label("total_sales")
-    ).join(models.Sale, models.User.id == models.Sale.user_id)\
-    .filter(
-        models.User.role == 'warehouse_operator',
-        models.Sale.location_id != 1, # Excluye la Matriz
-        and_(
-            func.date(models.Sale.created_at) >= start_date,
-            func.date(models.Sale.created_at) <= end_date
-        )
-    ).group_by(models.User.id).order_by(func.sum(models.Sale.total_amount).desc()).all()
+def get_dashboard_summary(db: Session, location_id: int, target_date: date):
+    # Calcula ventas totales del día en la ubicación
+    total_sales = db.query(func.sum(models.Sale.total_amount)).filter(
+        models.Sale.location_id == location_id,
+        func.date(models.Sale.created_at) == target_date
+    ).scalar() or 0.0
+
+    # Calcula gastos totales del día en la ubicación
+    cash_accounts = db.query(models.CashAccount).filter(
+        models.CashAccount.location_id == location_id,
+        models.CashAccount.account_type == 'CAJA_CHICA'
+    ).all()
+    account_ids = [acc.id for acc in cash_accounts]
+
+    total_expenses = 0.0
+    if account_ids:
+        total_expenses = db.query(func.sum(models.CashTransaction.amount)).filter(
+            models.CashTransaction.account_id.in_(account_ids),
+            models.CashTransaction.amount < 0,
+            func.date(models.CashTransaction.timestamp) == target_date
+        ).scalar() or 0.0
+    total_expenses = abs(total_expenses)
+
+    # --- SECCIÓN CORREGIDA ---
+    # Cuenta las órdenes de trabajo por estado
+    status_counts = db.query(models.WorkOrder.status, func.count(models.WorkOrder.id)).filter(
+        models.WorkOrder.location_id == location_id
+    ).group_by(models.WorkOrder.status).all()
+
+    # 1. Creamos el diccionario con las claves CORRECTAS y valor 0
+    work_order_summary = {
+        "por_reparar": 0,
+        "en_espera": 0,
+        "reparando": 0,
+        "listo_para_entrega": 0,
+        "entregado": 0,
+        "sin_reparacion": 0,
+    }
+
+    # 2. Mapeamos los estados de la base de datos a nuestras claves
+    status_map = {
+        "RECIBIDO": "por_reparar",
+        "EN_REVISION": "en_espera",
+        "REPARANDO": "reparando",
+        "LISTO": "listo_para_entrega",
+        "ENTREGADO": "entregado",
+        "SIN_REPARACION": "sin_reparacion"
+    }
+
+    # 3. Rellenamos el diccionario con los conteos reales
+    for status_from_db, count in status_counts:
+        if status_from_db in status_map:
+            key = status_map[status_from_db]
+            work_order_summary[key] = count
+    # --- FIN DE LA SECCIÓN CORREGIDA ---
+
+    return {
+        "total_sales": total_sales,
+        "total_expenses": total_expenses,
+        "work_order_summary": work_order_summary
+    }

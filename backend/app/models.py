@@ -46,12 +46,17 @@ class Product(Base):
     price_2 = Column(Float)
     price_3 = Column(Float)
     is_active = Column(Boolean, default=True)
+    # --- ESTA LINEA ES PARA UNA SOLA FOTO, LA DEJO AQUÍ POR SI LAS MOSCAS image_url = Column(String, nullable=True)
+    category_id = Column(Integer, ForeignKey("categories.id"), nullable=True)
+
     category_id = Column(Integer, ForeignKey("categories.id"), nullable=True)
     category = relationship("Category", back_populates="products")
     stock_entries = relationship("Stock", back_populates="product")
     movements = relationship("InventoryMovement", back_populates="product")
     sale_items = relationship("SaleItem", back_populates="product")
     purchase_invoice_items = relationship("PurchaseInvoiceItem", back_populates="product")
+
+    images = relationship("ProductImage", back_populates="product")
 
 class Category(Base):
     __tablename__ = "categories"
@@ -209,3 +214,12 @@ class CashTransaction(Base):
     account_id = Column(Integer, ForeignKey("cash_accounts.id"), nullable=False)
     user = relationship("User", back_populates="cash_transactions")
     account = relationship("CashAccount", back_populates="transactions")
+
+class ProductImage(Base):
+    __tablename__ = "product_images"
+
+    id = Column(Integer, primary_key=True, index=True)
+    image_url = Column(String, nullable=False)
+    product_id = Column(Integer, ForeignKey("products.id"), nullable=False)
+
+    product = relationship("Product", back_populates="images")

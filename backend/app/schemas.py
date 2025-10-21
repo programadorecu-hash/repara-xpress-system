@@ -18,6 +18,18 @@ class ProductBase(BaseModel):
     price_3: float
     is_active: bool = True
     category_id: int | None = None
+    
+class ProductImageBase(BaseModel):
+    image_url: str
+
+class ProductImageCreate(ProductImageBase):
+    pass
+
+class ProductImage(ProductImageBase):
+    id: int
+    product_id: int
+    class Config:
+        from_attributes = True
 
 class LocationBase(BaseModel):
     name: str
@@ -180,6 +192,8 @@ class Category(CategoryBase):
 class Product(ProductBase):
     id: int
     category: Category | None = None
+    images: List[ProductImage] = []
+
     class Config:
         from_attributes = True
 
@@ -206,6 +220,9 @@ class User(UserSimple):
     shifts: List[Shift] = []
     class Config:
         from_attributes = True
+
+class UserProfile(User):
+    active_shift: Shift | None = None
 
 class Stock(StockBase):
     id: int
@@ -295,6 +312,19 @@ class TopSeller(BaseModel):
     user: UserSimple
     total_sales: float
 
+class WorkOrderStatusSummary(BaseModel):
+    por_reparar: int
+    en_espera: int
+    reparando: int
+    listo_para_entrega: int
+    entregado: int
+    sin_reparacion: int
+
+class DashboardSummary(BaseModel):
+    total_sales: float
+    total_expenses: float
+    work_order_summary: WorkOrderStatusSummary
+
 # ===================================================================
 # --- RECONSTRUCCIÓN DE MODELOS ---
 # ===================================================================
@@ -302,3 +332,4 @@ Location.model_rebuild()
 User.model_rebuild()
 PurchaseInvoiceBase.model_rebuild()
 SaleBase.model_rebuild()
+
