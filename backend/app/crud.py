@@ -126,27 +126,67 @@ def set_stock(db: Session, stock: schemas.StockCreate):
     db.refresh(db_stock)
     return db_stock
 
+def adjust_stock(db: Session, adjustment: schemas.StockAdjustmentCreate, user_id: int):
+    # Buscamos el stock actual
+    db_stock = db.query(models.Stock).filter(
+        models.Stock.product_id == adjustment.product_id,
+        models.Stock.location_id == adjustment.location_id
+    ).first()
+
+    current_quantity = db_stock.quantity if db_stock else 0
+    
+    # Calculamos la diferencia que necesitamos mover
+    quantity_change = adjustment.new_quantity - current_quantity
+
+    if quantity_change == 0:
+        return None # No hay nada que hacer
+
+    # Creamos el movimiento en el Kardex
+    movement = schemas.InventoryMovementCreate(
+        product_id=adjustment.product_id,
+        location_id=adjustment.location_id,
+        quantity_change=quantity_change,
+        movement_type="AJUSTE_CONTEO", # O podría ser "AJUSTE_INICIAL"
+        reference_id=adjustment.reason,
+        pin=adjustment.pin
+    )
+    # create_inventory_movement ya se encarga de la validación y de actualizar el stock
+    return create_inventory_movement(db=db, movement=movement, user_id=user_id)
+
 # ===================================================================
 # --- MOVIMIENTOS (KARDEX) ---
 # ===================================================================
 def create_inventory_movement(db: Session, movement: schemas.InventoryMovementCreate, user_id: int):
-    db_stock = db.query(models.Stock).filter(models.Stock.product_id == movement.product_id, models.Stock.location_id == movement.location_id).first()
-    
-    if movement.quantity_change < 0:
-        if not db_stock or db_stock.quantity < abs(movement.quantity_change):
-            raise ValueError("Stock insuficiente para realizar la operación.")
-    
-    if not db_stock:
-        db_stock = models.Stock(product_id=movement.product_id, location_id=movement.location_id, quantity=0)
-        db.add(db_stock)
-        db.flush()
-    
-    db_stock.quantity += movement.quantity_change
-    movement_data = movement.model_dump(exclude={"pin"})
-    db_movement = models.InventoryMovement(**movement_data, user_id=user_id)
-    db.add(db_movement)
-    
-    return db_movement
+    # Usamos un try/except para asegurar que toda la operación sea atómica
+    try:
+        db_stock = db.query(models.Stock).filter(
+            models.Stock.product_id == movement.product_id,
+            models.Stock.location_id == movement.location_id
+        ).first()
+
+        if movement.quantity_change < 0:
+            if not db_stock or db_stock.quantity < abs(movement.quantity_change):
+                raise ValueError("Stock insuficiente para realizar la operación.")
+
+        if not db_stock:
+            db_stock = models.Stock(product_id=movement.product_id, location_id=movement.location_id, quantity=0)
+            db.add(db_stock)
+
+        db_stock.quantity += movement.quantity_change
+
+        movement_data = movement.model_dump(exclude={"pin"})
+        db_movement = models.InventoryMovement(**movement_data, user_id=user_id)
+        db.add(db_movement)
+
+        # Guardamos todos los cambios (stock y movimiento) juntos
+        db.commit()
+        db.refresh(db_movement)
+
+        return db_movement # <-- ¡LA LÍNEA CLAVE QUE FALTABA!
+    except Exception as e:
+        db.rollback() # Si algo falla, deshacemos todo
+        # Re-lanzamos el error para que el endpoint lo maneje
+        raise e
 
 def get_movements_by_product(db: Session, product_id: int):
     return db.query(models.InventoryMovement).options(joinedload(models.InventoryMovement.product), joinedload(models.InventoryMovement.location), joinedload(models.InventoryMovement.user)).filter(models.InventoryMovement.product_id == product_id).order_by(models.InventoryMovement.timestamp.desc()).all()

@@ -141,6 +141,12 @@ class LocationCreate(LocationBase):
 class StockCreate(StockBase):
     product_id: int
     location_id: int
+class StockAdjustmentCreate(BaseModel):
+    product_id: int
+    location_id: int # La bodega específica
+    new_quantity: int
+    reason: str
+    pin: str
 class InventoryMovementCreate(InventoryMovementBase):
     product_id: int
     location_id: int

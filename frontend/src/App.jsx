@@ -1,3 +1,4 @@
+import ProductPage from './pages/ProductPage.jsx';
 import { Routes, Route } from 'react-router-dom';
 import LoginPage from './pages/LoginPage.jsx';
 import DashboardPage from './pages/DashboardPage.jsx';
@@ -17,6 +18,7 @@ function App() {
       {/* Rutas Privadas (protegidas y con el layout principal) */}
       <Route path="/" element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
         <Route index element={<DashboardPage />} />
+        <Route path="inventario" element={<ProductPage />} />
       </Route>
     </Routes>
   );

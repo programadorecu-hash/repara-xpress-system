@@ -231,6 +231,28 @@ def read_stock_for_location(location_id: int, db: Session = Depends(get_db), cur
 def read_stock_for_product(product_id: int, db: Session = Depends(get_db), current_user: schemas.User = Depends(security.get_current_user)):
     return crud.get_stock_by_product(db, product_id=product_id)
 
+@app.post("/inventory/adjust", response_model=schemas.InventoryMovement)
+def adjust_inventory_stock(
+    adjustment: schemas.StockAdjustmentCreate,
+    db: Session = Depends(get_db),
+    current_user: schemas.User = Depends(security.get_current_user)
+):
+    # Verificamos PIN y Rol
+    if not current_user.hashed_pin or not security.verify_password(adjustment.pin, current_user.hashed_pin):
+        raise HTTPException(status_code=403, detail="PIN incorrecto o no establecido")
+    if current_user.role not in ["admin", "inventory_manager"]:
+        raise HTTPException(status_code=403, detail="No tienes permiso para ajustar el stock.")
+
+    try:
+        movement = crud.adjust_stock(db=db, adjustment=adjustment, user_id=current_user.id)
+        # --- LA CORRECCIÓN ESTÁ AQUÍ ---
+        if movement is None:
+            # Si no hubo cambios, es una petición "mala" porque no hace nada.
+            raise HTTPException(status_code=400, detail="La cantidad especificada es la misma que la actual. No se realizó ningún ajuste.")
+        return movement
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
 # ===================================================================
 # --- ENDPOINTS PARA MOVIMIENTOS (KARDEX) ---
 # ===================================================================
