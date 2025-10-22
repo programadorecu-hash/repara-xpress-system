@@ -6,6 +6,7 @@ import SelectShiftPage from './pages/SelectShiftPage.jsx'; // <-- Importa la nue
 import ProtectedRoute from './components/ProtectedRoute.jsx';
 import AppLayout from './components/AppLayout.jsx';
 import AuditPage from './pages/AuditPage.jsx';
+import WorkOrderPage from './pages/WorkOrderPage.jsx';
 
 function App() {
   return (
@@ -21,6 +22,7 @@ function App() {
         <Route index element={<DashboardPage />} />
         <Route path="inventario" element={<ProductPage />} />
         <Route path="auditoria" element={<AuditPage />} />
+        <Route path="ordenes" element={<WorkOrderPage />} />
       </Route>
     </Routes>
   );

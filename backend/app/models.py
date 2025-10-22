@@ -115,26 +115,59 @@ class WorkOrder(Base):
     id = Column(Integer, primary_key=True, index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     status = Column(String, default="RECIBIDO", nullable=False)
+    
+    # Datos del Cliente (sin cambios)
     customer_name = Column(String, index=True, nullable=False)
     customer_id_card = Column(String, index=True, nullable=False)
     customer_phone = Column(String, nullable=False)
     customer_address = Column(String, nullable=True)
+    
+    # Datos del Equipo (sin cambios)
     device_type = Column(String, nullable=False)
     device_brand = Column(String, nullable=False)
     device_model = Column(String, nullable=False)
     device_serial = Column(String, nullable=True)
-    device_password = Column(String, nullable=True)
-    device_initial_state = Column(JSON)
-    device_physical_state = Column(JSON)
+    
+    # Problema y Costos (sin cambios)
     reported_issue = Column(String, nullable=False)
     estimated_cost = Column(Float, nullable=False)
     deposit_amount = Column(Float, default=0, nullable=False)
     final_cost = Column(Float, nullable=True)
+
+    # --- NUEVOS CAMPOS AÑADIDOS ---
+    
+    # 1. Campos para contraseñas y cuentas (opcionales)
+    device_password = Column(String, nullable=True) # Para PIN o contraseña
+    device_unlock_pattern = Column(String, nullable=True) # Para el patrón
+    device_account = Column(String, nullable=True) # Para cuenta Google/iCloud
+    device_account_password = Column(String, nullable=True) # Para la clave de la cuenta
+
+    # 2. Checklist del estado inicial del equipo. Usamos JSON para guardar un objeto.
+    device_initial_check = Column(JSON) # Ej: {"enciende": true, "camara": false, ...}
+    
+    # 3. Checkbox para indicar si el cliente no esperó la revisión.
+    customer_declined_check = Column(Boolean, default=False, nullable=False)
+    
+    # Relaciones (se añade la relación con las imágenes)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     location_id = Column(Integer, ForeignKey("locations.id"), nullable=False)
     user = relationship("User", back_populates="work_orders")
     location = relationship("Location", back_populates="work_orders")
     sale = relationship("Sale", back_populates="work_order", uselist=False)
+    
+    # NUEVA RELACIÓN: Una orden de trabajo ahora puede tener muchas imágenes.
+    images = relationship("WorkOrderImage", back_populates="work_order")
+
+
+class WorkOrderImage(Base):
+    __tablename__ = "work_order_images"
+    id = Column(Integer, primary_key=True, index=True)
+    image_url = Column(String, nullable=False)
+    # NUEVO CAMPO: Para saber qué foto es (frontal, borde derecho, etc.)
+    tag = Column(String, nullable=False) 
+    work_order_id = Column(Integer, ForeignKey("work_orders.id"), nullable=False)
+    work_order = relationship("WorkOrder", back_populates="images")
+
 
 class Sale(Base):
     __tablename__ = "sales"

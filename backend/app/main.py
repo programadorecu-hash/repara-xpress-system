@@ -187,6 +187,8 @@ def delete_an_image(
     
     return db_image
 
+
+
 # ===================================================================
 # --- ENDPOINTS PARA UBICACIONES ---
 # ===================================================================
@@ -319,30 +321,81 @@ def read_lost_sale_logs(skip: int = 0, limit: int = 100, db: Session = Depends(g
 # --- ENDPOINTS PARA ÓRDENES DE TRABAJO ---
 # ===================================================================
 @app.post("/work-orders/", response_model=schemas.WorkOrder, status_code=status.HTTP_201_CREATED)
-def create_new_work_order(work_order: schemas.WorkOrderCreate, db: Session = Depends(get_db), current_user: schemas.User = Depends(security.get_current_user)):
+def create_new_work_order(
+    work_order: schemas.WorkOrderCreate, 
+    db: Session = Depends(get_db), 
+    current_user: models.User = Depends(security.get_current_user)
+):
     if not current_user.hashed_pin or not security.verify_password(work_order.pin, current_user.hashed_pin):
         raise HTTPException(status_code=403, detail="PIN incorrecto o no establecido")
+
     active_shift = crud.get_active_shift_for_user(db, user_id=current_user.id)
     if not active_shift:
         raise HTTPException(status_code=400, detail="El usuario debe tener un turno activo para crear una orden de trabajo.")
+
     return crud.create_work_order(db=db, work_order=work_order, user_id=current_user.id, location_id=active_shift.location_id)
 
 @app.patch("/work-orders/{work_order_id}", response_model=schemas.WorkOrder)
-def update_work_order_status(work_order_id: int, work_order_update: schemas.WorkOrderUpdate, db: Session = Depends(get_db), _role_check: None = Depends(security.require_role(required_roles=["admin", "inventory_manager", "warehouse_operator"]))):
+def update_work_order_status(
+    work_order_id: int, 
+    work_order_update: schemas.WorkOrderUpdate, 
+    db: Session = Depends(get_db), 
+    # Eliminamos el _role_check de aquí para que todos puedan actualizar
+    current_user: models.User = Depends(security.get_current_user)
+):
     updated_work_order = crud.update_work_order(db, work_order_id=work_order_id, work_order_update=work_order_update)
     if not updated_work_order:
         raise HTTPException(status_code=404, detail="Orden de trabajo no encontrada")
     return updated_work_order
 
 @app.get("/work-orders/", response_model=List[schemas.WorkOrder])
-def read_work_orders(skip: int = 0, limit: int = 100, db: Session = Depends(get_db), _role_check: None = Depends(security.require_role(required_roles=["admin", "inventory_manager"]))):
-    return crud.get_work_orders(db, skip=skip, limit=limit)
+def read_work_orders(
+    skip: int = 0, 
+    limit: int = 100, 
+    db: Session = Depends(get_db),
+    # Quitamos el chequeo de rol y en su lugar pedimos el usuario actual.
+    current_user: models.User = Depends(security.get_current_user)
+):
+    # Le pasamos el usuario actual a nuestra nueva función de CRUD.
+    # Ella se encargará de decidir qué órdenes devolver.
+    return crud.get_work_orders(db, user=current_user, skip=skip, limit=limit)
+
+
+@app.get("/work-orders/{work_order_id}", response_model=schemas.WorkOrder)
 
 @app.get("/work-orders/{work_order_id}", response_model=schemas.WorkOrder)
 def read_single_work_order(work_order_id: int, db: Session = Depends(get_db), current_user: schemas.User = Depends(security.get_current_user)):
     db_work_order = crud.get_work_order(db, work_order_id=work_order_id)
     if db_work_order is None:
         raise HTTPException(status_code=404, detail="Orden de trabajo no encontrada")
+    return db_work_order
+
+@app.post("/work-orders/{work_order_id}/upload-image/", response_model=schemas.WorkOrder)
+def upload_work_order_image(
+    work_order_id: int,
+    tag: str,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    # Eliminamos el _role_check también de aquí
+    current_user: models.User = Depends(security.get_current_user)
+):
+    db_work_order = crud.get_work_order(db, work_order_id=work_order_id)
+    if not db_work_order:
+        raise HTTPException(status_code=404, detail="Orden de trabajo no encontrada")
+
+    file_extension = os.path.splitext(file.filename)[1]
+    unique_filename = f"{uuid.uuid4()}{file_extension}"
+    upload_dir = "/code/uploads"
+    os.makedirs(upload_dir, exist_ok=True)
+    file_path = os.path.join(upload_dir, unique_filename)
+
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+
+    image_url = f"/uploads/{unique_filename}"
+    crud.add_work_order_image(db, work_order_id=work_order_id, image_url=image_url, tag=tag)
+
+    db.refresh(db_work_order)
     return db_work_order
 
 # ===================================================================

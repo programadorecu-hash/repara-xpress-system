@@ -1,5 +1,5 @@
 from pydantic import BaseModel, computed_field
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from datetime import datetime, date
 
 # ===================================================================
@@ -60,17 +60,31 @@ class WorkOrderBase(BaseModel):
     customer_name: str
     customer_id_card: str
     customer_phone: str
-    customer_address: str | None = None
+    customer_address: Optional[str] = None
     device_type: str
     device_brand: str
     device_model: str
-    device_serial: str | None = None
-    device_password: str | None = None
-    device_initial_state: Dict[str, Any] | None = None
-    device_physical_state: Dict[str, Any] | None = None
+    device_serial: Optional[str] = None
     reported_issue: str
     estimated_cost: float
     deposit_amount: float = 0
+    
+    # --- NUEVOS CAMPOS AÑADIDOS AL FORMULARIO BASE ---
+    device_password: Optional[str] = None
+    device_unlock_pattern: Optional[str] = None
+    device_account: Optional[str] = None
+    device_account_password: Optional[str] = None
+    device_initial_check: Optional[Dict[str, Any]] = None # Aceptará un objeto JSON
+    customer_declined_check: Optional[bool] = False
+
+class WorkOrderImageBase(BaseModel):
+    image_url: str
+    tag: str
+
+class WorkOrderImage(WorkOrderImageBase):
+    id: int
+    class Config:
+        from_attributes = True
 
 class SupplierBase(BaseModel):
     name: str
@@ -260,6 +274,8 @@ class WorkOrder(WorkOrderBase):
     final_cost: float | None = None
     user: UserSimple
     location: LocationSimple
+    images: List[WorkOrderImage] = []
+
     @computed_field
     @property
     def work_order_number(self) -> str:
@@ -338,4 +354,5 @@ Location.model_rebuild()
 User.model_rebuild()
 PurchaseInvoiceBase.model_rebuild()
 SaleBase.model_rebuild()
+WorkOrder.model_rebuild()
 

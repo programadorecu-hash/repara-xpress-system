@@ -93,6 +93,24 @@ def delete_product_image(db: Session, image_id: int):
             
     return db_image
 
+
+def add_work_order_image(db: Session, work_order_id: int, image_url: str, tag: str):
+    """
+    Añade una nueva imagen a una orden de trabajo existente.
+    - work_order_id: El ID de la orden.
+    - image_url: La ruta donde se guardó la imagen.
+    - tag: La etiqueta que describe la foto (ej: "frontal", "borde_derecho").
+    """
+    db_image = models.WorkOrderImage(
+        work_order_id=work_order_id, 
+        image_url=image_url,
+        tag=tag
+    )
+    db.add(db_image)
+    db.commit()
+    db.refresh(db_image)
+    return db_image
+
 # ===================================================================
 # --- UBICACIONES ---
 # ===================================================================
@@ -306,8 +324,33 @@ def get_lost_sale_logs(db: Session, skip: int = 0, limit: int = 100):
 def get_work_order(db: Session, work_order_id: int):
     return db.query(models.WorkOrder).options(joinedload(models.WorkOrder.user), joinedload(models.WorkOrder.location)).filter(models.WorkOrder.id == work_order_id).first()
 
-def get_work_orders(db: Session, skip: int = 0, limit: int = 100):
-    return db.query(models.WorkOrder).options(joinedload(models.WorkOrder.user), joinedload(models.WorkOrder.location)).order_by(models.WorkOrder.created_at.desc()).offset(skip).limit(limit).all()
+def get_work_orders(db: Session, user: models.User, skip: int = 0, limit: int = 100):
+    """
+    Obtiene las órdenes de trabajo con lógica de permisos.
+    - Admins/Managers ven todas las órdenes.
+    - Otros roles solo ven las de su turno activo.
+    """
+    # Preparamos la consulta base, incluyendo los datos del usuario y la ubicación.
+    query = db.query(models.WorkOrder).options(
+        joinedload(models.WorkOrder.user),
+        joinedload(models.WorkOrder.location)
+    )
+
+    # --- LÓGICA DE PERMISOS ---
+    # Si el rol del usuario NO es 'admin' o 'inventory_manager'...
+    if user.role not in ["admin", "inventory_manager"]:
+        # ...buscamos su turno activo para saber dónde está trabajando.
+        active_shift = get_active_shift_for_user(db, user_id=user.id)
+
+        # Si no tiene un turno activo, no puede ver ninguna orden.
+        if not active_shift:
+            return [] # Le devolvemos una lista vacía.
+
+        # Filtramos la búsqueda para que SOLO devuelva órdenes de su sucursal actual.
+        query = query.filter(models.WorkOrder.location_id == active_shift.location_id)
+
+    # Finalmente, ordenamos las órdenes de la más nueva a la más antigua y las devolvemos.
+    return query.order_by(models.WorkOrder.created_at.desc()).offset(skip).limit(limit).all()
 
 def create_work_order(db: Session, work_order: schemas.WorkOrderCreate, user_id: int, location_id: int):
     work_order_data = work_order.model_dump(exclude={"pin"})
