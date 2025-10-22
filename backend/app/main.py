@@ -1,3 +1,4 @@
+from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
@@ -13,6 +14,8 @@ from . import models, schemas, crud, security
 from .database import get_db
 
 app = FastAPI(title="API de Inventarios de Repara Xpress")
+
+app.mount("/uploads", StaticFiles(directory="/code/uploads"), name="uploads")
 
 # --- MIDELWARE PARA CONECTAR EL FRONTEND ---
 origins = [

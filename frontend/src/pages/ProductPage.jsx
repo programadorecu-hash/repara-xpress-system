@@ -38,23 +38,37 @@ function ProductPage() {
       if (dataToSave.category_id === '') {
         dataToSave.category_id = null;
       }
-      let savedProduct;
+  
       if (productToEdit) {
-        const response = await api.put(`/products/${productToEdit.id}`, dataToSave);
-        savedProduct = response.data;
+        // --- LÓGICA DE EDICIÓN ---
+        // Si ya estamos editando, solo guardamos y cerramos.
+        await api.put(`/products/${productToEdit.id}`, dataToSave);
+        setIsFormOpen(false);
+        setProductToEdit(null);
+        fetchProducts();
       } else {
+        // --- LÓGICA DE CREACIÓN (¡AQUÍ ESTÁ EL ARREGLO!) ---
         const response = await api.post('/products/', dataToSave);
-        savedProduct = response.data;
-        if (window.confirm(`Producto "${savedProduct.name}" creado. ¿Deseas registrar el stock inicial ahora?`)) {
-          setProductForAdjustment(savedProduct);
+        const newProduct = response.data;
+        
+        // 1. Actualizamos la lista de productos en segundo plano.
+        fetchProducts();
+
+        // 2. Convertimos el formulario a modo "Editar" para poder subir imágenes.
+        setProductToEdit(newProduct);
+        
+        // 3. ¡RECUPERAMOS LA PREGUNTA! Le preguntamos al usuario si quiere añadir el stock.
+        if (window.confirm(`Producto "${newProduct.name}" creado con éxito. ¿Deseas registrar el stock inicial ahora?`)) {
+          // Si dice que sí, preparamos y abrimos el formulario de ajuste de inventario.
+          setProductForAdjustment(newProduct);
           setIsAdjustmentFormOpen(true);
         }
       }
-      setIsFormOpen(false);
-      setProductToEdit(null);
-      fetchProducts();
+      
     } catch (err) {
-      alert('Error al guardar el producto.');
+      // Usamos 'console.error' para ver más detalles del error en la consola del navegador.
+      console.error("Error al guardar el producto:", err);
+      alert('Error al guardar el producto. Revisa la consola para más detalles.');
     }
   };
   

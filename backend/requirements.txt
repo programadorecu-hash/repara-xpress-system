@@ -5,9 +5,10 @@ psycopg2-binary
 
 # LIBRERÍAS SECU JAJAJA TENGO QUE COMENTARLAS PARA QUE NO SE ME OLVIDEN xD
 passlib==1.7.4
-bcrypt==4.1.2
+bcrypt==3.2.0
 python-jose[cryptography]
 python-multipart
+
 # MIGRADOR PARA LA BASE DE DATOS! TENGO HAMBRE!!1 QUIEO UNA HAMBURGUESITA
 
 alembic

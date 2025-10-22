@@ -1,6 +1,9 @@
+
 from sqlalchemy.sql import func, and_
 from sqlalchemy.orm import Session, joinedload
 from datetime import date
+
+import os
 
 from . import models, schemas, security
 
@@ -64,10 +67,30 @@ def get_product_image(db: Session, image_id: int):
     return db.query(models.ProductImage).filter(models.ProductImage.id == image_id).first()
 
 def delete_product_image(db: Session, image_id: int):
+    # Buscamos la imagen en la base de datos por su ID.
     db_image = get_product_image(db, image_id=image_id)
+    
+    # Si la encontramos...
     if db_image:
+        # Guardamos la ruta del archivo ANTES de borrar el registro de la BD.
+        image_path_to_delete = db_image.image_url
+
+        # Borramos el registro de la base de datos.
         db.delete(db_image)
         db.commit()
+
+        # --- ¡LA LÓGICA CLAVE! ---
+        # Ahora, borramos el archivo físico del disco duro del servidor.
+        full_file_path = f"/code{image_path_to_delete}"
+        
+        # Comprobamos si el archivo existe antes de intentar borrarlo para evitar errores.
+        try:
+            if os.path.exists(full_file_path):
+                os.remove(full_file_path)
+                print(f"Archivo eliminado: {full_file_path}") # Un log para nosotros
+        except OSError as e:
+            print(f"Error eliminando el archivo {full_file_path}: {e}")
+            
     return db_image
 
 # ===================================================================
