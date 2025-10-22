@@ -102,8 +102,8 @@ function ProductForm({ productToEdit, onSave, onClose }) {
         <h2 className="text-2xl font-bold text-secondary mb-6">{productToEdit ? 'Editar' : 'Crear'} Producto</h2>
         
         <form onSubmit={handleSubmit} className="space-y-4">
-          {/* --- CÓDIGO DEL FORMULARIO RESTAURADO --- */}
-          {/* Esta es la parte que borramos por error en el paso anterior. ¡Ya está de vuelta! */}
+          {/* --- CODIGO DEL FORMULARIO --- */}
+          {/* FORMULARIO EN INVENTARIOS PARA CREAR O EDITAR NUEVO PRODUCTO Y AÑADIR STOCK INICIAL*/}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="font-semibold">SKU</label>
