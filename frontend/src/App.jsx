@@ -5,6 +5,7 @@ import DashboardPage from './pages/DashboardPage.jsx';
 import SelectShiftPage from './pages/SelectShiftPage.jsx'; // <-- Importa la nueva página
 import ProtectedRoute from './components/ProtectedRoute.jsx';
 import AppLayout from './components/AppLayout.jsx';
+import AuditPage from './pages/AuditPage.jsx';
 
 function App() {
   return (
@@ -19,6 +20,7 @@ function App() {
       <Route path="/" element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
         <Route index element={<DashboardPage />} />
         <Route path="inventario" element={<ProductPage />} />
+        <Route path="auditoria" element={<AuditPage />} />
       </Route>
     </Routes>
   );

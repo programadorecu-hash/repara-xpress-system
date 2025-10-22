@@ -274,10 +274,24 @@ def read_movements_for_product(product_id: int, db: Session = Depends(get_db), _
 # --- ENDPOINTS PARA TURNOS (SHIFTS) ---
 # ===================================================================
 @app.post("/shifts/clock-in", response_model=schemas.Shift, status_code=status.HTTP_201_CREATED)
-def clock_in_user(shift_in: schemas.ShiftClockIn, db: Session = Depends(get_db), current_user: schemas.User = Depends(security.get_current_user)):
+def clock_in_user(
+    shift_in: schemas.ShiftClockIn,
+    db: Session = Depends(get_db),
+    current_user: schemas.User = Depends(security.get_current_user)
+):
+    # Buscamos si el usuario tiene un turno activo
     existing_shift = crud.get_active_shift_for_user(db, user_id=current_user.id)
+    
     if existing_shift:
-        raise HTTPException(status_code=400, detail="El usuario ya tiene un turno activo.")
+        # --- LÓGICA INTELIGENTE AÑADIDA ---
+        # Si el turno es de un día anterior, lo cerramos automáticamente
+        if existing_shift.start_time.date() < date.today():
+            crud.clock_out(db, user_id=current_user.id)
+        else:
+            # Si es de hoy, entonces sí es un error
+            raise HTTPException(status_code=400, detail="El usuario ya tiene un turno activo hoy.")
+    
+    # Procedemos a crear el nuevo turno para hoy
     return crud.clock_in(db=db, user_id=current_user.id, location_id=shift_in.location_id)
 
 @app.post("/shifts/clock-out", response_model=schemas.Shift)
@@ -417,7 +431,7 @@ def read_transactions_for_account(account_id: int, skip: int = 0, limit: int = 1
     return crud.get_cash_transactions_by_account(db, account_id=account_id, skip=skip, limit=limit)
 
 # ===================================================================
-# --- ENDPOINTS PARA REPORTES VENDEDOR DEL MES - DASHBOARDS - ETC ---
+# --- ENDPOINTS PARA REPORTES  - DASHBOARDS - ETC ---
 # ===================================================================
 @app.get("/reports/top-sellers", response_model=List[schemas.TopSeller])
 def get_top_sellers_report(start_date: date, end_date: date, db: Session = Depends(get_db), _role_check: None = Depends(security.require_role(required_roles=["admin", "inventory_manager"]))):
@@ -440,3 +454,14 @@ def get_dashboard_summary_report(
     today = date.today()
     summary = crud.get_dashboard_summary(db, location_id=active_shift.location_id, target_date=today)
     return summary
+
+@app.get("/reports/inventory-audit", response_model=List[schemas.InventoryMovement])
+def get_inventory_audit_report(
+    start_date: date | None = None,
+    end_date: date | None = None,
+    user_id: int | None = None,
+    db: Session = Depends(get_db),
+    _role_check: None = Depends(security.require_role(required_roles=["admin"]))
+):
+    movements = crud.get_inventory_audit(db, start_date=start_date, end_date=end_date, user_id=user_id)
+    return movements

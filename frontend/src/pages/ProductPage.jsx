@@ -3,6 +3,7 @@ import api from '../services/api';
 import { AuthContext } from '../context/AuthContext.jsx';
 import ProductDetails from '../components/ProductDetails.jsx';
 import ProductForm from '../components/ProductForm.jsx';
+import InventoryAdjustmentForm from '../components/InventoryAdjustmentForm.jsx';
 
 function ProductPage() {
   const [products, setProducts] = useState([]);
@@ -11,8 +12,9 @@ function ProductPage() {
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [productToEdit, setProductToEdit] = useState(null);
-
-  const { user } = useContext(AuthContext); // Obtenemos el usuario del contexto
+  const [isAdjustmentFormOpen, setIsAdjustmentFormOpen] = useState(false);
+  const [productForAdjustment, setProductForAdjustment] = useState(null);
+  const { user } = useContext(AuthContext);
 
   const fetchProducts = async () => {
     try {
@@ -30,32 +32,49 @@ function ProductPage() {
     fetchProducts();
   }, []);
 
-  const handleSave = async (productData) => {
+  const handleSaveProduct = async (productData) => {
     try {
-      // Limpiamos los campos que no se deben enviar si están vacíos
       const dataToSave = { ...productData };
       if (dataToSave.category_id === '') {
         dataToSave.category_id = null;
       }
-
+      let savedProduct;
       if (productToEdit) {
-        await api.put(`/products/${productToEdit.id}`, dataToSave);
+        const response = await api.put(`/products/${productToEdit.id}`, dataToSave);
+        savedProduct = response.data;
       } else {
-        await api.post('/products/', dataToSave);
+        const response = await api.post('/products/', dataToSave);
+        savedProduct = response.data;
+        if (window.confirm(`Producto "${savedProduct.name}" creado. ¿Deseas registrar el stock inicial ahora?`)) {
+          setProductForAdjustment(savedProduct);
+          setIsAdjustmentFormOpen(true);
+        }
       }
       setIsFormOpen(false);
       setProductToEdit(null);
       fetchProducts();
     } catch (err) {
-      // Aquí podrías mostrar un mensaje de error más específico
       alert('Error al guardar el producto.');
     }
   };
+  
+  const handleSaveAdjustment = async (productId, adjustmentData) => {
+    // La función onSave ahora es una 'Promise' para que el hijo sepa si hubo un error
+    return api.post('/inventory/adjust', {
+      product_id: productId,
+      location_id: adjustmentData.location_id,
+      new_quantity: parseInt(adjustmentData.new_quantity, 10),
+      reason: adjustmentData.reason,
+      pin: adjustmentData.pin,
+    }).then(() => {
+      // Opcional: refrescar los detalles del producto para ver el nuevo stock
+      if (selectedProduct && selectedProduct.id === productId) {
+        api.get(`/products/${productId}`).then(res => setSelectedProduct(res.data));
+      }
+    });
+  };
 
-  // --- LÓGICA DE PERMISOS MEJORADA ---
-  // El usuario está logueado
   const isLoggedIn = !!user;
-  // El usuario tiene permisos de gestión
   const canManageProducts = user?.role === 'admin' || user?.role === 'inventory_manager';
 
   if (loading) return <p>Cargando productos...</p>;
@@ -80,7 +99,6 @@ function ProductPage() {
               <th className="py-3 px-4 text-left">SKU</th>
               <th className="py-3 px-4 text-left">Nombre</th>
               <th className="py-3 px-4 text-right">Precio</th>
-              {/* Mostramos la columna "Acciones" si el usuario está logueado */}
               {isLoggedIn && <th className="py-3 px-4 text-center">Acciones</th>}
             </tr>
           </thead>
@@ -91,18 +109,11 @@ function ProductPage() {
                 <td className="py-3 px-4 font-mono text-sm">{product.sku}</td>
                 <td className="py-3 px-4 font-semibold">{product.name}</td>
                 <td className="py-3 px-4 text-right font-semibold">${product.price_3.toFixed(2)}</td>
-                {/* Mostramos la celda de acciones si el usuario está logueado */}
                 {isLoggedIn && (
                   <td className="py-3 px-4 text-center">
-                    {/* El botón "Ver" lo pueden ver todos los logueados */}
-                    <button onClick={() => setSelectedProduct(product)} className="text-blue-500 hover:underline mr-4">
-                      Ver
-                    </button>
-                    {/* El botón "Editar" solo lo ven los gerentes */}
+                    <button onClick={() => setSelectedProduct(product)} className="text-blue-500 hover:underline mr-4">Ver</button>
                     {canManageProducts && (
-                      <button onClick={() => { setProductToEdit(product); setIsFormOpen(true); }} className="text-green-500 hover:underline">
-                        Editar
-                      </button>
+                      <button onClick={() => { setProductToEdit(product); setIsFormOpen(true); }} className="text-green-500 hover:underline">Editar</button>
                     )}
                   </td>
                 )}
@@ -117,8 +128,16 @@ function ProductPage() {
       {isFormOpen && (
         <ProductForm 
           productToEdit={productToEdit}
-          onSave={handleSave}
+          onSave={handleSaveProduct}
           onClose={() => setIsFormOpen(false)}
+        />
+      )}
+
+      {isAdjustmentFormOpen && (
+        <InventoryAdjustmentForm 
+          product={productForAdjustment}
+          onSave={handleSaveAdjustment}
+          onClose={() => { setIsAdjustmentFormOpen(false); setProductForAdjustment(null); }}
         />
       )}
     </div>

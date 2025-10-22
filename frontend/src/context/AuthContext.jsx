@@ -23,9 +23,21 @@ export function AuthProvider({ children }) {
     }
   }, [token]);
 
-  const login = (newToken) => {
+  const login = async (newToken) => {
     localStorage.setItem('accessToken', newToken);
-    setToken(newToken); // Esto disparará el useEffect de arriba para cargar el perfil
+    setToken(newToken);
+    
+    // Inmediatamente después de guardar el token, buscamos el perfil completo
+    try {
+      const response = await api.get('/users/me/profile');
+      setUser(response.data);
+      setActiveShift(response.data.active_shift);
+      return response.data; // Devolvemos el perfil para que la página de login lo use
+    } catch (error) {
+      console.error("Error al cargar el perfil del usuario", error);
+      logout(); // Si falla, limpiamos todo por seguridad
+      return null;
+    }
   };
 
   const logout = async () => {

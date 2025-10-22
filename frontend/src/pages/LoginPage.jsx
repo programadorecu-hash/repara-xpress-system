@@ -20,12 +20,18 @@ function LoginPage() {
       formData.append('password', password);
 
       const response = await axios.post('http://localhost:8000/token', formData);
+      
+      // Llamamos a nuestra nueva función de login y esperamos el perfil
+      const userProfile = await login(response.data.access_token);
 
-      // Usamos la función de nuestro Context para guardar el token
-      login(response.data.access_token);
-
-      // Redirigimos al usuario a la selección de turno
-      navigate('/iniciar-turno');
+      // --- ¡LA LÓGICA INTELIGENTE! ---
+      if (userProfile && userProfile.active_shift) {
+        // Si el usuario ya tiene un turno activo, va directo al dashboard
+        navigate('/');
+      } else {
+        // Si no, va a la página para iniciar un turno nuevo
+        navigate('/iniciar-turno');
+      }
 
     } catch (err) {
       setError('Email o contraseña incorrectos.');

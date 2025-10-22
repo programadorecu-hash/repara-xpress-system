@@ -522,3 +522,19 @@ def get_dashboard_summary(db: Session, location_id: int, target_date: date):
         "total_expenses": total_expenses,
         "work_order_summary": work_order_summary
     }
+
+def get_inventory_audit(db: Session, start_date: date | None = None, end_date: date | None = None, user_id: int | None = None):
+    query = db.query(models.InventoryMovement).options(
+        joinedload(models.InventoryMovement.product),
+        joinedload(models.InventoryMovement.location),
+        joinedload(models.InventoryMovement.user)
+    )
+
+    if start_date:
+        query = query.filter(func.date(models.InventoryMovement.timestamp) >= start_date)
+    if end_date:
+        query = query.filter(func.date(models.InventoryMovement.timestamp) <= end_date)
+    if user_id:
+        query = query.filter(models.InventoryMovement.user_id == user_id)
+
+    return query.order_by(models.InventoryMovement.timestamp.desc()).all()

@@ -24,7 +24,8 @@ function ProductForm({ productToEdit, onSave, onClose }) {
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
-    const val = type === 'checkbox' ? checked : (name.startsWith('price') || name === 'category_id') ? (value ? parseInt(value, 10) : null) : value;
+    // LÍNEA NUEVA
+const val = type === 'checkbox' ? checked : (name.startsWith('price') || name === 'category_id') ? (value ? parseFloat(value) : null) : value;
     setProduct(prev => ({ ...prev, [name]: val }));
   };
 
@@ -55,7 +56,7 @@ function ProductForm({ productToEdit, onSave, onClose }) {
   // --- FIN DE NUEVA FUNCIÓN ---
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-60 z-40 flex items-center justify-center" onClick={onClose}>
+    <div className="fixed inset-0 bg-black bg-opacity-60 z-40 flex items-center justify-center">
       <div className="bg-white p-8 rounded-lg shadow-xl w-full max-w-2xl text-gray-800" onClick={(e) => e.stopPropagation()}>
         <h2 className="text-2xl font-bold text-secondary mb-6">{productToEdit ? 'Editar' : 'Crear'} Producto</h2>
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -63,16 +64,16 @@ function ProductForm({ productToEdit, onSave, onClose }) {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="font-semibold">SKU</label>
-              <input type="text" name="sku" value={product.sku} onChange={handleChange} className="w-full p-2 border rounded" required />
+              <input type="text" name="sku" value={product.sku} onChange={handleChange} className="w-full p-2 border rounded uppercase" required />
             </div>
             <div>
               <label className="font-semibold">Nombre</label>
-              <input type="text" name="name" value={product.name} onChange={handleChange} className="w-full p-2 border rounded" required />
+              <input type="text" name="name" value={product.name} onChange={handleChange} className="w-full p-2 border rounded uppercase" required />
             </div>
           </div>
           <div>
             <label className="font-semibold">Descripción</label>
-            <textarea name="description" value={product.description || ''} onChange={handleChange} className="w-full p-2 border rounded" />
+            <textarea name="description" value={product.description || ''} onChange={handleChange} className="w-full p-2 border rounded uppercase" />
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
@@ -93,7 +94,7 @@ function ProductForm({ productToEdit, onSave, onClose }) {
           <div>
             <label className="font-semibold">Categoría</label>
             <div className="flex items-center space-x-2">
-              <select name="category_id" value={product.category_id || ''} onChange={handleChange} className="w-full p-2 border rounded">
+              <select name="category_id" value={product.category_id || ''} onChange={handleChange} className="w-full p-2 border rounded uppercase">
                 <option value="">Sin Categoría</option>
                 {categories.map(cat => (
                   <option key={cat.id} value={cat.id}>{cat.name}</option>
