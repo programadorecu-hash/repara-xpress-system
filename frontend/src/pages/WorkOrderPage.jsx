@@ -72,8 +72,14 @@ function WorkOrderPage() {
     setSelectedOrderId(null); // Limpiamos la selección al cerrar.
   };
 
-  const handleSave = () => {
-    fetchWorkOrders(); // Después de guardar, volvemos a cargar la lista actualizada.
+  const handleSave = (savedOrder) => {
+    // Si 'savedOrder' tiene datos (lo que sucede al crear una nueva orden)
+    // y actualmente no tenemos ningún ID seleccionado, actualizamos el ID.
+    if (savedOrder && !selectedOrderId) {
+        setSelectedOrderId(savedOrder.id);
+    }
+    // Siempre refrescamos la lista principal.
+    fetchWorkOrders();
   };
 
 

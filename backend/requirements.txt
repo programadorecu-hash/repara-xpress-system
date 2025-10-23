@@ -9,6 +9,8 @@ bcrypt==3.2.0
 python-jose[cryptography]
 python-multipart
 
-# MIGRADOR PARA LA BASE DE DATOS! TENGO HAMBRE!!1 QUIEO UNA HAMBURGUESITA
-
+# MIGRADOR PARA LA BASE DE DATOS!
 alembic
+
+# NUEVA LIBRERÍA PARA GENERAR PDFs
+reportlab

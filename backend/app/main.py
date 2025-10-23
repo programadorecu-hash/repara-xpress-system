@@ -10,6 +10,9 @@ import shutil
 import os
 import uuid
 
+from fastapi.responses import StreamingResponse
+from . import pdf_utils
+
 from . import models, schemas, crud, security
 from .database import get_db
 
@@ -397,6 +400,31 @@ def upload_work_order_image(
 
     db.refresh(db_work_order)
     return db_work_order
+
+@app.get("/work-orders/{work_order_id}/print", response_class=StreamingResponse)
+def print_work_order(
+    work_order_id: int, 
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(security.get_current_user)
+):
+    db_work_order = crud.get_work_order(db, work_order_id=work_order_id)
+    if db_work_order is None:
+        raise HTTPException(status_code=404, detail="Orden de trabajo no encontrada")
+
+    # --- ¡LA MAGIA SUCEDE AQUÍ! ---
+    # 1. Convertimos el objeto de la base de datos a un esquema "inteligente" PRIMERO.
+    schema_work_order = schemas.WorkOrder.model_validate(db_work_order)
+
+    # 2. Ahora usamos 'schema_work_order' para TODO lo que sigue.
+    pdf_buffer = pdf_utils.generate_work_order_pdf(schema_work_order)
+
+    # 3. Creamos las cabeceras USANDO el objeto correcto.
+    headers = {
+        'Content-Disposition': f'inline; filename="orden_{schema_work_order.work_order_number}.pdf"'
+    }
+
+    # 4. Enviamos el PDF como una respuesta.
+    return StreamingResponse(pdf_buffer, media_type="application/pdf", headers=headers)
 
 # ===================================================================
 # --- ENDPOINTS PARA PROVEEDORES ---

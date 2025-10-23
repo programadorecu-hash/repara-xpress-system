@@ -157,11 +157,36 @@ function WorkOrderForm({ orderId, onClose, onSave }) {
     setOrder(prev => ({...prev, images: newImageList}));
   };
 
+  const handlePrint = async () => {
+    if (!orderId) return;
+    try {
+        const response = await api.get(`/work-orders/${orderId}/print`, {
+            responseType: 'blob', // ¡Muy importante! Le decimos a Axios que esperamos un archivo.
+        });
+
+        // Creamos una URL temporal para el archivo PDF que recibimos.
+        const fileURL = window.URL.createObjectURL(response.data);
+
+        // Abrimos esa URL en una nueva pestaña del navegador.
+        window.open(fileURL, '_blank');
+
+    } catch (error) {
+        console.error("Error al generar el PDF:", error);
+        alert("No se pudo generar el PDF. Revise la consola para más detalles.");
+    }
+  };
+
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-60 z-50 flex items-center justify-center p-4">
       <div className="bg-white p-6 rounded-lg shadow-xl w-full max-w-4xl text-gray-800 overflow-y-auto max-h-[95vh]" onClick={(e) => e.stopPropagation()}>
-        <h2 className="text-2xl font-bold text-secondary mb-6">{orderId ? `Ver / Editar Orden #${order.work_order_number}` : 'Crear Nueva Orden de Trabajo'}</h2>
+        <div className="mb-6">
+          <h2 className="text-2xl font-bold text-secondary">{orderId ? `Ver / Editar Orden #${order.work_order_number}` : 'Crear Nueva Orden de Trabajo'}</h2>
+          {/* --- NUEVA LÍNEA --- Mostramos quién creó la orden si ya existe */}
+          {orderId && order.user && (
+            <p className="text-sm text-gray-500 mt-1">Orden creada por: <span className="font-semibold">{order.user.email}</span></p>
+          )}
+        </div>
         
         {loading && <p>Cargando...</p>}
         {error && <p className="bg-red-200 text-red-800 p-3 rounded-lg my-4">{error}</p>}
@@ -274,7 +299,7 @@ function WorkOrderForm({ orderId, onClose, onSave }) {
           <div className="mt-6 flex justify-between items-center">
             <div>
                 {/* Botón de Imprimir, por ahora desactivado */}
-                <button type="button" disabled={!orderId} className="py-2 px-4 bg-gray-500 text-white font-bold rounded-lg disabled:bg-gray-300">Imprimir</button>
+                <button type="button" onClick={handlePrint} disabled={!orderId} className="py-2 px-4 bg-detail text-white font-bold rounded-lg hover:bg-indigo-700 disabled:bg-gray-300">Imprimir</button>
             </div>
             <div className="flex space-x-4">
                 <button type="button" onClick={onClose} className="py-2 px-4 bg-gray-200 rounded-lg hover:bg-gray-300">Cerrar</button>
