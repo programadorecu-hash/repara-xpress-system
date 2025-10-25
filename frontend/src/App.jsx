@@ -2,11 +2,12 @@ import ProductPage from './pages/ProductPage.jsx';
 import { Routes, Route } from 'react-router-dom';
 import LoginPage from './pages/LoginPage.jsx';
 import DashboardPage from './pages/DashboardPage.jsx';
-import SelectShiftPage from './pages/SelectShiftPage.jsx'; // <-- Importa la nueva página
+import SelectShiftPage from './pages/SelectShiftPage.jsx';
 import ProtectedRoute from './components/ProtectedRoute.jsx';
 import AppLayout from './components/AppLayout.jsx';
 import AuditPage from './pages/AuditPage.jsx';
 import WorkOrderPage from './pages/WorkOrderPage.jsx';
+import POSPage from './pages/POSPage.jsx';
 
 function App() {
   return (
@@ -23,6 +24,8 @@ function App() {
         <Route path="inventario" element={<ProductPage />} />
         <Route path="auditoria" element={<AuditPage />} />
         <Route path="ordenes" element={<WorkOrderPage />} />
+        <Route path="pos" element={<POSPage />} />
+
       </Route>
     </Routes>
   );

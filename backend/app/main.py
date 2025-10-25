@@ -116,8 +116,16 @@ def create_new_product(product: schemas.ProductCreate, db: Session = Depends(get
     return crud.create_product(db=db, product=product)
 
 @app.get("/products/", response_model=List[schemas.Product])
-def read_products(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    return crud.get_products(db, skip=skip, limit=limit)
+def read_products(
+    skip: int = 0,
+    limit: int = 100,
+    search: str | None = None, # <-- NUEVO
+    location_id: int | None = None, # <-- NUEVO
+    db: Session = Depends(get_db)
+    # No necesitamos el usuario actual aquí, la info de ubicación viene como parámetro
+):
+    # Pasamos los nuevos parámetros a la función CRUD
+    return crud.get_products(db, skip=skip, limit=limit, search=search, location_id=location_id)
 
 @app.get("/products/{product_id}", response_model=schemas.Product)
 def read_product(product_id: int, db: Session = Depends(get_db)):

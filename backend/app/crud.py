@@ -1,6 +1,7 @@
 
-from sqlalchemy.sql import func, and_
-from sqlalchemy.orm import Session, joinedload
+from collections import defaultdict
+from sqlalchemy.sql import func, and_, case, literal_column
+from sqlalchemy.orm import Session, joinedload, outerjoin
 from datetime import date
 
 import os
@@ -29,8 +30,109 @@ def create_category(db: Session, category: schemas.CategoryCreate):
 def get_product(db: Session, product_id: int):
     return db.query(models.Product).filter(models.Product.id == product_id).first()
 
-def get_products(db: Session, skip: int = 0, limit: int = 100):
-    return db.query(models.Product).order_by(models.Product.name).offset(skip).limit(limit).all()
+def get_products(db: Session, skip: int = 0, limit: int = 100, search: str | None = None, location_id: int | None = None):
+    # --- Parte 1: Encontrar los productos que coinciden y su stock local ---
+    base_query = db.query(
+        models.Product,
+        models.Category.name.label("category_name")
+    ).outerjoin(models.Category, models.Product.category_id == models.Category.id)\
+     .options(joinedload(models.Product.images)) # Cargar imágenes
+
+    current_bodega_id = None
+    if location_id:
+        bodega = get_primary_bodega_for_location(db, location_id=location_id)
+        if bodega:
+            current_bodega_id = bodega.id
+            # Añadir columna de stock local
+            base_query = base_query.add_columns(
+                func.coalesce(models.Stock.quantity, 0).label("stock_quantity")
+            ).outerjoin(
+                models.Stock,
+                (models.Product.id == models.Stock.product_id) & (models.Stock.location_id == current_bodega_id)
+            )
+        else:
+             # Si no hay bodega local, añadir columna como 0
+             base_query = base_query.add_columns(
+                 literal_column("0").label("stock_quantity")
+             )
+    else:
+         # Si no se especifica ubicación, añadir columna como 0
+         base_query = base_query.add_columns(
+             literal_column("0").label("stock_quantity")
+         )
+
+
+    # Aplicar filtro de búsqueda si existe
+    if search:
+        search_term = f"%{search.lower()}%"
+        base_query = base_query.filter(
+            (func.lower(models.Product.name).like(search_term)) |
+            (func.lower(models.Product.sku).like(search_term)) |
+            (func.lower(models.Product.description).like(search_term))
+        )
+
+    # Ejecutar la primera consulta para obtener los productos y stock local
+    initial_results = base_query.order_by(models.Product.name).offset(skip).limit(limit).all()
+
+    # Si no hay resultados, terminar aquí
+    if not initial_results:
+        return []
+
+    # Extraer los IDs de los productos encontrados
+    product_ids_found = [row.Product.id for row in initial_results]
+
+    # --- Parte 2: Buscar stock en OTRAS bodegas para esos productos ---
+    other_stock_data = defaultdict(list) # Usaremos un diccionario para agrupar
+    if product_ids_found:
+        # Encontrar IDs de todas las bodegas (excepto la actual si existe)
+        other_bodegas_query = db.query(models.Location.id, models.Location.name).filter(models.Location.parent_id != None)
+        if current_bodega_id:
+            other_bodegas_query = other_bodegas_query.filter(models.Location.id != current_bodega_id)
+
+        other_bodegas = other_bodegas_query.all()
+        other_bodega_ids = [bodega.id for bodega in other_bodegas]
+        other_bodega_names = {bodega.id: bodega.name for bodega in other_bodegas} # Mapa ID -> Nombre
+
+
+        if other_bodega_ids:
+            # Consultar stock en esas otras bodegas para los productos encontrados
+            stock_in_others = db.query(
+                models.Stock.product_id,
+                models.Stock.location_id,
+                models.Stock.quantity
+            ).filter(
+                models.Stock.product_id.in_(product_ids_found),
+                models.Stock.location_id.in_(other_bodega_ids),
+                models.Stock.quantity > 0 # Solo mostrar si hay stock
+            ).all()
+
+            # Agrupar los resultados por product_id
+            for stock_entry in stock_in_others:
+                location_name = other_bodega_names.get(stock_entry.location_id, "Desconocida")
+                other_stock_data[stock_entry.product_id].append(
+                    schemas.StockLocationInfo(
+                        location_name=location_name,
+                        quantity=stock_entry.quantity
+                    )
+                )
+
+    # --- Parte 3: Combinar todo y devolver ---
+    products_list = []
+    for row in initial_results:
+        product_data = row.Product.__dict__
+        product_data['images'] = row.Product.images # Adjuntar imágenes
+        product_data['category'] = schemas.Category(id=row.Product.category_id, name=row.category_name) if row.Product.category_id else None
+
+        # Añadir stock local (ya viene en 'row')
+        product_data['stock_quantity'] = row.stock_quantity if row.stock_quantity is not None else 0
+
+        # Añadir stock de otras ubicaciones (buscando en el diccionario que creamos)
+        product_data['other_locations_stock'] = other_stock_data.get(row.Product.id, []) # Usa .get() para default a lista vacía
+
+        # Validar con el schema Pydantic
+        products_list.append(schemas.Product.model_validate(product_data))
+
+    return products_list
 
 def create_product(db: Session, product: schemas.ProductCreate):
     db_product = models.Product(**product.model_dump())

@@ -209,10 +209,16 @@ class Category(CategoryBase):
     class Config:
         from_attributes = True
 
+class StockLocationInfo(BaseModel):
+    location_name: str
+    quantity: int
+
 class Product(ProductBase):
     id: int
     category: Category | None = None
     images: List[ProductImage] = []
+    stock_quantity: Optional[int] = None
+    other_locations_stock: List[StockLocationInfo] = []
 
     class Config:
         from_attributes = True

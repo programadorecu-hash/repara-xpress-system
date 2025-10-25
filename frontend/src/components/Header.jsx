@@ -26,13 +26,16 @@ function Header() {
           <div className="flex items-center space-x-6">
             
             {/* --- ENLACES DE NAVEGACIÓN --- */}
-            <Link to="/" className="text-white font-semibold hover:text-gray-300">Dashboard</Link>
-            <Link to="/ordenes" className="text-white font-semibold hover:text-gray-300">Órdenes</Link>
-            <Link to="/inventario" className="text-white font-semibold hover:text-gray-300">Inventario</Link>
+            <Link to="/" className="text-white font-semibold hover:text-gray-300">INICIO</Link>
+            <Link to="/pos" className="text-white font-semibold hover:text-gray-300">VENDER</Link>
+            <Link to="/ordenes" className="text-white font-semibold hover:text-gray-300">ORDENES</Link>
+            <Link to="/inventario" className="text-white font-semibold hover:text-gray-300">BODEGA</Link>
+            
+
             
             {user?.role === 'admin' && (
               <Link to="/auditoria" className="text-white font-semibold hover:text-gray-300">
-                Auditoría
+                AUDITAR INVENTARIO
               </Link>
             )}
             
@@ -43,7 +46,7 @@ function Header() {
                   onClick={handleLogout}
                   className="bg-highlight hover:bg-yellow-500 text-secondary font-bold py-2 px-4 rounded-lg transition duration-300"
                 >
-                  Cerrar Sesión
+                  FIN DEL TURNO
                 </button>
               </div>
             )}
