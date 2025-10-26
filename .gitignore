@@ -1,4 +1,4 @@
-# ===== Archivos de entorno y secretos =====
+# ===== Secretos / Entorno =====
 .env
 *.env
 !.env.example
@@ -10,8 +10,10 @@ __pycache__/
 *.pyd
 *.sqlite3
 *.db
+.venv/
+venv/
 
-# ===== Alembic (mantener migraciones, pero ignorar cachés) =====
+# ===== Alembic (cache) =====
 backend/alembic/__pycache__/
 
 # ===== Node / Frontend =====
@@ -22,9 +24,11 @@ frontend/build/
 frontend/.cache/
 *.log
 
-# ===== Docker / Postgres data local =====
+# ===== Docker / Postgres data =====
 postgres_data/
 
-# ===== Sistemas =====
+# ===== SO / IDE =====
 .DS_Store
 Thumbs.db
+.vscode/
+.git/

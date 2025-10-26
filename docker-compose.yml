@@ -9,9 +9,6 @@ services:
     env_file:
       - .env
     environment:
-      # Si quisieras forzar alguna variable aquí, puedes mantenerla
-      # DATABASE_URL se puede leer desde .env (como ya la pusimos)
-      # SECRET_KEY también viene de .env
       - DATABASE_URL=${DATABASE_URL}
       - SECRET_KEY=${SECRET_KEY}
       - TZ=${TZ}
@@ -21,7 +18,6 @@ services:
         condition: service_healthy
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
-  # (Opcional pero recomendado) Frontend en compose
   frontend:
     build: ./frontend
     container_name: repara_xpress_frontend
@@ -50,3 +46,4 @@ services:
       retries: 5
     ports:
       - "5432:5432"
+

@@ -1,21 +1,22 @@
-# Usamos una imagen oficial de Python como base.
+# backend/Dockerfile
 FROM python:3.11-slim
 
-# --- CAMBIO AQUÍ ---
-# Establecemos un directorio de trabajo más genérico, como '/code'.
+# 1) Ajustes útiles de Python en contenedor
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+# 2) Carpeta de trabajo
 WORKDIR /code
 
-# Copiamos primero el archivo de dependencias.
+# 3) Instala dependencias antes (mejor cache)
 COPY requirements.txt .
-
-# Instalamos las dependencias.
 RUN pip install --no-cache-dir -r requirements.txt
 
-# --- CAMBIO AQUÍ ---
-# Copiamos nuestra carpeta local 'app' DENTRO de '/code'.
-# Ahora la estructura interna será /code/app/main.py, lo cual es más claro.
-COPY ./app ./app
+# 4) Copia el código (luego el volumen de compose lo sobre-monta para hot-reload)
+COPY app ./app
 
-# El comando que se ejecutará cuando el contenedor inicie.
-# Este comando ahora funcionará porque se ejecuta desde /code y puede "ver" la carpeta 'app'.
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+# 5) Exponemos el puerto del API
+EXPOSE 8000
+
+# 6) Comando por defecto (compose puede sobreescribir con --reload)
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
