@@ -58,6 +58,10 @@ def generate_work_order_pdf(work_order: schemas.WorkOrder):
     draw_paragraph(f"{work_order.customer_name}", style_normal)
     draw_paragraph(f"<b>C.I:</b> {work_order.customer_id_card}", style_normal)
     draw_paragraph(f"<b>Telf:</b> {work_order.customer_phone}", style_normal)
+    if work_order.customer_email:
+        draw_paragraph(f"<b>Email:</b> {work_order.customer_email}", style_normal)
+    if work_order.customer_address:
+        draw_paragraph(f"<b>Dir:</b> {work_order.customer_address}", style_normal)
     y -= 2 * mm
     
     draw_paragraph("<b>EQUIPO:</b>", style_normal)

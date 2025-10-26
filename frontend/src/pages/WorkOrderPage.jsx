@@ -146,7 +146,16 @@ const WorkOrderTable = ({ orders, formatDate, onEdit }) => (
             <tr key={order.id} className="border-b hover:bg-gray-50">
               {/* ... (otras celdas no cambian) ... */}
               <td className="py-3 px-4 font-mono font-bold">{order.work_order_number}</td>
-              <td className="py-3 px-4">{order.customer_name}</td>
+              <td className="py-3 px-4">
+                <div className="font-medium text-sm">{order.customer_name}</div>
+                <div className="text-xs text-gray-500">{order.customer_phone}</div>
+                {order.customer_email && (
+                  <div className="text-xs text-gray-500">{order.customer_email}</div>
+                )}
+                {order.customer_address && (
+                  <div className="text-xs text-gray-400">{order.customer_address}</div>
+                )}
+              </td>
               <td className="py-3 px-4">{`${order.device_brand} ${order.device_model}`}</td>
               <td className="py-3 px-4">{formatDate(order.created_at)}</td>
               <td className="py-3 px-4">

@@ -121,6 +121,7 @@ class WorkOrder(Base):
     customer_id_card = Column(String, index=True, nullable=False)
     customer_phone = Column(String, nullable=False)
     customer_address = Column(String, nullable=True)
+    customer_email = Column(String, nullable=True)
     
     # Datos del Equipo (sin cambios)
     device_type = Column(String, nullable=False)

@@ -60,6 +60,8 @@ function WorkOrderForm({ orderId, onClose, onSave }) {
     customer_name: '',
     customer_id_card: '',
     customer_phone: '',
+    customer_address: '',
+    customer_email: '',
     device_type: 'Celular',
     device_brand: '',
     device_model: '',
@@ -98,8 +100,15 @@ function WorkOrderForm({ orderId, onClose, onSave }) {
       setLoading(true);
       api.get(`/work-orders/${orderId}`)
         .then(response => {
-          // Nos aseguramos de que todos los campos, incluidos los nuevos, tengan un valor
-          setOrder({ ...initialState, ...response.data });
+          const data = response.data || {};
+          setOrder({
+            ...initialState,
+            ...data,
+            device_initial_check: {
+              ...initialState.device_initial_check,
+              ...(data.device_initial_check || {}),
+            },
+          });
         })
         .catch(err => setError('No se pudieron cargar los datos de la orden.'))
         .finally(() => setLoading(false));
@@ -132,19 +141,31 @@ function WorkOrderForm({ orderId, onClose, onSave }) {
     try {
       // Esta función SOLO guarda, no cierra el modal, para poder subir fotos.
       if (orderId) {
-        // En modo edición, usamos PATCH para no sobreescribir todo
-        await api.patch(`/work-orders/${orderId}`, {
+        // En modo edición, usamos PATCH para actualizar los campos clave
+        const response = await api.patch(`/work-orders/${orderId}`, {
              status: order.status,
-             // Aquí podríamos añadir otros campos que queramos que sean editables
+             customer_phone: order.customer_phone,
+             customer_address: order.customer_address || null,
+             customer_email: order.customer_email || null,
         });
+        setOrder(prev => ({
+          ...prev,
+          ...response.data,
+        }));
+        onSave(response.data);
       } else {
-        const response = await api.post('/work-orders/', order);
+        const payload = {
+          ...order,
+          customer_address: order.customer_address || null,
+          customer_email: order.customer_email || null,
+        };
+        const response = await api.post('/work-orders/', payload);
         // MUY IMPORTANTE: Después de crear, obtenemos el ID de la nueva orden
         // y actualizamos el estado para "convertir" el formulario a modo edición.
         onSave(response.data); // Esto refrescará la lista en segundo plano
         return; // Salimos para que el useEffect se encargue de recargar los datos
       }
-      onSave(order); // Refrescamos la lista en la página principal
+      
     } catch (err) {
       setError(err.response?.data?.detail || 'Ocurrió un error al guardar.');
     } finally {
@@ -197,9 +218,53 @@ function WorkOrderForm({ orderId, onClose, onSave }) {
             <fieldset className="border p-4 rounded-lg">
             <legend className="text-lg font-semibold px-2">Datos del Cliente</legend>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <input type="text" name="customer_name" value={order.customer_name} onChange={handleChange} placeholder="Nombre y Apellido" className="p-2 border rounded" required disabled={!!orderId} />
-              <input type="text" name="customer_id_card" value={order.customer_id_card} onChange={handleChange} placeholder="Cédula" className="p-2 border rounded" required disabled={!!orderId} />
-              <input type="text" name="customer_phone" value={order.customer_phone} onChange={handleChange} placeholder="Teléfono" className="p-2 border rounded" required disabled={!!orderId} />
+              <input
+                type="text"
+                name="customer_name"
+                value={order.customer_name}
+                onChange={handleChange}
+                placeholder="Nombre y Apellido"
+                className="p-2 border rounded"
+                required
+                disabled={!!orderId}
+              />
+              <input
+                type="text"
+                name="customer_id_card"
+                value={order.customer_id_card}
+                onChange={handleChange}
+                placeholder="Cédula"
+                className="p-2 border rounded"
+                required
+                disabled={!!orderId}
+              />
+              <input
+                type="text"
+                name="customer_phone"
+                value={order.customer_phone}
+                onChange={handleChange}
+                placeholder="Teléfono"
+                className="p-2 border rounded"
+                required
+              />
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+              <input
+                type="text"
+                name="customer_address"
+                value={order.customer_address}
+                onChange={handleChange}
+                placeholder="Dirección"
+                className="p-2 border rounded md:col-span-2"
+              />
+              <input
+                type="email"
+                name="customer_email"
+                value={order.customer_email}
+                onChange={handleChange}
+                placeholder="Correo electrónico"
+                className="p-2 border rounded"
+              />
             </div>
           </fieldset>
           
