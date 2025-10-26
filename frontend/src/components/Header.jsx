@@ -8,6 +8,9 @@ function Header() {
   const { token, user, activeShift, logout } = useContext(AuthContext);
   const navigate = useNavigate();
 
+  const canManageInventory = user?.role === 'admin' || user?.role === 'inventory_manager';
+  const canManageCash = user?.role === 'admin';
+
   const handleLogout = () => {
     logout();
     navigate('/login');
@@ -30,12 +33,28 @@ function Header() {
             <Link to="/pos" className="text-white font-semibold hover:text-gray-300">VENDER</Link>
             <Link to="/ordenes" className="text-white font-semibold hover:text-gray-300">ORDENES</Link>
             <Link to="/inventario" className="text-white font-semibold hover:text-gray-300">BODEGA</Link>
-            
 
-            
+            {canManageInventory && (
+              <Link to="/proveedores" className="text-white font-semibold hover:text-gray-300">
+                PROVEEDORES
+              </Link>
+            )}
+
+            {canManageInventory && (
+              <Link to="/compras" className="text-white font-semibold hover:text-gray-300">
+                COMPRAS
+              </Link>
+            )}
+
             {user?.role === 'admin' && (
               <Link to="/auditoria" className="text-white font-semibold hover:text-gray-300">
                 AUDITAR INVENTARIO
+              </Link>
+            )}
+
+            {canManageCash && (
+              <Link to="/caja" className="text-white font-semibold hover:text-gray-300">
+                CAJA
               </Link>
             )}
             
