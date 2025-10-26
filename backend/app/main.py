@@ -6,6 +6,7 @@ from typing import List
 from sqlalchemy.orm import Session
 from datetime import date
 from fastapi import File, UploadFile
+
 import shutil
 import os
 import uuid
@@ -21,15 +22,12 @@ app = FastAPI(title="API de Inventarios de Repara Xpress")
 app.mount("/uploads", StaticFiles(directory="/code/uploads"), name="uploads")
 
 # --- MIDELWARE PARA CONECTAR EL FRONTEND ---
-origins = [
-    "http://localhost:5173", # La dirección de nuestro frontend de React
-    "http://localhost",
-    "http://localhost:8080", # Puedes añadir más si es necesario
-]
+cors_origins = os.getenv("CORS_ORIGINS", "http://localhost:5173")
+allowed = [o.strip() for o in cors_origins.split(",") if o.strip()]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=allowed,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

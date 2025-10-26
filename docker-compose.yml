@@ -6,12 +6,33 @@ services:
       - "8000:8000"
     volumes:
       - ./backend:/code
+    env_file:
+      - .env
     environment:
-      - DATABASE_URL=postgresql://repara_user:repara_password@db/repara_xpress_inventory_db
-      - SECRET_KEY=${SECRET_KEY:?SECRET_KEY environment variable is required}
+      # Si quisieras forzar alguna variable aquí, puedes mantenerla
+      # DATABASE_URL se puede leer desde .env (como ya la pusimos)
+      # SECRET_KEY también viene de .env
+      - DATABASE_URL=${DATABASE_URL}
+      - SECRET_KEY=${SECRET_KEY}
+      - TZ=${TZ}
+      - CORS_ORIGINS=${CORS_ORIGINS}
     depends_on:
-      db: # <-- CAMBIO AQUÍ
-        condition: service_healthy # Espera a que la BD esté "sana"
+      db:
+        condition: service_healthy
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  # (Opcional pero recomendado) Frontend en compose
+  frontend:
+    build: ./frontend
+    container_name: repara_xpress_frontend
+    ports:
+      - "5173:5173"
+    env_file:
+      - .env
+    environment:
+      - VITE_API_URL=${VITE_API_URL}
+    depends_on:
+      - api
 
   db:
     image: postgres:15-alpine
@@ -22,7 +43,7 @@ services:
       - POSTGRES_USER=repara_user
       - POSTGRES_PASSWORD=repara_password
       - POSTGRES_DB=repara_xpress_inventory_db
-    healthcheck: # <-- SECCIÓN NUEVA
+    healthcheck:
       test: ["CMD-SHELL", "pg_isready -U repara_user -d repara_xpress_inventory_db"]
       interval: 5s
       timeout: 5s

@@ -16,12 +16,7 @@ from . import crud, schemas
 from .database import get_db
 
 # --- Configuración de Seguridad ---
-SECRET_KEY = os.getenv("SECRET_KEY")
-if not SECRET_KEY:
-    raise RuntimeError(
-        "SECRET_KEY environment variable must be set for authentication to work securely."
-    )
-
+SECRET_KEY = os.getenv("SECRET_KEY", "solo-dev_cambia_esto")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 

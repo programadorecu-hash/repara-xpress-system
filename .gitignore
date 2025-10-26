@@ -1,13 +1,30 @@
-# Byte-compiled / optimized / DLL files
-__pycache__/
-*.py[cod]
-*$py.class
+# ===== Archivos de entorno y secretos =====
+.env
+*.env
+!.env.example
 
-# Docker
+# ===== Python =====
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.sqlite3
+*.db
+
+# ===== Alembic (mantener migraciones, pero ignorar cachés) =====
+backend/alembic/__pycache__/
+
+# ===== Node / Frontend =====
+frontend/node_modules/
+frontend/.vite/
+frontend/dist/
+frontend/build/
+frontend/.cache/
+*.log
+
+# ===== Docker / Postgres data local =====
 postgres_data/
 
-# Virtual environment
-.venv/
-venv/
-ENV/
-env/
+# ===== Sistemas =====
+.DS_Store
+Thumbs.db
