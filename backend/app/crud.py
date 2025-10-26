@@ -1,7 +1,7 @@
 
 from collections import defaultdict
 from sqlalchemy.sql import func, and_, case, literal_column, or_
-from sqlalchemy.orm import Session, joinedload, outerjoin
+from sqlalchemy.orm import Session, joinedload, outerjoin, selectinload
 from datetime import date
 
 import os
@@ -554,10 +554,24 @@ def delete_supplier(db: Session, supplier_id: int):
         db.delete(db_supplier)
         db.commit()
     return db_supplier
-    
+
 # ===================================================================
 # --- FACTURAS DE COMPRA ---
 # ===================================================================
+def get_purchase_invoices(db: Session, skip: int = 0, limit: int = 100):
+    return (
+        db.query(models.PurchaseInvoice)
+        .options(
+            selectinload(models.PurchaseInvoice.supplier),
+            selectinload(models.PurchaseInvoice.items).selectinload(models.PurchaseInvoiceItem.product),
+            selectinload(models.PurchaseInvoice.user),
+        )
+        .order_by(models.PurchaseInvoice.invoice_date.desc())
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
+
 def create_purchase_invoice(db: Session, invoice: schemas.PurchaseInvoiceCreate, user_id: int, location_id: int):
     try:
         total_cost = 0

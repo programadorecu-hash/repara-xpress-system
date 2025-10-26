@@ -484,6 +484,16 @@ def delete_supplier_by_id(supplier_id: int, db: Session = Depends(get_db), _role
 # ===================================================================
 # --- ENDPOINTS PARA FACTURAS DE COMPRA ---
 # ===================================================================
+@app.get("/purchase-invoices/", response_model=List[schemas.PurchaseInvoiceRead])
+def read_purchase_invoices(
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(get_db),
+    _role_check: None = Depends(security.require_role(required_roles=["admin", "inventory_manager"]))
+):
+    return crud.get_purchase_invoices(db=db, skip=skip, limit=limit)
+
+
 @app.post("/purchase-invoices/", response_model=schemas.PurchaseInvoice, status_code=status.HTTP_201_CREATED)
 def create_new_purchase_invoice(invoice: schemas.PurchaseInvoiceCreate, location_id: int, db: Session = Depends(get_db), current_user: schemas.User = Depends(security.get_current_user)):
     if not current_user.hashed_pin or not security.verify_password(invoice.pin, current_user.hashed_pin):
