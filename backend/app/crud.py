@@ -425,10 +425,29 @@ def create_lost_sale_log(db: Session, log: schemas.LostSaleLogCreate, user_id: i
     db.add(db_log)
     db.commit()
     db.refresh(db_log)
-    return db_log
+
+    return (
+        db.query(models.LostSaleLog)
+        .options(
+            selectinload(models.LostSaleLog.user),
+            selectinload(models.LostSaleLog.location),
+        )
+        .filter(models.LostSaleLog.id == db_log.id)
+        .first()
+    )
 
 def get_lost_sale_logs(db: Session, skip: int = 0, limit: int = 100):
-    return db.query(models.LostSaleLog).order_by(models.LostSaleLog.timestamp.desc()).offset(skip).limit(limit).all()
+    return (
+        db.query(models.LostSaleLog)
+        .options(
+            selectinload(models.LostSaleLog.user),
+            selectinload(models.LostSaleLog.location),
+        )
+        .order_by(models.LostSaleLog.timestamp.desc())
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
 
 # ===================================================================
 # --- ÓRDENES DE TRABAJO ---
