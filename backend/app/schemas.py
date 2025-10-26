@@ -318,6 +318,19 @@ class PurchaseInvoice(PurchaseInvoiceBase):
     class Config:
         from_attributes = True
 
+class PurchaseInvoiceRead(BaseModel):
+    id: int
+    invoice_number: str
+    invoice_date: datetime
+    total_cost: float
+    created_at: datetime
+    user: UserSimple
+    supplier: Supplier
+    items: List[PurchaseInvoiceItem]
+
+    class Config:
+        from_attributes = True
+
 class SaleItem(SaleItemBase):
     id: int
     line_total: float
@@ -381,6 +394,7 @@ class DashboardSummary(BaseModel):
 Location.model_rebuild()
 User.model_rebuild()
 PurchaseInvoiceBase.model_rebuild()
+PurchaseInvoiceRead.model_rebuild()
 SaleBase.model_rebuild()
 WorkOrder.model_rebuild()
 
