@@ -506,11 +506,30 @@ def create_new_sale(sale: schemas.SaleCreate, db: Session = Depends(get_db), cur
     active_shift = crud.get_active_shift_for_user(db, user_id=current_user.id)
     if not active_shift:
         raise HTTPException(status_code=400, detail="El usuario debe tener un turno activo para crear una venta.")
-    
+
     try:
         return crud.create_sale(db=db, sale=sale, user_id=current_user.id, location_id=active_shift.location_id)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/sales/{sale_id}/receipt", response_class=StreamingResponse)
+def get_sale_receipt(
+    sale_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(security.get_current_user),
+):
+    db_sale = crud.get_sale(db, sale_id=sale_id)
+    if db_sale is None:
+        raise HTTPException(status_code=404, detail="Venta no encontrada")
+
+    sale_schema = schemas.Sale.model_validate(db_sale)
+    pdf_buffer = pdf_utils.generate_sale_receipt_pdf(sale_schema)
+    headers = {
+        "Content-Disposition": f'inline; filename="venta_{sale_schema.id}.pdf"'
+    }
+
+    return StreamingResponse(pdf_buffer, media_type="application/pdf", headers=headers)
 
 # ===================================================================
 # --- ENDPOINTS PARA GESTIÓN DE CAJA (CUENTAS Y TRANSACCIONES) ---

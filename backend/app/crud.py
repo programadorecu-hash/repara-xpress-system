@@ -648,6 +648,19 @@ def create_sale(db: Session, sale: schemas.SaleCreate, user_id: int, location_id
         db.rollback()
         raise e
 
+
+def get_sale(db: Session, sale_id: int):
+    return (
+        db.query(models.Sale)
+        .options(
+            joinedload(models.Sale.user),
+            joinedload(models.Sale.location),
+            joinedload(models.Sale.items).joinedload(models.SaleItem.product),
+        )
+        .filter(models.Sale.id == sale_id)
+        .first()
+    )
+
 # ===================================================================
 # --- GESTIÓN DE CAJA ---
 # ===================================================================
