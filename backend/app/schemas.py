@@ -283,6 +283,7 @@ class LostSaleLog(LostSaleLogBase):
     id: int
     timestamp: datetime
     user: UserSimple
+    location: LocationSimple
     class Config:
         from_attributes = True
 

@@ -12,6 +12,7 @@ import SuppliersPage from './pages/SuppliersPage.jsx';
 import PurchaseInvoicesPage from './pages/PurchaseInvoicesPage.jsx';
 import CashAccountsPage from './pages/CashAccountsPage.jsx';
 import CashTransactionsPage from './pages/CashTransactionsPage.jsx';
+import LostSalesPage from './pages/LostSalesPage.jsx';
 
 function App() {
   return (
@@ -42,6 +43,14 @@ function App() {
           element={(
             <ProtectedRoute requiredRoles={['admin', 'inventory_manager']}>
               <PurchaseInvoicesPage />
+            </ProtectedRoute>
+          )}
+        />
+        <Route
+          path="ventas-perdidas"
+          element={(
+            <ProtectedRoute requiredRoles={['admin', 'inventory_manager']}>
+              <LostSalesPage />
             </ProtectedRoute>
           )}
         />

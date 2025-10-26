@@ -46,6 +46,12 @@ function Header() {
               </Link>
             )}
 
+            {canManageInventory && (
+              <Link to="/ventas-perdidas" className="text-white font-semibold hover:text-gray-300">
+                VENTAS PERDIDAS
+              </Link>
+            )}
+
             {user?.role === 'admin' && (
               <Link to="/auditoria" className="text-white font-semibold hover:text-gray-300">
                 AUDITAR INVENTARIO

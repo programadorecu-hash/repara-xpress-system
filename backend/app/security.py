@@ -1,7 +1,9 @@
 # EN backend/app/security.py
 
+import os
 from typing import List
 from datetime import datetime, timedelta, timezone
+
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from fastapi import Depends, HTTPException, status
@@ -14,7 +16,12 @@ from . import crud, schemas
 from .database import get_db
 
 # --- Configuración de Seguridad ---
-SECRET_KEY = "una-clave-secreta-muy-larga-y-dificil-de-adivinar"
+SECRET_KEY = os.getenv("SECRET_KEY")
+if not SECRET_KEY:
+    raise RuntimeError(
+        "SECRET_KEY environment variable must be set for authentication to work securely."
+    )
+
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
@@ -52,11 +59,17 @@ def get_current_user(db: Session = Depends(get_db), token: str = Depends(oauth2_
         # Opcional: podrías añadir un schema para el payload del token para validarlo.
     except JWTError:
         raise credentials_exception
-    
+
     user = crud.get_user_by_email(db, email=email)
     if user is None:
         raise credentials_exception
-    
+
+    if not getattr(user, "is_active", True):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="El usuario está deshabilitado"
+        )
+
     # Devolvemos el usuario completo obtenido de la base de datos
     return user
 
