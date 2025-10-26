@@ -11,6 +11,7 @@ import POSPage from './pages/POSPage.jsx';
 import SuppliersPage from './pages/SuppliersPage.jsx';
 import PurchaseInvoicesPage from './pages/PurchaseInvoicesPage.jsx';
 import CashAccountsPage from './pages/CashAccountsPage.jsx';
+import CashTransactionsPage from './pages/CashTransactionsPage.jsx';
 
 function App() {
   return (
@@ -49,6 +50,14 @@ function App() {
           element={(
             <ProtectedRoute requiredRoles={['admin']}>
               <CashAccountsPage />
+            </ProtectedRoute>
+          )}
+        />
+        <Route
+          path="caja/transacciones"
+          element={(
+            <ProtectedRoute requiredRoles={['admin']}>
+              <CashTransactionsPage />
             </ProtectedRoute>
           )}
         />

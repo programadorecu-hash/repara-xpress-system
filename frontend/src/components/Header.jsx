@@ -57,6 +57,11 @@ function Header() {
                 CAJA
               </Link>
             )}
+            {canManageCash && (
+              <Link to="/caja/transacciones" className="text-white font-semibold hover:text-gray-300">
+                MOVIMIENTOS DE CAJA
+              </Link>
+            )}
             
             {token && user && (
               <div className="flex items-center space-x-4">
