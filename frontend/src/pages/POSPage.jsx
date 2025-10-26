@@ -20,6 +20,7 @@ function POSPage() {
   const [customerPhone, setCustomerPhone] = useState("");
   const [customerAddress, setCustomerAddress] = useState("");
   const [customerEmail, setCustomerEmail] = useState(""); // Añadimos email también
+  const [isDownloadingReceipt, setIsDownloadingReceipt] = useState(false);
 
   // Calcula el total cada vez que el carrito cambia
   useEffect(() => {
@@ -317,11 +318,36 @@ function POSPage() {
 
     // Preparamos el objeto final que enviará la petición.
     // Añadimos work_order_id solo si existe un item de orden de trabajo en el carrito.
+    const normalizedPhone =
+      saleDataFromModal.customer_phone &&
+      saleDataFromModal.customer_phone.toString().trim() !== ""
+        ? saleDataFromModal.customer_phone.toString().trim()
+        : null;
+    const normalizedAddress =
+      saleDataFromModal.customer_address &&
+      saleDataFromModal.customer_address.toString().trim() !== ""
+        ? saleDataFromModal.customer_address.toString().trim()
+        : null;
+    const normalizedEmail =
+      saleDataFromModal.customer_email &&
+      saleDataFromModal.customer_email.toString().trim() !== ""
+        ? saleDataFromModal.customer_email.toString().trim()
+        : null;
+
     const saleData = {
       payment_method: saleDataFromModal.payment_method,
       payment_method_details: saleDataFromModal.payment_method_details,
       pin: saleDataFromModal.pin,
       items: itemsPayload,
+      // --- DATOS DEL CLIENTE ---
+      customer_ci:
+        saleDataFromModal.customer_ci?.toString().trim() || customerCI.trim(),
+      customer_name:
+        saleDataFromModal.customer_name?.toString().trim() ||
+        customerName.trim(),
+      customer_phone: normalizedPhone ?? null,
+      customer_address: normalizedAddress ?? null,
+      customer_email: normalizedEmail ?? null,
       // work_order_id: null si no hay orden; esto facilita que el backend lo reciba siempre
       // y haga la lógica correspondiente.
       work_order_id: workOrderItem ? workOrderItem.work_order_id : null,
@@ -355,6 +381,38 @@ function POSPage() {
     }
   };
   // --- FIN FUNCIÓN MODIFICADA ---
+
+  const handleDownloadReceipt = async () => {
+    if (!lastSuccessfulSale) return;
+
+    try {
+      setIsDownloadingReceipt(true);
+      const response = await api.get(
+        `/sales/${lastSuccessfulSale.id}/receipt`,
+        {
+          responseType: "blob",
+        }
+      );
+
+      const blob = new Blob([response.data], { type: "application/pdf" });
+      const fileURL = window.URL.createObjectURL(blob);
+      const downloadLink = document.createElement("a");
+      downloadLink.href = fileURL;
+      downloadLink.setAttribute(
+        "download",
+        `recibo_venta_${lastSuccessfulSale.id}.pdf`
+      );
+      document.body.appendChild(downloadLink);
+      downloadLink.click();
+      downloadLink.remove();
+      window.URL.revokeObjectURL(fileURL);
+    } catch (error) {
+      console.error("Error al descargar el recibo de la venta:", error);
+      alert("No se pudo generar el recibo. Revisa la consola para más detalles.");
+    } finally {
+      setIsDownloadingReceipt(false);
+    }
+  };
 
   // --- Diseño Básico de la Interfaz ---
   // --- CORRECCIÓN: Añadido Fragment < > para envolver todo ---
@@ -866,14 +924,21 @@ function POSPage() {
                 ${lastSuccessfulSale.total_amount.toFixed(2)}
               </span>
             </p>
-            {/* Botón para cerrar este mensaje e iniciar nueva venta */}
-            <button
-              onClick={() => setLastSuccessfulSale(null)} // Limpia el estado para ocultar el mensaje
-              className="w-full bg-accent hover:bg-teal-500 text-white font-bold py-2 px-4 rounded-lg transition duration-150"
-            >
-              Nueva Venta
-            </button>
-            {/* Aquí podríamos añadir el botón "Imprimir Recibo" en el futuro */}
+            <div className="space-y-3">
+              <button
+                onClick={handleDownloadReceipt}
+                className="w-full bg-highlight hover:bg-yellow-500 text-secondary font-bold py-2 px-4 rounded-lg transition duration-150 disabled:bg-gray-300"
+                disabled={isDownloadingReceipt}
+              >
+                {isDownloadingReceipt ? "Generando recibo..." : "Descargar Recibo"}
+              </button>
+              <button
+                onClick={() => setLastSuccessfulSale(null)} // Limpia el estado para ocultar el mensaje
+                className="w-full bg-accent hover:bg-teal-500 text-white font-bold py-2 px-4 rounded-lg transition duration-150"
+              >
+                Nueva Venta
+              </button>
+            </div>
           </div>
         </div>
       )}
