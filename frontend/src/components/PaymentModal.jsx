@@ -5,6 +5,9 @@ const PAYMENT_METHODS = ["Efectivo", "Tarjeta", "Transferencia", "Otro"];
 
 function PaymentModal({
   totalAmount,
+  subtotalAmount = 0,
+  ivaPercentage = 12,
+  ivaAmount = 0,
   cartItems,
   onClose,
   onSubmitSale,
@@ -56,20 +59,23 @@ function PaymentModal({
 
     // Prepara los datos para enviar al backend
     const saleData = {
-          payment_method: paymentMethod.toUpperCase().replace(' ', '_'),
-          payment_method_details: paymentMethod !== 'Efectivo' ? { reference: reference } : null,
-          pin: pin,
-          items: cartItems,
-          work_order_id: cartItems.find(item => item.work_order_id)?.work_order_id || null,
-          // --- CORRECCIÓN AQUÍ ---
-          // Asegúrate que los nombres a la DERECHA coincidan con los de la definición de la función
-          customer_ci: initialCustomerCI,         // Correcto si la prop se llama initialCustomerCI
-          customer_name: initialCustomerName,     // Correcto si la prop se llama initialCustomerName
-          customer_phone: initialCustomerPhone,   // Correcto si la prop se llama initialCustomerPhone
-          customer_address: initialCustomerAddress, // Correcto si la prop se llama initialCustomerAddress
-          customer_email: initialCustomerEmail      // Correcto si la prop se llama initialCustomerEmail
-          // --- FIN CORRECCIÓN ---
-      };
+      payment_method: paymentMethod.toUpperCase().replace(/\s+/g, "_"),
+      payment_method_details:
+        paymentMethod !== "Efectivo" ? { reference: reference } : null,
+      pin: pin,
+      items: cartItems,
+      work_order_id:
+        cartItems.find((item) => item.work_order_id)?.work_order_id || null,
+      iva_percentage: ivaPercentage,
+      // --- CORRECCIÓN AQUÍ ---
+      // Asegúrate que los nombres a la DERECHA coincidan con los de la definición de la función
+      customer_ci: initialCustomerCI, // Correcto si la prop se llama initialCustomerCI
+      customer_name: initialCustomerName, // Correcto si la prop se llama initialCustomerName
+      customer_phone: initialCustomerPhone, // Correcto si la prop se llama initialCustomerPhone
+      customer_address: initialCustomerAddress, // Correcto si la prop se llama initialCustomerAddress
+      customer_email: initialCustomerEmail, // Correcto si la prop se llama initialCustomerEmail
+      // --- FIN CORRECCIÓN ---
+    };
 
     try {
       // Llama a la función que nos pasaron desde POSPage para registrar la venta
@@ -93,8 +99,15 @@ function PaymentModal({
         </h2>
 
         {/* Total a Pagar */}
-        <div className="bg-gray-100 p-4 rounded-lg mb-4 text-center">
-          <p className="text-sm text-gray-600">Total a Pagar</p>
+        <div className="bg-gray-100 p-4 rounded-lg mb-4 text-center space-y-1">
+          <p className="text-xs uppercase tracking-wide text-gray-500">Resumen</p>
+          <p className="text-sm text-gray-600">
+            Subtotal: <span className="font-semibold text-secondary">${subtotalAmount.toFixed(2)}</span>
+          </p>
+          <p className="text-sm text-gray-600">
+            IVA ({ivaPercentage}%): <span className="font-semibold text-secondary">${ivaAmount.toFixed(2)}</span>
+          </p>
+          <p className="text-lg font-bold text-gray-700">Total a Pagar</p>
           <p className="text-3xl font-bold text-accent">
             ${totalAmount.toFixed(2)}
           </p>
