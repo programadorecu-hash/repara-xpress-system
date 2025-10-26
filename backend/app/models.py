@@ -176,10 +176,20 @@ class Sale(Base):
     total_amount = Column(Float, nullable=False)
     payment_method = Column(String, nullable=False)
     payment_method_details = Column(JSON, nullable=True)
+
+    # --- NUEVAS COLUMNAS PARA DATOS DEL CLIENTE ---
+    customer_ci = Column(String, index=True, nullable=False) # Cédula/RUC Obligatorio
+    customer_name = Column(String, index=True, nullable=False) # Nombre Obligatorio
+    customer_phone = Column(String, nullable=True)
+    customer_address = Column(String, nullable=True)
+    customer_email = Column(String, nullable=True)
+    # --- FIN NUEVAS COLUMNAS ---
+
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     location_id = Column(Integer, ForeignKey("locations.id"), nullable=False)
     work_order_id = Column(Integer, ForeignKey("work_orders.id"), nullable=True)
     user = relationship("User", back_populates="sales")
+    
     location = relationship("Location", back_populates="sales")
     work_order = relationship("WorkOrder", back_populates="sale")
     items = relationship("SaleItem", back_populates="sale")

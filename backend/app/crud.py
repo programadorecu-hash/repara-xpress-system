@@ -1,6 +1,6 @@
 
 from collections import defaultdict
-from sqlalchemy.sql import func, and_, case, literal_column
+from sqlalchemy.sql import func, and_, case, literal_column, or_
 from sqlalchemy.orm import Session, joinedload, outerjoin
 from datetime import date
 
@@ -300,36 +300,46 @@ def adjust_stock(db: Session, adjustment: schemas.StockAdjustmentCreate, user_id
 # --- MOVIMIENTOS (KARDEX) ---
 # ===================================================================
 def create_inventory_movement(db: Session, movement: schemas.InventoryMovementCreate, user_id: int):
-    # Usamos un try/except para asegurar que toda la operación sea atómica
-    try:
-        db_stock = db.query(models.Stock).filter(
-            models.Stock.product_id == movement.product_id,
-            models.Stock.location_id == movement.location_id
-        ).first()
+    # Buscamos el stock actual del producto en la ubicación
+    db_stock = db.query(models.Stock).filter(
+        models.Stock.product_id == movement.product_id,
+        models.Stock.location_id == movement.location_id
+    ).with_for_update().first() # with_for_update() puede ayudar a prevenir condiciones de carrera
 
-        if movement.quantity_change < 0:
-            if not db_stock or db_stock.quantity < abs(movement.quantity_change):
-                raise ValueError("Stock insuficiente para realizar la operación.")
+    # Verificamos si hay stock suficiente ANTES de hacer cambios
+    if movement.quantity_change < 0: # Si estamos restando stock...
+        current_quantity = db_stock.quantity if db_stock else 0
+        if current_quantity < abs(movement.quantity_change):
+            # Obtenemos el nombre del producto para el mensaje de error
+            product = get_product(db, movement.product_id)
+            product_name = product.name if product else f"ID {movement.product_id}"
+            raise ValueError(f"Stock insuficiente para '{product_name}'. Disponible: {current_quantity}, Necesario: {abs(movement.quantity_change)}")
 
-        if not db_stock:
-            db_stock = models.Stock(product_id=movement.product_id, location_id=movement.location_id, quantity=0)
-            db.add(db_stock)
+    # Si no hay registro de stock, creamos uno (asumiendo que es una entrada o ajuste inicial)
+    if not db_stock:
+        # Solo permitir crear si la cantidad es positiva (entrada/ajuste)
+        if movement.quantity_change <= 0:
+             product = get_product(db, movement.product_id)
+             product_name = product.name if product else f"ID {movement.product_id}"
+             raise ValueError(f"Intento de sacar stock inexistente para '{product_name}'.")
+        db_stock = models.Stock(product_id=movement.product_id, location_id=movement.location_id, quantity=0)
+        db.add(db_stock)
+        # Necesitamos hacer flush aquí para que el db_stock obtenga un ID si es nuevo y
+        # para asegurar que el lock with_for_update funcione correctamente si se crea
+        db.flush()
 
-        db_stock.quantity += movement.quantity_change
 
-        movement_data = movement.model_dump(exclude={"pin"})
-        db_movement = models.InventoryMovement(**movement_data, user_id=user_id)
-        db.add(db_movement)
+    # Actualizamos la cantidad en el objeto Stock (en memoria de sesión)
+    db_stock.quantity += movement.quantity_change
 
-        # Guardamos todos los cambios (stock y movimiento) juntos
-        db.commit()
-        db.refresh(db_movement)
+    # Creamos el registro del movimiento (en memoria de sesión)
+    movement_data = movement.model_dump(exclude={"pin"}) # Excluimos el PIN
+    db_movement = models.InventoryMovement(**movement_data, user_id=user_id)
+    db.add(db_movement)
 
-        return db_movement # <-- ¡LA LÍNEA CLAVE QUE FALTABA!
-    except Exception as e:
-        db.rollback() # Si algo falla, deshacemos todo
-        # Re-lanzamos el error para que el endpoint lo maneje
-        raise e
+    # NO HACEMOS COMMIT AQUÍ - Dejamos que la función que llama (create_sale) lo haga al final
+
+    return db_movement # Devolvemos el objeto movimiento (aún no guardado permanentemente)
 
 def get_movements_by_product(db: Session, product_id: int):
     return db.query(models.InventoryMovement).options(joinedload(models.InventoryMovement.product), joinedload(models.InventoryMovement.location), joinedload(models.InventoryMovement.user)).filter(models.InventoryMovement.product_id == product_id).order_by(models.InventoryMovement.timestamp.desc()).all()
@@ -472,6 +482,46 @@ def update_work_order(db: Session, work_order_id: int, work_order_update: schema
         db.refresh(db_work_order)
     return db_work_order
 
+def search_ready_work_orders(db: Session, user: models.User, search: str | None = None, skip: int = 0, limit: int = 100):
+    """
+    Busca órdenes de trabajo con estado 'LISTO' visibles para el usuario actual.
+    Permite filtrar por número de orden (ID), nombre de cliente o cédula.
+    """
+    # Consulta base, incluyendo usuario y ubicación
+    query = db.query(models.WorkOrder).options(
+        joinedload(models.WorkOrder.user),
+        joinedload(models.WorkOrder.location)
+    ).filter(models.WorkOrder.status == 'LISTO') # <-- SOLO ÓRDENES LISTAS
+
+    # Aplicar filtro de permisos basado en rol y turno (igual que en get_work_orders)
+    if user.role not in ["admin", "inventory_manager"]:
+        active_shift = get_active_shift_for_user(db, user_id=user.id)
+        if not active_shift:
+            return [] # Sin turno activo, no puede ver órdenes
+        query = query.filter(models.WorkOrder.location_id == active_shift.location_id)
+
+    # Aplicar filtro de búsqueda si se proporciona
+    if search:
+        search_term_like = f"%{search.lower()}%"
+        # Intentar convertir búsqueda a número para buscar por ID
+        search_term_int = None
+        try:
+            search_term_int = int(search)
+        except ValueError:
+            pass # No es un número válido para ID
+
+        filters = [
+            func.lower(models.WorkOrder.customer_name).like(search_term_like),
+            func.lower(models.WorkOrder.customer_id_card).like(search_term_like)
+        ]
+        if search_term_int is not None:
+            filters.append(models.WorkOrder.id == search_term_int)
+
+        query = query.filter(or_(*filters)) # Usamos or_ para buscar en cualquiera de los campos
+
+    # Ordenar y devolver resultados
+    return query.order_by(models.WorkOrder.created_at.desc()).offset(skip).limit(limit).all()
+
 # ===================================================================
 # --- PROVEEDORES ---
 # ===================================================================
@@ -552,6 +602,15 @@ def create_sale(db: Session, sale: schemas.SaleCreate, user_id: int, location_id
             total_amount=total_amount,
             payment_method=sale.payment_method,
             payment_method_details=sale.payment_method_details,
+
+            # --- PASAR DATOS DEL CLIENTE ---
+            customer_ci=sale.customer_ci,
+            customer_name=sale.customer_name,
+            customer_phone=sale.customer_phone,
+            customer_address=sale.customer_address,
+            customer_email=sale.customer_email,
+            # --- FIN DATOS CLIENTE ---
+
             user_id=user_id,
             location_id=location_id,
             work_order_id=sale.work_order_id,

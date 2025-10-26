@@ -372,7 +372,22 @@ def read_work_orders(
     return crud.get_work_orders(db, user=current_user, skip=skip, limit=limit)
 
 
-@app.get("/work-orders/{work_order_id}", response_model=schemas.WorkOrder)
+# --- NUEVO ENDPOINT PARA BUSCAR ÓRDENES LISTAS ---
+@app.get("/work-orders/ready/search", response_model=List[schemas.WorkOrder])
+def search_ready_work_orders_endpoint(
+    search: str | None = None, # Parámetro de búsqueda
+    skip: int = 0,
+    limit: int = 20, # Limitamos a menos resultados para la búsqueda rápida
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(security.get_current_user)
+):
+    """
+    Endpoint para buscar órdenes de trabajo en estado LISTO
+    visibles para el usuario actual (según su turno y rol).
+    Busca por ID, nombre de cliente o cédula.
+    """
+    return crud.search_ready_work_orders(db=db, user=current_user, search=search, skip=skip, limit=limit)
+# --- FIN NUEVO ENDPOINT ---
 
 @app.get("/work-orders/{work_order_id}", response_model=schemas.WorkOrder)
 def read_single_work_order(work_order_id: int, db: Session = Depends(get_db), current_user: schemas.User = Depends(security.get_current_user)):

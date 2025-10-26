@@ -113,6 +113,15 @@ class SaleBase(BaseModel):
     payment_method: str
     payment_method_details: Dict[str, Any] | None = None
     work_order_id: int | None = None
+
+    # --- NUEVOS CAMPOS PARA DATOS DEL CLIENTE ---
+    customer_ci: str
+    customer_name: str
+    customer_phone: str | None = None
+    customer_address: str | None = None
+    customer_email: str | None = None
+    # --- FIN NUEVOS CAMPOS ---
+
     items: List["SaleItemCreate"]
 
 class CashAccountBase(BaseModel):
@@ -316,6 +325,15 @@ class Sale(SaleBase):
     id: int
     created_at: datetime
     total_amount: float
+
+    # --- NUEVOS CAMPOS PARA DATOS DEL CLIENTE (RESPUESTA) ---
+    customer_ci: str
+    customer_name: str
+    customer_phone: str | None = None
+    customer_address: str | None = None
+    customer_email: str | None = None
+    # --- FIN NUEVOS CAMPOS ---
+
     user: UserSimple
     location: LocationSimple
     items: List[SaleItem]
