@@ -49,7 +49,11 @@ def read_root():
 # ===================================================================
 
 @app.post("/users/", response_model=schemas.User, status_code=status.HTTP_201_CREATED)
-def create_new_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
+def create_new_user(
+    user: schemas.UserCreate,
+    db: Session = Depends(get_db),
+    _role_check: None = Depends(security.require_role(required_roles=["admin"]))
+):
     db_user = crud.get_user_by_email(db, email=user.email)
     if db_user:
         raise HTTPException(status_code=400, detail="El email ya está registrado")

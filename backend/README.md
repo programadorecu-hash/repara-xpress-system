@@ -13,6 +13,11 @@ Las últimas revisiones quedan encadenadas en este orden:
 
 Usa `alembic history --verbose` para revisar el resto de la cadena si es necesario.
 
+## Variables de entorno requeridas
+
+- `DATABASE_URL`: cadena de conexión usada por SQLAlchemy y Alembic.
+- `SECRET_KEY`: clave criptográfica para firmar los JWT. Debe ser una cadena larga y aleatoria.
+
 ## Generar nuevas migraciones
 1. Asegúrate de que el contenedor de base de datos esté disponible y que la variable `sqlalchemy.url` de `alembic.ini` sea alcanzable.
 2. Arranca desde una base sincronizada: `alembic upgrade head`.

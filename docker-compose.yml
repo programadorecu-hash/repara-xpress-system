@@ -8,6 +8,7 @@ services:
       - ./backend:/code
     environment:
       - DATABASE_URL=postgresql://repara_user:repara_password@db/repara_xpress_inventory_db
+      - SECRET_KEY=${SECRET_KEY:?SECRET_KEY environment variable is required}
     depends_on:
       db: # <-- CAMBIO AQUÍ
         condition: service_healthy # Espera a que la BD esté "sana"
