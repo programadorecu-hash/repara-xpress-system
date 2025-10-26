@@ -1,7 +1,7 @@
 """Hacer columnas de cliente NOT NULL
 
 Revision ID: 92d2f21907fd
-Revises: 0866cb4978c7
+Revises: 1d64c9b6c9d0
 Create Date: 2025-10-26 01:35:10.426856
 
 """
@@ -13,7 +13,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision: str = '92d2f21907fd'
-down_revision: Union[str, Sequence[str], None] = '0866cb4978c7'
+down_revision: Union[str, Sequence[str], None] = '1d64c9b6c9d0'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

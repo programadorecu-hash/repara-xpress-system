@@ -1,7 +1,7 @@
 """Añadir campos de cliente a tabla sales
 
 Revision ID: 0866cb4978c7
-Revises: 69cbd33e5f55
+Revises: 0acfba2a2698
 Create Date: 2025-10-26 01:27:19.997732
 
 """
@@ -13,7 +13,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision: str = '0866cb4978c7'
-down_revision: Union[str, Sequence[str], None] = '69cbd33e5f55'
+down_revision: Union[str, Sequence[str], None] = '0acfba2a2698'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
