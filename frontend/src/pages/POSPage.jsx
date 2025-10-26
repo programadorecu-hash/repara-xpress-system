@@ -8,6 +8,9 @@ function POSPage() {
   const [searchResults, setSearchResults] = useState([]); // Resultados de búsqueda
   const [cart, setCart] = useState([]); // Los items en el carrito
   const [total, setTotal] = useState(0); // El total de la venta
+  const [subtotal, setSubtotal] = useState(0);
+  const [ivaPercentage, setIvaPercentage] = useState(12);
+  const [ivaAmount, setIvaAmount] = useState(0);
   const [loadingSearch, setLoadingSearch] = useState(false); // Indicador de carga
   const { user, activeShift } = useContext(AuthContext); // Info del usuario y turno
   const [searchMode, setSearchMode] = useState("products"); // 'products' or 'workorders'
@@ -24,12 +27,21 @@ function POSPage() {
 
   // Calcula el total cada vez que el carrito cambia
   useEffect(() => {
-    const newTotal = cart.reduce(
+    const rawSubtotal = cart.reduce(
       (sum, item) => sum + item.quantity * item.unit_price,
       0
     );
-    setTotal(newTotal);
-  }, [cart]);
+    const roundedSubtotal = Number(rawSubtotal.toFixed(2));
+    const calculatedIva = Number(
+      ((roundedSubtotal * ivaPercentage) / 100).toFixed(2)
+    );
+    const calculatedTotal = Number(
+      (roundedSubtotal + calculatedIva).toFixed(2)
+    );
+    setSubtotal(roundedSubtotal);
+    setIvaAmount(calculatedIva);
+    setTotal(calculatedTotal);
+  }, [cart, ivaPercentage]);
 
   useEffect(() => {
     const delayDebounceFn = setTimeout(() => {
@@ -339,6 +351,10 @@ function POSPage() {
       payment_method_details: saleDataFromModal.payment_method_details,
       pin: saleDataFromModal.pin,
       items: itemsPayload,
+      iva_percentage:
+        typeof saleDataFromModal.iva_percentage === "number"
+          ? saleDataFromModal.iva_percentage
+          : ivaPercentage,
       // --- DATOS DEL CLIENTE ---
       customer_ci:
         saleDataFromModal.customer_ci?.toString().trim() || customerCI.trim(),
@@ -873,13 +889,57 @@ function POSPage() {
           {/* --- FIN BOTONES GLOBALES --- */}
 
           {/* Total y Botón de Pago */}
-          <div className="border-t pt-4">
-            <div className="flex justify-between items-center mb-4">
-              <span className="text-lg font-bold text-secondary">TOTAL:</span>
-              <span className="text-2xl font-bold text-accent">
-                ${total.toFixed(2)}
-              </span>
+          <div className="border-t pt-4 space-y-4">
+            <div>
+              <p className="text-sm font-semibold text-secondary mb-2">
+                IVA aplicado (Ecuador)
+              </p>
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIvaPercentage(0)}
+                  className={`flex-1 py-2 px-3 rounded-lg border text-sm font-semibold transition ${
+                    ivaPercentage === 0
+                      ? "bg-accent text-white border-accent shadow"
+                      : "bg-white text-gray-600 border-gray-300 hover:bg-gray-100"
+                  }`}
+                >
+                  IVA 0%
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIvaPercentage(12)}
+                  className={`flex-1 py-2 px-3 rounded-lg border text-sm font-semibold transition ${
+                    ivaPercentage === 12
+                      ? "bg-accent text-white border-accent shadow"
+                      : "bg-white text-gray-600 border-gray-300 hover:bg-gray-100"
+                  }`}
+                >
+                  IVA 12%
+                </button>
+              </div>
+              <p className="text-xs text-gray-500 mt-2">
+                Selecciona la tasa vigente según el producto o servicio gravado.
+              </p>
             </div>
+
+            <div className="bg-gray-50 rounded-lg p-4 space-y-2 border border-gray-200">
+              <div className="flex justify-between text-sm text-gray-600">
+                <span>Subtotal</span>
+                <span>${subtotal.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between text-sm text-gray-600">
+                <span>IVA ({ivaPercentage}%)</span>
+                <span>${ivaAmount.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between items-center pt-2 border-t border-dashed border-gray-300">
+                <span className="text-lg font-bold text-secondary">Total</span>
+                <span className="text-2xl font-bold text-accent">
+                  ${total.toFixed(2)}
+                </span>
+              </div>
+            </div>
+
             <button
               className="w-full bg-highlight hover:bg-yellow-500 text-secondary font-bold py-3 rounded-lg transition duration-300 disabled:bg-gray-300"
               disabled={cart.length === 0}
@@ -924,6 +984,12 @@ function POSPage() {
                 ${lastSuccessfulSale.total_amount.toFixed(2)}
               </span>
             </p>
+            <p className="text-sm text-gray-500 mb-4">
+              Subtotal: ${lastSuccessfulSale.subtotal_amount.toFixed(2)} | IVA ({
+                lastSuccessfulSale.iva_percentage
+              }
+              %): ${lastSuccessfulSale.tax_amount.toFixed(2)}
+            </p>
             <div className="space-y-3">
               <button
                 onClick={handleDownloadReceipt}
@@ -948,6 +1014,9 @@ function POSPage() {
       {isPaymentModalOpen && (
         <PaymentModal
           totalAmount={total}
+          subtotalAmount={subtotal}
+          ivaPercentage={ivaPercentage}
+          ivaAmount={ivaAmount}
           cartItems={cart.map((item) => ({
             product_id: item.isWorkOrder ? null : item.product_id,
             description: item.description,

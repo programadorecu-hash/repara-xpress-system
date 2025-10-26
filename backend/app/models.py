@@ -174,7 +174,10 @@ class Sale(Base):
     __tablename__ = "sales"
     id = Column(Integer, primary_key=True, index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    subtotal_amount = Column(Float, nullable=False, default=0.0)
+    tax_amount = Column(Float, nullable=False, default=0.0)
     total_amount = Column(Float, nullable=False)
+    iva_percentage = Column(Float, nullable=False, default=12.0)
     payment_method = Column(String, nullable=False)
     payment_method_details = Column(JSON, nullable=True)
 

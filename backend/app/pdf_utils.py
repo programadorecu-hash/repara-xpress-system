@@ -199,6 +199,11 @@ def generate_sale_receipt_pdf(sale: schemas.Sale):
         y -= 1 * mm
 
     draw_line()
+    draw_paragraph(f"<b>Subtotal:</b> ${sale.subtotal_amount:.2f}", style_normal)
+    draw_paragraph(
+        f"<b>IVA ({sale.iva_percentage:.0f}%):</b> ${sale.tax_amount:.2f}",
+        style_normal,
+    )
     draw_paragraph(f"<b>Total:</b> ${sale.total_amount:.2f}", style_normal)
 
     formatted_payment_method = sale.payment_method.replace("_", " ").title()

@@ -1,4 +1,4 @@
-from pydantic import BaseModel, computed_field
+from pydantic import BaseModel, computed_field, field_validator
 from typing import List, Dict, Any, Optional
 from datetime import datetime, date
 
@@ -114,6 +114,7 @@ class SaleBase(BaseModel):
     payment_method: str
     payment_method_details: Dict[str, Any] | None = None
     work_order_id: int | None = None
+    iva_percentage: float = 12.0
 
     # --- NUEVOS CAMPOS PARA DATOS DEL CLIENTE ---
     customer_ci: str
@@ -124,6 +125,13 @@ class SaleBase(BaseModel):
     # --- FIN NUEVOS CAMPOS ---
 
     items: List["SaleItemCreate"]
+
+    @field_validator("iva_percentage")
+    @classmethod
+    def validate_iva_percentage(cls, value: float) -> float:
+        if value not in (0, 12):
+            raise ValueError("El IVA debe ser 0% o 12%.")
+        return value
 
 class CashAccountBase(BaseModel):
     name: str
@@ -342,6 +350,8 @@ class SaleItem(SaleItemBase):
 class Sale(SaleBase):
     id: int
     created_at: datetime
+    subtotal_amount: float
+    tax_amount: float
     total_amount: float
 
     # --- NUEVOS CAMPOS PARA DATOS DEL CLIENTE (RESPUESTA) ---

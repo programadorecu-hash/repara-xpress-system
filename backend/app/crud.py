@@ -1,5 +1,6 @@
 
 from collections import defaultdict
+from decimal import Decimal, ROUND_HALF_UP
 from sqlalchemy.sql import func, and_, case, literal_column, or_
 from sqlalchemy.orm import Session, joinedload, outerjoin, selectinload
 from datetime import date
@@ -623,16 +624,37 @@ def create_sale(db: Session, sale: schemas.SaleCreate, user_id: int, location_id
         bodega = get_primary_bodega_for_location(db, location_id=location_id)
         if not bodega:
             raise ValueError(f"La sucursal con ID {location_id} no tiene una bodega configurada.")
-        
-        total_amount = 0
+
+        if not sale.items:
+            raise ValueError("La venta debe incluir al menos un ítem.")
+
+        subtotal_decimal = Decimal("0.00")
         sale_items_to_create = []
         for item in sale.items:
-            line_total = item.quantity * item.unit_price
-            total_amount += line_total
-            sale_items_to_create.append(models.SaleItem(**item.model_dump(), line_total=line_total))
+            line_total_decimal = Decimal(item.quantity) * Decimal(str(item.unit_price))
+            subtotal_decimal += line_total_decimal
+            line_total = line_total_decimal.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+            sale_items_to_create.append(
+                models.SaleItem(
+                    **item.model_dump(),
+                    line_total=float(line_total)
+                )
+            )
+
+        subtotal_decimal = subtotal_decimal.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        iva_rate = Decimal(str(sale.iva_percentage)) / Decimal("100")
+        tax_amount_decimal = (subtotal_decimal * iva_rate).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        total_amount_decimal = (subtotal_decimal + tax_amount_decimal).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+        subtotal_amount = float(subtotal_decimal)
+        tax_amount = float(tax_amount_decimal)
+        total_amount = float(total_amount_decimal)
 
         db_sale = models.Sale(
+            subtotal_amount=subtotal_amount,
+            tax_amount=tax_amount,
             total_amount=total_amount,
+            iva_percentage=sale.iva_percentage,
             payment_method=sale.payment_method,
             payment_method_details=sale.payment_method_details,
 
@@ -663,13 +685,13 @@ def create_sale(db: Session, sale: schemas.SaleCreate, user_id: int, location_id
                     pin=sale.pin
                 )
                 create_inventory_movement(db=db, movement=movement, user_id=user_id)
-        
+
         if sale.work_order_id:
             db_work_order = get_work_order(db, work_order_id=sale.work_order_id)
             if db_work_order:
                 db_work_order.status = "ENTREGADO"
                 db_work_order.final_cost = total_amount
-        
+
         db.commit()
         db.refresh(db_sale)
         return db_sale
