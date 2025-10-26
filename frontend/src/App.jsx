@@ -8,6 +8,9 @@ import AppLayout from './components/AppLayout.jsx';
 import AuditPage from './pages/AuditPage.jsx';
 import WorkOrderPage from './pages/WorkOrderPage.jsx';
 import POSPage from './pages/POSPage.jsx';
+import SuppliersPage from './pages/SuppliersPage.jsx';
+import PurchaseInvoicesPage from './pages/PurchaseInvoicesPage.jsx';
+import CashAccountsPage from './pages/CashAccountsPage.jsx';
 
 function App() {
   return (
@@ -22,9 +25,33 @@ function App() {
       <Route path="/" element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
         <Route index element={<DashboardPage />} />
         <Route path="inventario" element={<ProductPage />} />
-        <Route path="auditoria" element={<AuditPage />} />
+        <Route path="auditoria" element={<ProtectedRoute requiredRoles={['admin']}><AuditPage /></ProtectedRoute>} />
         <Route path="ordenes" element={<WorkOrderPage />} />
         <Route path="pos" element={<POSPage />} />
+        <Route
+          path="proveedores"
+          element={(
+            <ProtectedRoute requiredRoles={['admin', 'inventory_manager']}>
+              <SuppliersPage />
+            </ProtectedRoute>
+          )}
+        />
+        <Route
+          path="compras"
+          element={(
+            <ProtectedRoute requiredRoles={['admin', 'inventory_manager']}>
+              <PurchaseInvoicesPage />
+            </ProtectedRoute>
+          )}
+        />
+        <Route
+          path="caja"
+          element={(
+            <ProtectedRoute requiredRoles={['admin']}>
+              <CashAccountsPage />
+            </ProtectedRoute>
+          )}
+        />
 
       </Route>
     </Routes>
