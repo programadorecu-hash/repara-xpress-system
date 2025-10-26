@@ -61,6 +61,7 @@ class WorkOrderBase(BaseModel):
     customer_id_card: str
     customer_phone: str
     customer_address: Optional[str] = None
+    customer_email: Optional[str] = None
     device_type: str
     device_brand: str
     device_model: str
@@ -195,6 +196,9 @@ class WorkOrderCreate(WorkOrderBase):
 class WorkOrderUpdate(BaseModel):
     status: str | None = None
     final_cost: float | None = None
+    customer_phone: str | None = None
+    customer_address: str | None = None
+    customer_email: str | None = None
 class SupplierCreate(SupplierBase):
     pass
 class PurchaseInvoiceItemCreate(PurchaseInvoiceItemBase):
