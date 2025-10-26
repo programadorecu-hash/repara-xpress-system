@@ -1,4 +1,5 @@
 import React, { useContext, useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import DataTable from '../components/DataTable.jsx';
 import ModalForm from '../components/ModalForm.jsx';
 import api from '../services/api';
@@ -135,6 +136,14 @@ function CashAccountsPage() {
         <DataTable
           columns={columns}
           data={accounts}
+          actions={(row) => (
+            <Link
+              to={`/caja/transacciones?accountId=${row.id}`}
+              className="text-accent font-semibold hover:underline"
+            >
+              Ver movimientos
+            </Link>
+          )}
           emptyMessage={location ? 'No hay cuentas registradas para esta sucursal.' : 'Inicia un turno para ver las cuentas.'}
         />
       )}
