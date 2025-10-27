@@ -1,0 +1,10 @@
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.venv
+venv
+alembic/versions/__pycache__
+postgres_data
+.vscode
+.git
