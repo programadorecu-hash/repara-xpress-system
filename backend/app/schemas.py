@@ -87,6 +87,24 @@ class WorkOrderImage(WorkOrderImageBase):
     class Config:
         from_attributes = True
 
+# ===== Schemas para la bitácora de órdenes =====
+class WorkOrderNoteBase(BaseModel):
+    message: str
+
+class WorkOrderNoteCreate(WorkOrderNoteBase):
+    pass
+
+class WorkOrderNote(WorkOrderNoteBase):
+    id: int
+    created_at: datetime
+    user: "UserSimple"
+    location: "LocationSimple"
+
+    class Config:
+        from_attributes = True
+# ===== Fin schemas bitácora =====
+
+
 class SupplierBase(BaseModel):
     name: str
     contact_person: str | None = None
@@ -303,6 +321,9 @@ class WorkOrder(WorkOrderBase):
     user: UserSimple
     location: LocationSimple
     images: List[WorkOrderImage] = []
+        # Notas internas (solo para vistas internas)
+    notes: List[WorkOrderNote] = []
+
 
     @computed_field
     @property
@@ -310,6 +331,45 @@ class WorkOrder(WorkOrderBase):
         return f"{self.id:05d}"
     class Config:
         from_attributes = True
+
+        # ===== Esquema público: no expone datos sensibles de la orden =====
+class WorkOrderPublic(BaseModel):
+    # --- Campos visibles (seguros) ---
+    id: int
+    created_at: datetime
+    status: str
+    final_cost: float | None = None
+
+    # Datos del cliente (sin contraseñas de dispositivo)
+    customer_name: str
+    customer_id_card: str
+    customer_phone: str
+    customer_address: Optional[str] = None
+    customer_email: Optional[str] = None
+
+    # Datos del equipo (sin contraseñas ni patrones)
+    device_type: str
+    device_brand: str
+    device_model: str
+    device_serial: Optional[str] = None
+    reported_issue: str
+    estimated_cost: float
+    deposit_amount: float = 0
+
+    # Relaciones
+    user: UserSimple
+    location: LocationSimple
+    images: List[WorkOrderImage] = []
+
+    @computed_field
+    @property
+    def work_order_number(self) -> str:
+        return f"{self.id:05d}"
+
+    class Config:
+        from_attributes = True
+# ===== Fin esquema público =====
+
 
 class PurchaseInvoiceItem(PurchaseInvoiceItemBase):
     id: int

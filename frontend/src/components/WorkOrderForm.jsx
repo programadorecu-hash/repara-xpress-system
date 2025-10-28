@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import api from '../services/api';
 
+
 // --- Componente para un solo item del Checklist ---
 // Lo creamos aparte para no repetir código.
 const CheckListItem = ({ label, name, value, onChange, disabled }) => (

@@ -1,5 +1,5 @@
 from sqlalchemy import (
-    Column, Integer, String, Float, Boolean, ForeignKey, UniqueConstraint, DateTime
+    Column, Integer, String, Float, Boolean, ForeignKey, UniqueConstraint, DateTime, desc
 )
 from sqlalchemy.dialects.postgresql import JSON
 from sqlalchemy.sql import func
@@ -158,6 +158,35 @@ class WorkOrder(Base):
     
     # NUEVA RELACIÓN: Una orden de trabajo ahora puede tener muchas imágenes.
     images = relationship("WorkOrderImage", back_populates="work_order")
+
+        # Notas internas (bitácora)
+    notes = relationship(
+    "WorkOrderNote",
+    back_populates="work_order",
+    cascade="all, delete-orphan",
+    order_by=lambda: desc(WorkOrderNote.created_at)
+)
+
+
+
+# ===== Bitácora interna por orden de trabajo =====
+class WorkOrderNote(Base):
+    __tablename__ = "work_order_notes"
+    id = Column(Integer, primary_key=True, index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    message = Column(String, nullable=False)
+
+    # Relación con la orden
+    work_order_id = Column(Integer, ForeignKey("work_orders.id"), nullable=False)
+    work_order = relationship("WorkOrder", back_populates="notes")
+
+    # Quién escribió y desde qué local (ubicación del turno)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    location_id = Column(Integer, ForeignKey("locations.id"), nullable=False)
+
+    user = relationship("User")       # (lectura sencilla; no necesitamos back_populates aquí)
+    location = relationship("Location")
+# ===== Fin bitácora =====
 
 
 class WorkOrderImage(Base):

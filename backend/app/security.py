@@ -81,3 +81,13 @@ def require_role(required_roles: List[str]):
                 detail="No tienes permiso para realizar esta acción"
             )
     return role_checker
+
+def require_internal_roles():
+    """
+    Acceso a usuarios internos del negocio (roles actuales):
+    - admin
+    - inventory_manager
+    - warehouse_operator
+    Nota: cuando agregues un rol nuevo (ej. technician), añádelo a esta lista.
+    """
+    return require_role(required_roles=["admin", "inventory_manager", "warehouse_operator"])

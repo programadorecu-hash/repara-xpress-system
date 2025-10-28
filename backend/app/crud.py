@@ -456,7 +456,20 @@ def get_lost_sale_logs(db: Session, skip: int = 0, limit: int = 100):
 # --- ÓRDENES DE TRABAJO ---
 # ===================================================================
 def get_work_order(db: Session, work_order_id: int):
-    return db.query(models.WorkOrder).options(joinedload(models.WorkOrder.user), joinedload(models.WorkOrder.location)).filter(models.WorkOrder.id == work_order_id).first()
+    return (
+        db.query(models.WorkOrder)
+        .options(
+            joinedload(models.WorkOrder.user),
+            joinedload(models.WorkOrder.location),
+            selectinload(models.WorkOrder.images),
+            selectinload(models.WorkOrder.notes).selectinload(models.WorkOrderNote.user),
+            selectinload(models.WorkOrder.notes).selectinload(models.WorkOrderNote.location),
+        )
+        .filter(models.WorkOrder.id == work_order_id)
+        .first()
+    )
+
+
 
 def get_work_orders(db: Session, user: models.User, skip: int = 0, limit: int = 100):
     """
@@ -543,6 +556,44 @@ def search_ready_work_orders(db: Session, user: models.User, search: str | None 
 
     # Ordenar y devolver resultados
     return query.order_by(models.WorkOrder.created_at.desc()).offset(skip).limit(limit).all()
+
+def create_work_order_note(db: Session, work_order_id: int, user_id: int, location_id: int, message: str):
+    """Crea una nota interna para una orden de trabajo."""
+    note = models.WorkOrderNote(
+        work_order_id=work_order_id,
+        user_id=user_id,
+        location_id=location_id,
+        message=message
+    )
+    db.add(note)
+    db.commit()
+    db.refresh(note)
+    # Devolvemos con relaciones cargadas:
+    return (
+        db.query(models.WorkOrderNote)
+        .options(
+            selectinload(models.WorkOrderNote.user),
+            selectinload(models.WorkOrderNote.location),
+        )
+        .filter(models.WorkOrderNote.id == note.id)
+        .first()
+    )
+
+def get_work_order_notes(db: Session, work_order_id: int, skip: int = 0, limit: int = 100):
+    """Lista notas de una orden (más recientes primero)."""
+    return (
+        db.query(models.WorkOrderNote)
+        .options(
+            selectinload(models.WorkOrderNote.user),
+            selectinload(models.WorkOrderNote.location),
+        )
+        .filter(models.WorkOrderNote.work_order_id == work_order_id)
+        .order_by(models.WorkOrderNote.created_at.desc())
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
+
 
 # ===================================================================
 # --- PROVEEDORES ---

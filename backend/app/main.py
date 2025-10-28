@@ -11,7 +11,12 @@ import shutil
 import os
 import uuid
 
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, PlainTextResponse
+from slowapi import Limiter                      # Núcleo del limitador
+from slowapi.util import get_remote_address      # Cómo identificar al cliente (por IP)
+from slowapi.errors import RateLimitExceeded     # Error cuando se excede el límite
+from slowapi.middleware import SlowAPIMiddleware # Middleware que activa el limitador
+from starlette.requests import Request           # Tipo de request para el handler
 from . import pdf_utils
 
 from . import models, schemas, crud, security
@@ -32,6 +37,21 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ===== Rate limiting: limitar intentos de login =====
+# 1) Creamos el "guardia" que cuenta cuántas peticiones hace cada cliente (por IP)
+limiter = Limiter(key_func=get_remote_address)
+
+# 2) Guardamos el limitador en la app y activamos su middleware
+app.state.limiter = limiter
+app.add_middleware(SlowAPIMiddleware)
+
+# 3) Mensaje claro cuando alguien se pasa del límite
+@app.exception_handler(RateLimitExceeded)
+async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
+    # 429 = Too Many Requests (demasiadas peticiones)
+    return PlainTextResponse("Demasiados intentos, intenta más tarde.", status_code=429)
+# ===== Fin rate limiting =====
 
 
 # ===================================================================
@@ -80,8 +100,13 @@ def reset_password_for_user(user_id: int, password_data: schemas.UserPasswordRes
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
     return {"message": f"Contraseña para el usuario {db_user.email} ha sido reseteada con éxito."}
 
+@limiter.limit("5/minute")  # Máximo 5 intentos por minuto desde la misma conexión
 @app.post("/token")
-async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+async def login_for_access_token(
+    request: Request,  # <= NECESARIO para slowapi
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    db: Session = Depends(get_db)
+):
     user = crud.get_user_by_email(db, email=form_data.username)
     if not user or not security.verify_password(form_data.password, user.hashed_password):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Email o contraseña incorrectos", headers={"WWW-Authenticate": "Bearer"})
@@ -160,6 +185,31 @@ def upload_product_image(
     db_product = crud.get_product(db, product_id=product_id)
     if not db_product:
         raise HTTPException(status_code=404, detail="Producto no encontrado")
+    
+        # ===== VALIDACIÓN DE ARCHIVO (Producto) =====
+    # 1) Extensiones permitidas
+    allowed_exts = [".jpg", ".jpeg", ".png", ".webp"]
+    # 2) Tipos MIME permitidos
+    allowed_types = ["image/jpeg", "image/png", "image/webp"]
+    # 3) Tamaño máximo (5 MB)
+    MAX_BYTES = 5 * 1024 * 1024
+
+    # Revisar el tipo MIME que dice el navegador/cliente
+    if file.content_type not in allowed_types:
+        raise HTTPException(status_code=400, detail="Solo se permiten imágenes JPG, PNG o WEBP")
+
+    # Revisar la extensión del nombre original
+    original_ext = os.path.splitext(file.filename)[1].lower()
+    if original_ext not in allowed_exts:
+        raise HTTPException(status_code=400, detail="Extensión no permitida (usa .jpg, .jpeg, .png, .webp)")
+
+    # Revisar tamaño leyendo el contenido en memoria y luego regresando el puntero
+    contents = file.file.read()
+    if len(contents) > MAX_BYTES:
+        raise HTTPException(status_code=400, detail="Archivo demasiado grande (máx 5MB)")
+    # Volver el puntero al inicio para poder guardarlo más abajo
+    file.file.seek(0)
+    # ===== FIN VALIDACIÓN DE ARCHIVO =====
 
     # --- LÓGICA MEJORADA PARA NOMBRES ÚNICOS ---
 
@@ -333,7 +383,7 @@ def read_lost_sale_logs(skip: int = 0, limit: int = 100, db: Session = Depends(g
 # ===================================================================
 # --- ENDPOINTS PARA ÓRDENES DE TRABAJO ---
 # ===================================================================
-@app.post("/work-orders/", response_model=schemas.WorkOrder, status_code=status.HTTP_201_CREATED)
+@app.post("/work-orders/", response_model=schemas.WorkOrderPublic, status_code=status.HTTP_201_CREATED)
 def create_new_work_order(
     work_order: schemas.WorkOrderCreate, 
     db: Session = Depends(get_db), 
@@ -348,7 +398,7 @@ def create_new_work_order(
 
     return crud.create_work_order(db=db, work_order=work_order, user_id=current_user.id, location_id=active_shift.location_id)
 
-@app.patch("/work-orders/{work_order_id}", response_model=schemas.WorkOrder)
+@app.patch("/work-orders/{work_order_id}", response_model=schemas.WorkOrderPublic)
 def update_work_order_status(
     work_order_id: int, 
     work_order_update: schemas.WorkOrderUpdate, 
@@ -361,7 +411,7 @@ def update_work_order_status(
         raise HTTPException(status_code=404, detail="Orden de trabajo no encontrada")
     return updated_work_order
 
-@app.get("/work-orders/", response_model=List[schemas.WorkOrder])
+@app.get("/work-orders/", response_model=List[schemas.WorkOrderPublic])
 def read_work_orders(
     skip: int = 0, 
     limit: int = 100, 
@@ -375,7 +425,7 @@ def read_work_orders(
 
 
 # --- NUEVO ENDPOINT PARA BUSCAR ÓRDENES LISTAS ---
-@app.get("/work-orders/ready/search", response_model=List[schemas.WorkOrder])
+@app.get("/work-orders/ready/search", response_model=List[schemas.WorkOrderPublic])
 def search_ready_work_orders_endpoint(
     search: str | None = None, # Parámetro de búsqueda
     skip: int = 0,
@@ -391,14 +441,14 @@ def search_ready_work_orders_endpoint(
     return crud.search_ready_work_orders(db=db, user=current_user, search=search, skip=skip, limit=limit)
 # --- FIN NUEVO ENDPOINT ---
 
-@app.get("/work-orders/{work_order_id}", response_model=schemas.WorkOrder)
+@app.get("/work-orders/{work_order_id}", response_model=schemas.WorkOrderPublic)
 def read_single_work_order(work_order_id: int, db: Session = Depends(get_db), current_user: schemas.User = Depends(security.get_current_user)):
     db_work_order = crud.get_work_order(db, work_order_id=work_order_id)
     if db_work_order is None:
         raise HTTPException(status_code=404, detail="Orden de trabajo no encontrada")
     return db_work_order
 
-@app.post("/work-orders/{work_order_id}/upload-image/", response_model=schemas.WorkOrder)
+@app.post("/work-orders/{work_order_id}/upload-image/", response_model=schemas.WorkOrderPublic)
 def upload_work_order_image(
     work_order_id: int,
     tag: str,
@@ -410,6 +460,25 @@ def upload_work_order_image(
     db_work_order = crud.get_work_order(db, work_order_id=work_order_id)
     if not db_work_order:
         raise HTTPException(status_code=404, detail="Orden de trabajo no encontrada")
+    
+        # ===== VALIDACIÓN DE ARCHIVO (Orden de trabajo) =====
+    allowed_exts = [".jpg", ".jpeg", ".png", ".webp"]
+    allowed_types = ["image/jpeg", "image/png", "image/webp"]
+    MAX_BYTES = 5 * 1024 * 1024
+
+    if file.content_type not in allowed_types:
+        raise HTTPException(status_code=400, detail="Solo se permiten imágenes JPG, PNG o WEBP")
+
+    original_ext = os.path.splitext(file.filename)[1].lower()
+    if original_ext not in allowed_exts:
+        raise HTTPException(status_code=400, detail="Extensión no permitida (usa .jpg, .jpeg, .png, .webp)")
+
+    contents = file.file.read()
+    if len(contents) > MAX_BYTES:
+        raise HTTPException(status_code=400, detail="Archivo demasiado grande (máx 5MB)")
+    file.file.seek(0)
+    # ===== FIN VALIDACIÓN DE ARCHIVO =====
+
 
     file_extension = os.path.splitext(file.filename)[1]
     unique_filename = f"{uuid.uuid4()}{file_extension}"
@@ -426,11 +495,58 @@ def upload_work_order_image(
     db.refresh(db_work_order)
     return db_work_order
 
+# ===== Bitácora de órdenes (solo roles internos) =====
+
+@app.post("/work-orders/{work_order_id}/notes", response_model=schemas.WorkOrderNote, status_code=status.HTTP_201_CREATED)
+def add_work_order_note(
+    work_order_id: int,
+    note_in: schemas.WorkOrderNoteCreate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(security.get_current_user),
+    _ok: None = Depends(security.require_internal_roles())
+):
+    # Verificar que la orden exista
+    db_work_order = crud.get_work_order(db, work_order_id=work_order_id)
+    if not db_work_order:
+        raise HTTPException(status_code=404, detail="Orden de trabajo no encontrada")
+
+    # Necesitamos saber en qué local está trabajando el usuario (turno activo)
+    active_shift = crud.get_active_shift_for_user(db, user_id=current_user.id)
+    if not active_shift:
+        raise HTTPException(status_code=400, detail="Debes tener un turno activo para comentar.")
+
+    # Crear la nota
+    return crud.create_work_order_note(
+        db=db,
+        work_order_id=work_order_id,
+        user_id=current_user.id,
+        location_id=active_shift.location_id,
+        message=note_in.message
+    )
+
+@app.get("/work-orders/{work_order_id}/notes", response_model=List[schemas.WorkOrderNote])
+def list_work_order_notes(
+    work_order_id: int,
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(get_db),
+    _ok: None = Depends(security.require_internal_roles())
+):
+    # Verificar que la orden exista
+    db_work_order = crud.get_work_order(db, work_order_id=work_order_id)
+    if not db_work_order:
+        raise HTTPException(status_code=404, detail="Orden de trabajo no encontrada")
+
+    return crud.get_work_order_notes(db=db, work_order_id=work_order_id, skip=skip, limit=limit)
+
+# ===== Fin bitácora =====
+
+
 @app.get("/work-orders/{work_order_id}/print", response_class=StreamingResponse)
 def print_work_order(
     work_order_id: int, 
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(security.get_current_user)
+    _ok: None = Depends(security.require_internal_roles())
 ):
     db_work_order = crud.get_work_order(db, work_order_id=work_order_id)
     if db_work_order is None:
@@ -450,6 +566,63 @@ def print_work_order(
 
     # 4. Enviamos el PDF como una respuesta.
     return StreamingResponse(pdf_buffer, media_type="application/pdf", headers=headers)
+
+# ===================================================================
+# --- RUTAS INTERNAS (SOLO EMPLEADOS) - ÓRDENES COMPLETAS ---
+# ===================================================================
+
+# 1) Obtener UNA orden completa por ID
+@app.get("/internal/work-orders/{work_order_id}", response_model=schemas.WorkOrder)
+def read_work_order_internal(
+    work_order_id: int,
+    db: Session = Depends(get_db),
+    _ok: None = Depends(security.require_internal_roles())  # <- SOLO empleados internos
+):
+    """
+    Vista interna (taller): devuelve la orden COMPLETA con datos sensibles.
+    """
+    db_work_order = crud.get_work_order(db, work_order_id=work_order_id)
+    if db_work_order is None:
+        raise HTTPException(status_code=404, detail="Orden de trabajo no encontrada")
+    return db_work_order
+
+
+# 2) Listar órdenes completas (aplicando la lógica de tu CRUD)
+@app.get("/internal/work-orders", response_model=List[schemas.WorkOrder])
+def read_work_orders_internal(
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(security.get_current_user),
+    _ok: None = Depends(security.require_internal_roles())  # <- SOLO empleados internos
+):
+    """
+    Vista interna (taller): lista órdenes COMPLETAS.
+    - Admin / inventory_manager: verán TODAS.
+    - warehouse_operator: verá solo las de su sucursal actual (según su turno activo).
+    """
+    return crud.get_work_orders(db=db, user=current_user, skip=skip, limit=limit)
+
+
+
+# 3) Buscar órdenes LISTAS (completas)
+@app.get("/internal/work-orders/ready/search", response_model=List[schemas.WorkOrder])
+def search_ready_work_orders_internal(
+    search: str | None = None,
+    skip: int = 0,
+    limit: int = 20,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(security.get_current_user),
+    _ok: None = Depends(security.require_internal_roles())  # <- SOLO empleados internos
+):
+    """
+    Vista interna (taller): búsqueda de órdenes LISTAS (estado 'LISTO') con datos COMPLETOS.
+    - Admin / inventory_manager: verán todas las LISTAS.
+    - warehouse_operator: verá solo las LISTAS de su sucursal (según turno activo).
+    """
+    return crud.search_ready_work_orders(db=db, user=current_user, search=search, skip=skip, limit=limit)
+
+
 
 # ===================================================================
 # --- ENDPOINTS PARA PROVEEDORES ---
