@@ -94,7 +94,7 @@ function PaymentModal({
     <div className="fixed inset-0 bg-black bg-opacity-60 z-50 flex items-center justify-center p-4">
       {/* Contenedor del modal */}
       <div className="bg-white p-6 rounded-lg shadow-xl w-full max-w-md text-gray-800">
-        <h2 className="text-2xl font-bold text-secondary mb-4 text-center">
+        <h2 className="text-2xl font-bold text-onSurface mb-4 text-center">
           Confirmar Pago
         </h2>
 
@@ -102,13 +102,13 @@ function PaymentModal({
         <div className="bg-gray-100 p-4 rounded-lg mb-4 text-center space-y-1">
           <p className="text-xs uppercase tracking-wide text-gray-500">Resumen</p>
           <p className="text-sm text-gray-600">
-            Subtotal: <span className="font-semibold text-secondary">${subtotalAmount.toFixed(2)}</span>
+            Subtotal: <span className="font-semibold text-onSurface">${subtotalAmount.toFixed(2)}</span>
           </p>
           <p className="text-sm text-gray-600">
-            IVA ({ivaPercentage}%): <span className="font-semibold text-secondary">${ivaAmount.toFixed(2)}</span>
+            IVA ({ivaPercentage}%): <span className="font-semibold text-onSurface">${ivaAmount.toFixed(2)}</span>
           </p>
           <p className="text-lg font-bold text-gray-700">Total a Pagar</p>
-          <p className="text-3xl font-bold text-accent">
+          <p className="text-3xl font-bold text-brand">
             ${totalAmount.toFixed(2)}
           </p>
         </div>
@@ -220,7 +220,7 @@ function PaymentModal({
             </button>
             <button
               type="submit"
-              className="flex-1 py-2 px-4 bg-accent text-white font-bold rounded-lg hover:bg-teal-600 transition duration-150 disabled:bg-gray-400"
+              className="flex-1 py-2 px-4 bg-brand text-white font-bold rounded-lg hover:bg-brand-deep transition duration-150 disabled:bg-gray-400"
               disabled={isSubmitting} // Deshabilitar si se está enviando
             >
               {isSubmitting ? "Procesando..." : "Confirmar Venta"}

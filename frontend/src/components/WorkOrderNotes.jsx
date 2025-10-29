@@ -20,7 +20,9 @@ export default function WorkOrderNotes({ workOrderId }) {
       const data = await getWorkOrderNotes(workOrderId, { limit: 50 });
       setNotes(data);
     } catch (err) {
-      setError("No se pudieron cargar las notas. Verifica permisos y turno activo.");
+      setError(
+        "No se pudieron cargar las notas. Verifica permisos y turno activo."
+      );
     } finally {
       setLoading(false);
     }
@@ -64,7 +66,7 @@ export default function WorkOrderNotes({ workOrderId }) {
           <button
             type="submit"
             disabled={sending || !message.trim()}
-            className="px-3 py-1 rounded bg-blue-600 text-white disabled:opacity-50"
+            className="px-3 py-1 rounded bg-brand hover:bg-brand-deep text-white disabled:opacity-50"
           >
             {sending ? "Guardando..." : "Agregar nota"}
           </button>
@@ -93,7 +95,9 @@ export default function WorkOrderNotes({ workOrderId }) {
             <li key={n.id} className="border rounded p-2">
               <div className="text-sm text-gray-500">
                 {/* Encabezado: autor (email), local y fecha */}
-                <span className="font-medium">{n?.user?.email || "Usuario"}</span>
+                <span className="font-medium">
+                  {n?.user?.email || "Usuario"}
+                </span>
                 {" · "}
                 <span>{n?.location?.name || "Local"}</span>
                 {" · "}

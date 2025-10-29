@@ -1,20 +1,31 @@
 /** @type {import('tailwindcss').Config} */
 export default {
-  content: [
-    "./index.html",
-    "./src/**/*.{js,ts,jsx,tsx}",
-  ],
+  content: ["./index.html", "./src/**/*.{js,ts,jsx,tsx}"],
   theme: {
     extend: {
-      // --- COLORES DE ESTA APP WEB (TENGO SUEÑO! :( ) ---
+      // --- PALETA ELEGANTE (2025) ---
       colors: {
-        'primary': '#F2F2F2',   // Fondo principal claro
-        'secondary': '#027368', // Texto principal, oscuro y legible
-        'accent': '#63A1F2',    // Botones y elementos activos
-        'highlight': '#F2B33D', // Alertas o elementos a destacar
-        'detail': '#5550F2',     // Detalles, bordes al enfocar, enlaces
+        // Superficies y texto
+        surface: "#F2F2F2", // Fondo claro principal
+        onSurface: "#00010D", // Texto sobre fondo claro (profundo)
+
+        // Marca (oscura)
+        brand: "#283540", // Principal (headers/botones)
+        "brand-deep": "#00010D", // Hover/activo muy oscuro
+        "brand-soft": "#636B73", // Muted (secundario/bordes activos)
+        "brand-mist": "#9FA3A6", // Muy suave (dividers/hover claro)
+
+        // Alias para compatibilidad con tu código actual:
+        primary: "#F2F2F2", // = surface (mantiene text/bg-primary existentes)
+        secondary: "#00010D", // = onSurface (mantiene text-secondary existentes)
+
+        // Acentos existentes (no tocamos para no romper otras pantallas)
+        accent: "#63A1F2",
+        highlight: "#F2B33D",
+        detail: "#5550F2",
       },
     },
   },
+
   plugins: [],
-}
+};
