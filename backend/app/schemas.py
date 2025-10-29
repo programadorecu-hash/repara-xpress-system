@@ -132,7 +132,8 @@ class SaleBase(BaseModel):
     payment_method: str
     payment_method_details: Dict[str, Any] | None = None
     work_order_id: int | None = None
-    iva_percentage: float = 12.0
+    # Valor por defecto actualizado a 15.0
+    iva_percentage: float = 15.0
 
     # --- NUEVOS CAMPOS PARA DATOS DEL CLIENTE ---
     customer_ci: str
@@ -147,8 +148,12 @@ class SaleBase(BaseModel):
     @field_validator("iva_percentage")
     @classmethod
     def validate_iva_percentage(cls, value: float) -> float:
-        if value not in (0, 12):
-            raise ValueError("El IVA debe ser 0% o 12%.")
+        """
+        Aceptamos solamente 0% (RIMPE) o 15% (tarifa general actual en Ecuador).
+        Esto evita errores de cálculo y mantiene consistencia tributaria.
+        """
+        if value not in (0, 15):
+            raise ValueError("El IVA debe ser 0% o 15%.")
         return value
 
 class CashAccountBase(BaseModel):

@@ -163,11 +163,13 @@ function POSPage() {
         return;
       }
 
-      // Calcular saldo pendiente
-      const pendingAmount =
-        (itemToAdd.final_cost || itemToAdd.estimated_cost) -
-        itemToAdd.deposit_amount;
-      if (pendingAmount <= 0) {
+      // ✅ Calcular saldo pendiente y NORMALIZAR a mínimo 0
+      const rawPending =
+        (itemToAdd.final_cost ?? itemToAdd.estimated_cost ?? 0) -
+        (itemToAdd.deposit_amount ?? 0);
+      const displayPending = Math.max(0, Number(rawPending || 0));
+
+      if (displayPending <= 0) {
         alert(
           `La Orden #${itemToAdd.work_order_number} no tiene saldo pendiente.`
         );
@@ -176,11 +178,11 @@ function POSPage() {
 
       // Añadir el cobro de la orden como un item especial
       const newCartItem = {
-        isWorkOrder: true, // Marcar como SI orden de trabajo
-        work_order_id: itemToAdd.id, // Guardamos el ID de la orden
-        description: `Cobro Orden #${itemToAdd.work_order_number} (${itemToAdd.device_brand} ${itemToAdd.device_model})`, // Descripción clara
-        quantity: 1, // Siempre es 1 cobro
-        unit_price: pendingAmount, // El precio es el saldo pendiente
+        isWorkOrder: true,
+        work_order_id: itemToAdd.id,
+        description: `Cobro Orden #${itemToAdd.work_order_number} (${itemToAdd.device_brand} ${itemToAdd.device_model})`,
+        quantity: 1,
+        unit_price: displayPending, // ✅ usamos el valor normalizado
       };
 
       // --- NUEVO: AUTO-LLENAR DATOS CLIENTE ---
@@ -424,7 +426,9 @@ function POSPage() {
       window.URL.revokeObjectURL(fileURL);
     } catch (error) {
       console.error("Error al descargar el recibo de la venta:", error);
-      alert("No se pudo generar el recibo. Revisa la consola para más detalles.");
+      alert(
+        "No se pudo generar el recibo. Revisa la consola para más detalles."
+      );
     } finally {
       setIsDownloadingReceipt(false);
     }
@@ -572,15 +576,21 @@ function POSPage() {
                   </p>
                 ) : workOrderResults.length > 0 ? (
                   workOrderResults.map((order) => {
-                    // Calculamos el saldo pendiente
-                    const pendingAmount =
-                      (order.final_cost || order.estimated_cost) -
-                      order.deposit_amount;
+                    // ✅ Calculamos y normalizamos el saldo para NO mostrar valores negativos
+                    const rawPending =
+                      (order.final_cost ?? order.estimated_cost ?? 0) -
+                      (order.deposit_amount ?? 0);
+
+                    // Lo que mostramos visualmente (mínimo 0.00)
+                    const displayPending = Math.max(0, Number(rawPending || 0));
+
+                    // Si hay algo que cobrar (> 0)
+                    const canCharge = displayPending > 0;
+
                     return (
                       <div
                         key={`wo-${order.id}`}
                         className="flex items-center justify-between p-3 mb-2 bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-shadow duration-150 cursor-pointer"
-                        // Añadiremos onClick para añadir al carrito
                       >
                         {/* Info de la Orden */}
                         <div className="flex-grow min-w-0 mr-3">
@@ -595,18 +605,31 @@ function POSPage() {
                             C.I: {order.customer_id_card}
                           </p>
                         </div>
+
                         {/* Saldo y Botón */}
                         <div className="text-right flex-shrink-0">
+                          {/* Monto pendiente NUNCA negativo */}
                           <p className="font-bold text-lg text-secondary">
-                            ${pendingAmount.toFixed(2)}
+                            ${displayPending.toFixed(2)}
                           </p>
                           <p className="text-xs text-gray-500">Pendiente</p>
-                          {/* Botón (aún sin función) */}
-                          {/* Botón (AHORA CON FUNCIÓN) */}
+
+                          {/* Botón deshabilitado si no hay saldo */}
                           <button
-                            className="mt-1 bg-accent hover:bg-teal-500 text-white font-bold py-1 px-3 rounded-md transition duration-150 text-sm"
-                            title="Añadir cobro al carrito"
-                            onClick={() => handleAddToCart(order, "workorder")} // <-- MODIFICA ESTA LÍNEA
+                            disabled={!canCharge} // 🔒 deshabilita si no hay nada que cobrar
+                            className={`mt-1 font-bold py-1 px-3 rounded-md transition duration-150 text-sm ${
+                              !canCharge
+                                ? "bg-gray-300 text-gray-600 cursor-not-allowed"
+                                : "bg-accent text-white hover:bg-teal-500"
+                            }`}
+                            title={
+                              canCharge
+                                ? "Añadir cobro al carrito"
+                                : "La orden ya no tiene saldo pendiente"
+                            }
+                            onClick={() =>
+                              canCharge && handleAddToCart(order, "workorder")
+                            }
                           >
                             Añadir
                           </button>
@@ -985,9 +1008,8 @@ function POSPage() {
               </span>
             </p>
             <p className="text-sm text-gray-500 mb-4">
-              Subtotal: ${lastSuccessfulSale.subtotal_amount.toFixed(2)} | IVA ({
-                lastSuccessfulSale.iva_percentage
-              }
+              Subtotal: ${lastSuccessfulSale.subtotal_amount.toFixed(2)} | IVA (
+              {lastSuccessfulSale.iva_percentage}
               %): ${lastSuccessfulSale.tax_amount.toFixed(2)}
             </p>
             <div className="space-y-3">
@@ -996,7 +1018,9 @@ function POSPage() {
                 className="w-full bg-highlight hover:bg-yellow-500 text-secondary font-bold py-2 px-4 rounded-lg transition duration-150 disabled:bg-gray-300"
                 disabled={isDownloadingReceipt}
               >
-                {isDownloadingReceipt ? "Generando recibo..." : "Descargar Recibo"}
+                {isDownloadingReceipt
+                  ? "Generando recibo..."
+                  : "Descargar Recibo"}
               </button>
               <button
                 onClick={() => setLastSuccessfulSale(null)} // Limpia el estado para ocultar el mensaje

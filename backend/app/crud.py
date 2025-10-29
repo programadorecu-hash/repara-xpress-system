@@ -11,6 +11,20 @@ import os
 
 from . import models, schemas, security
 
+# --- HELPER DE CÁLCULO DE TOTALES (VENTA) ---
+def _compute_sale_totals(items: list[dict], iva_percentage: float) -> tuple[float, float, float]:
+    """
+    Calcula los totales SIEMPRE desde cero.
+    - items: lista de dicts con {quantity, unit_price}
+    - iva_percentage: 0 o 15 (validado por schemas)
+    Retorna (subtotal, tax_amount, total_amount) redondeados a 2 decimales.
+    """
+    subtotal = sum((item.get("quantity", 0) or 0) * (item.get("unit_price", 0) or 0) for item in items)
+    subtotal = round(subtotal + 1e-9, 2)
+    tax_amount = round(subtotal * (iva_percentage / 100.0), 2)
+    total_amount = round(subtotal + tax_amount, 2)
+    return subtotal, tax_amount, total_amount
+
 # ===================================================================
 # --- CATEGORÍAS ---
 # ===================================================================
@@ -743,7 +757,10 @@ def create_sale(db: Session, sale: schemas.SaleCreate, user_id: int, location_id
             db_work_order = get_work_order(db, work_order_id=sale.work_order_id)
             if db_work_order:
                 db_work_order.status = "ENTREGADO"
-                db_work_order.final_cost = total_amount
+                # Guardamos el costo final de la orden como SUBTOTAL (¡sin IVA!)
+                # Motivo: si más adelante se vuelve a “vender” esta misma orden, 
+                # no se duplicará el impuesto ni se “inflará” el total.
+                db_work_order.final_cost = subtotal_amount
 
         db.commit()
         db.refresh(db_sale)
