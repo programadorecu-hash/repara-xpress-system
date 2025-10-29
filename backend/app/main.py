@@ -7,16 +7,75 @@ from sqlalchemy.orm import Session
 from datetime import date
 from fastapi import File, UploadFile
 
-import shutil
-import os
-import uuid
-
 from fastapi.responses import StreamingResponse, PlainTextResponse
 from slowapi import Limiter                      # Núcleo del limitador
 from slowapi.util import get_remote_address      # Cómo identificar al cliente (por IP)
 from slowapi.errors import RateLimitExceeded     # Error cuando se excede el límite
 from slowapi.middleware import SlowAPIMiddleware # Middleware que activa el limitador
 from starlette.requests import Request           # Tipo de request para el handler
+
+from starlette.middleware.base import BaseHTTPMiddleware
+
+import shutil
+import os
+import uuid
+
+# --- Helpers para nombres de carpeta/archivo por producto ---
+import re
+import unicodedata
+
+# ===================================================================
+# --- HELPER PARA QUE LAS IMAGENES SE GUARDEN POR NOMBRES Y CARPETAS  ---
+# ===================================================================
+
+def _slugify(text: str, case: str = "lower") -> str:
+    """
+    Normaliza texto:
+    - quita acentos
+    - reemplaza cualquier caracter no alfanumérico por '_'
+    - colapsa múltiples '_' seguidos
+    - quita '_' al inicio/fin
+    - aplica minúsculas o mayúsculas según 'case'
+    """
+    if not text:
+        return "producto"
+    # quitar acentos
+    text = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode("ascii")
+    # reemplazar no alfanumérico por '_'
+    text = re.sub(r"[^A-Za-z0-9]+", "_", text)
+    # colapsar múltiples '_'
+    text = re.sub(r"_+", "_", text).strip("_")
+    if case == "upper":
+        return text.upper()
+    return text.lower()
+# --- fin helpers ---
+
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """
+    Añade cabeceras de seguridad a TODAS las respuestas.
+    - X-Frame-Options: evita que nos embeban en iframes (clickjacking).
+    - X-Content-Type-Options: evita sniffing de tipos.
+    - Referrer-Policy: restringe el referer.
+    - Permissions-Policy: bloquea acceso a APIs del navegador que no usamos.
+    - HSTS: solo se activa si estamos detrás de HTTPS (según cabecera del proxy).
+    """
+    async def dispatch(self, request, call_next):
+        response = await call_next(request)
+
+        # Cabeceras seguras por defecto
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+
+        # HSTS solo si el tráfico viene por HTTPS (útil en despliegues detrás de proxy)
+        if request.headers.get("x-forwarded-proto", "").lower() == "https":
+            response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+
+        return response
+# --- Fin cabeceras de seguridad ---
+
 from . import pdf_utils
 
 from . import models, schemas, crud, security
@@ -32,10 +91,14 @@ allowed = [o.strip() for o in cors_origins.split(",") if o.strip()]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=allowed,
+    allow_origins=allowed,                 # Orígenes permitidos desde env
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=[
+        "Authorization", "Content-Type", "Accept",
+        "X-Requested-With", "Origin"
+    ],
+    expose_headers=["Content-Disposition"] # Necesario para descargas (PDFs)
 )
 
 # ===== Rate limiting: limitar intentos de login =====
@@ -43,8 +106,10 @@ app.add_middleware(
 limiter = Limiter(key_func=get_remote_address)
 
 # 2) Guardamos el limitador en la app y activamos su middleware
-app.state.limiter = limiter
+app.state.limiter = limiter 
 app.add_middleware(SlowAPIMiddleware)
+# Activamos cabeceras de seguridad en todas las respuestas
+app.add_middleware(SecurityHeadersMiddleware)
 
 # 3) Mensaje claro cuando alguien se pasa del límite
 @app.exception_handler(RateLimitExceeded)
@@ -143,11 +208,13 @@ def create_new_product(product: schemas.ProductCreate, db: Session = Depends(get
     return crud.create_product(db=db, product=product)
 
 @app.get("/products/", response_model=List[schemas.Product])
+@limiter.limit("60/minute")  # Evita martillazos de búsqueda desde el frontend
 def read_products(
+    request: Request,
     skip: int = 0,
     limit: int = 100,
-    search: str | None = None, # <-- NUEVO
-    location_id: int | None = None, # <-- NUEVO
+    search: str | None = None,
+    location_id: int | None = None, 
     db: Session = Depends(get_db)
     # No necesitamos el usuario actual aquí, la info de ubicación viene como parámetro
 ):
@@ -175,8 +242,10 @@ def delete_product_by_id(product_id: int, db: Session = Depends(get_db), _role_c
         raise HTTPException(status_code=404, detail="Producto no encontrado para eliminar")
     return db_product
 
+@limiter.limit("10/minute")  # Subidas acotadas para evitar abuso/picos
 @app.post("/products/{product_id}/upload-image/", response_model=schemas.Product)
 def upload_product_image(
+    request: Request,
     product_id: int,
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
@@ -211,26 +280,51 @@ def upload_product_image(
     file.file.seek(0)
     # ===== FIN VALIDACIÓN DE ARCHIVO =====
 
-    # --- LÓGICA MEJORADA PARA NOMBRES ÚNICOS ---
+       # --- LÓGICA DE CARPETA Y NOMBRES POR PRODUCTO ---
+    # Carpeta base para uploads
+    base_upload_dir = "/code/uploads"
+    os.makedirs(base_upload_dir, exist_ok=True)
 
-    # Obtenemos la extensión del archivo original (ej: '.jpg')
-    file_extension = os.path.splitext(file.filename)[1]
+    # 1) Sacamos el nombre del producto para armar carpeta y prefijo de archivo
+    #    - Carpeta: MAYÚSCULAS con '_'
+    #    - Archivo: minúsculas con '_'
+    product_folder = _slugify(db_product.name, case="upper")  # p.ej. "CHIP_CLARO"
+    file_prefix = _slugify(db_product.name, case="lower")     # p.ej. "chip_claro"
 
-    # Creamos un nombre de archivo único usando un UUID
-    unique_filename = f"{uuid.uuid4()}{file_extension}"
+    # 2) Subcarpeta del producto
+    product_dir = os.path.join(base_upload_dir, product_folder)
+    os.makedirs(product_dir, exist_ok=True)
 
-    upload_dir = "/code/uploads"
-    os.makedirs(upload_dir, exist_ok=True)
+    # 3) Determinar el índice siguiente (chip_claro_1, chip_claro_2, ...)
+    #    Buscamos archivos existentes que sigan el patrón 'chip_claro_<n>.<ext>'
+    existing_files = [f for f in os.listdir(product_dir) if f.lower().startswith(f"{file_prefix}_")]
+    max_index = 0
+    pattern = re.compile(rf"^{re.escape(file_prefix)}_(\d+)\.", re.IGNORECASE)
+    for fname in existing_files:
+        m = pattern.match(fname)
+        if m:
+            try:
+                idx = int(m.group(1))
+                if idx > max_index:
+                    max_index = idx
+            except:
+                pass
+    next_index = max_index + 1
 
-    # La nueva ruta con el nombre seguro
-    file_path = os.path.join(upload_dir, unique_filename)
+    # 4) Armar nombre final con extensión original (normalizada a lower)
+    file_extension = os.path.splitext(file.filename)[1].lower()  # ej: '.jpg'
+    safe_filename = f"{file_prefix}_{next_index}{file_extension}"  # ej: 'chip_claro_3.jpg'
 
-    # --- FIN DE LA LÓGICA MEJORADA ---
+    # 5) Ruta destino final
+    file_path = os.path.join(product_dir, safe_filename)
+    # --- FIN LÓGICA CARPETA/NOMBRE ---
 
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
-    image_url = f"/uploads/{unique_filename}"
+    # Nota: tu app sirve /uploads desde "/code/uploads" (app.mount en main.py)
+    # Por lo tanto, devolvemos la URL relativa correcta con subcarpeta
+    image_url = f"/uploads/{product_folder}/{safe_filename}"
     crud.add_product_image(db, product_id=product_id, image_url=image_url)
 
     db.refresh(db_product)
@@ -245,9 +339,28 @@ def delete_an_image(
     db_image = crud.delete_product_image(db, image_id=image_id)
     if db_image is None:
         raise HTTPException(status_code=404, detail="Imagen no encontrada para eliminar")
-    
-    # Opcional: Aquí podríamos añadir la lógica para borrar el archivo del disco
-    
+
+    # --- BORRADO FÍSICO EN DISCO (SEGURO) ---
+    try:
+        # db_image.image_url viene como '/uploads/archivo.ext'
+        # Construimos la ruta absoluta de forma segura
+        relative_path = db_image.image_url.lstrip("/")  # 'uploads/archivo.ext'
+        base_dir = "/code"                              # raíz del contenedor en runtime
+        file_path = os.path.join(base_dir, relative_path)
+
+        # Evitar path traversal: confirmar que está dentro de /code/uploads
+        uploads_dir = os.path.join(base_dir, "uploads")
+        if os.path.commonpath([os.path.abspath(file_path), uploads_dir]) == os.path.abspath(uploads_dir):
+            if os.path.exists(file_path):
+                os.remove(file_path)  # eliminamos el archivo
+        # Si no existe, no pasa nada (quizá ya se borró manualmente)
+    except Exception as e:
+        # No rompemos la API si falla el borrado físico,
+        # solo dejamos un comentario para log futuro.
+        # (Si tienes logger, aquí iría un logger.warning(...))
+        pass
+    # --- FIN BORRADO FÍSICO ---
+
     return db_image
 
 
@@ -425,8 +538,10 @@ def read_work_orders(
 
 
 # --- NUEVO ENDPOINT PARA BUSCAR ÓRDENES LISTAS ---
+@limiter.limit("60/minute")  # Búsqueda rápida pero con freno anti-abuso
 @app.get("/work-orders/ready/search", response_model=List[schemas.WorkOrderPublic])
 def search_ready_work_orders_endpoint(
+    request: Request,
     search: str | None = None, # Parámetro de búsqueda
     skip: int = 0,
     limit: int = 20, # Limitamos a menos resultados para la búsqueda rápida
@@ -448,8 +563,10 @@ def read_single_work_order(work_order_id: int, db: Session = Depends(get_db), cu
         raise HTTPException(status_code=404, detail="Orden de trabajo no encontrada")
     return db_work_order
 
+@limiter.limit("10/minute")  # Subidas acotadas también aquí
 @app.post("/work-orders/{work_order_id}/upload-image/", response_model=schemas.WorkOrderPublic)
 def upload_work_order_image(
+    request: Request,
     work_order_id: int,
     tag: str,
     file: UploadFile = File(...),

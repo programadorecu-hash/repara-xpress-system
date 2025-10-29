@@ -6,7 +6,7 @@ const PAYMENT_METHODS = ["Efectivo", "Tarjeta", "Transferencia", "Otro"];
 function PaymentModal({
   totalAmount,
   subtotalAmount = 0,
-  ivaPercentage = 12,
+  ivaPercentage = 15,
   ivaAmount = 0,
   cartItems,
   onClose,

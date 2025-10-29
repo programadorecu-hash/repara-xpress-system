@@ -9,7 +9,25 @@ function POSPage() {
   const [cart, setCart] = useState([]); // Los items en el carrito
   const [total, setTotal] = useState(0); // El total de la venta
   const [subtotal, setSubtotal] = useState(0);
-  const [ivaPercentage, setIvaPercentage] = useState(12);
+  // --- IVA predeterminado (0 o 15) guardado en el navegador ---
+  // Clave donde guardaremos la preferencia del usuario
+  const DEFAULT_IVA_KEY = "rx_default_iva_percentage";
+
+  // Al iniciar la página, leemos el IVA predeterminado desde localStorage.
+  // Si no hay nada guardado, usamos 0% por defecto.
+  const [ivaPercentage, setIvaPercentage] = useState(() => {
+    const saved = localStorage.getItem(DEFAULT_IVA_KEY);
+    const parsed = saved ? Number(saved) : 0; // 0 como predeterminado
+    return parsed === 15 ? 15 : 0; // Solo permitimos 0 o 15
+  });
+
+  // Función para cambiar el predeterminado y aplicarlo de una
+  const setDefaultIVA = (value) => {
+    const safe = value === 15 ? 15 : 0;
+    localStorage.setItem(DEFAULT_IVA_KEY, String(safe));
+    setIvaPercentage(safe);
+  };
+
   const [ivaAmount, setIvaAmount] = useState(0);
   const [loadingSearch, setLoadingSearch] = useState(false); // Indicador de carga
   const { user, activeShift } = useContext(AuthContext); // Info del usuario y turno
@@ -931,19 +949,54 @@ function POSPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setIvaPercentage(12)}
+                  onClick={() => setIvaPercentage(15)}
                   className={`flex-1 py-2 px-3 rounded-lg border text-sm font-semibold transition ${
-                    ivaPercentage === 12
+                    ivaPercentage === 15
                       ? "bg-accent text-white border-accent shadow"
                       : "bg-white text-gray-600 border-gray-300 hover:bg-gray-100"
                   }`}
                 >
-                  IVA 12%
+                  IVA 15%
                 </button>
               </div>
               <p className="text-xs text-gray-500 mt-2">
                 Selecciona la tasa vigente según el producto o servicio gravado.
               </p>
+              {/* --- Elegir IVA predeterminado (se guarda en el navegador) --- */}
+              <div className="mt-3 p-2 bg-gray-50 border rounded-lg">
+                <p className="text-xs text-gray-600 mb-2">
+                  IVA predeterminado actual:{" "}
+                  <span className="font-semibold">
+                    {ivaPercentage === 15 &&
+                    localStorage.getItem(DEFAULT_IVA_KEY) === "15"
+                      ? "15%"
+                      : localStorage.getItem(DEFAULT_IVA_KEY) === "15"
+                      ? "15%"
+                      : "0%"}
+                  </span>
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setDefaultIVA(0)}
+                    className="flex-1 py-1.5 px-2 rounded border text-xs font-semibold bg-white text-gray-700 hover:bg-gray-100 border-gray-300"
+                    title="Guardar como IVA predeterminado 0%"
+                  >
+                    Predeterminado 0%
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDefaultIVA(15)}
+                    className="flex-1 py-1.5 px-2 rounded border text-xs font-semibold bg-white text-gray-700 hover:bg-gray-100 border-gray-300"
+                    title="Guardar como IVA predeterminado 15%"
+                  >
+                    Predeterminado 15%
+                  </button>
+                </div>
+                <p className="text-[11px] text-gray-500 mt-2">
+                  *RIMPE usa el 0% | RUC usa el 15%
+                </p>
+              </div>
             </div>
 
             <div className="bg-gray-50 rounded-lg p-4 space-y-2 border border-gray-200">
