@@ -98,10 +98,9 @@ function ProductForm({ productToEdit, onSave, onClose }) {
     setIsUploading(true);
     const formData = new FormData();
 
-    // --- ¡AQUÍ ESTÁ EL ARREGLO! ---
-    // NO importa si es un Blob (cámara) o un File (subida),
-    // SIEMPRE lo vamos a "re-empacar" en una caja estándar (new File)
-    // para asegurarnos de que el "cerebro" (backend) lo entienda.
+    // --- ¡AQUÍ ESTÁ EL ARREGLO (30/10/2025)! ---
+    // La regla de oro: SIEMPRE re-empaquetamos el archivo para
+    // asegurarnos de que el navegador le ponga la etiqueta de "tipo" (Content-Type) correcta.
     
     let finalFile;
 
@@ -117,17 +116,17 @@ function ProductForm({ productToEdit, onSave, onClose }) {
     let fileType;
 
     if (fileToSend instanceof File) {
-      // Si es un ARCHIVO SUBIDO (caja azul), usamos su nombre y tipo original
+      // Si es un ARCHIVO SUBIDO (de la PC), usamos su nombre y tipo original
       fileName = customName || fileToSend.name;
       fileType = fileToSend.type;
     } else {
-      // Si es un BLOB DE CÁMARA (bolsa de plástico), inventamos un nombre .jpg
+      // Si es un BLOB (de la cámara), inventamos un nombre .jpg
       fileName = customName || `${safeName}_${Date.now()}.jpg`;
       fileType = "image/jpeg";
     }
 
-    // 3. ¡El re-empaquetado! Creamos la "caja marrón" estándar.
-    // Metemos el contenido (fileToSend) en la caja nueva (new File)
+    // 3. ¡El re-empaquetado! SIEMPRE creamos un sobre (File) nuevo y estándar.
+    // Metemos el contenido (fileToSend) en el sobre nuevo (new File)
     finalFile = new File([fileToSend], fileName, { type: fileType });
     // --- FIN DEL ARREGLO ---
 
@@ -141,7 +140,7 @@ function ProductForm({ productToEdit, onSave, onClose }) {
       // NOTA: NO forzamos 'Content-Type' aquí porque el navegador debe generar el boundary
       // Si lo ponemos a mano, FastAPI recibe un multipart incompleto y responde 422.
       setProduct((prev) => ({ ...prev, images: response.data.images }));
-      setSelectedFile(null);
+      setSelectedFile(null); // Limpiamos el selector de archivo
     } catch (error) {
       console.error(error);
       alert("Error al subir la imagen.");
@@ -422,7 +421,10 @@ function ProductForm({ productToEdit, onSave, onClose }) {
               {product.images.map((image) => (
                 <div key={image.id} className="relative group">
                   <img
-                    src={`http://localhost:8000${image.image_url}`}
+                    // Usamos la "agenda" para saber dónde está el almacén
+                    src={`${
+                      import.meta.env.VITE_API_URL || "http://localhost:8000"
+                    }${image.image_url}`}
                     alt={product.name}
                     className="w-full h-24 object-cover rounded-lg shadow-md"
                   />
@@ -446,7 +448,8 @@ function ProductForm({ productToEdit, onSave, onClose }) {
                 <input
                   type="file"
                   accept="image/*"
-                  capture="environment"
+                  // NOTA: 'capture="environment"' a veces da problemas en PC
+                  // Lo quitamos para que "Seleccionar archivo" sea la acción principal
                   onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
                   className="w-full p-2 border rounded-lg bg-white"
                 />
@@ -525,7 +528,8 @@ function ProductForm({ productToEdit, onSave, onClose }) {
 
                 <button
                   type="button"
-                  onClick={handleImageUpload}
+                  // Corregimos aquí: la función se llama SIN argumentos
+                  onClick={() => handleImageUpload()}
                   disabled={isUploading || !selectedFile}
                   className="py-2 px-4 bg-detail text-white font-bold rounded-lg hover:bg-indigo-600 disabled:bg-gray-400 whitespace-nowrap"
                 >

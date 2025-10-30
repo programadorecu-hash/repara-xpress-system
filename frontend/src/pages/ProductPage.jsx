@@ -148,7 +148,11 @@ function ProductPage() {
                   <img
                     src={
                       product.images[0]?.image_url
-                        ? `http://localhost:8000${product.images[0].image_url}`
+                        ? // Usamos la "agenda" para saber dónde está el almacén
+                          `${
+                            import.meta.env.VITE_API_URL ||
+                            "http://localhost:8000"
+                          }${product.images[0].image_url}`
                         : "/vite.svg"
                     }
                     alt={product.name}

@@ -70,16 +70,31 @@ const ImageUploader = ({ tag, label, orderId, onUpload }) => {
     setIsUploading(true);
     const formData = new FormData();
 
-    let finalFile = fileArg;
-    if (fileArg instanceof Blob && !(fileArg instanceof File)) {
+    // --- INICIO DEL ARREGLO (30/10/2025) ---
+    // Aplicamos la misma lógica del ProductForm: SIEMPRE re-empaquetamos.
+
+    let finalFile;
+    let fileName;
+    let fileType;
+
+    if (fileArg instanceof File) {
+      // Si es un ARCHIVO SUBIDO (de la PC), usamos su nombre y tipo original
+      fileName = suggestedName || fileArg.name;
+      fileType = fileArg.type;
+    } else {
+      // Si es un BLOB (de la cámara), inventamos un nombre .jpg
       const safeTag = (tag || "foto")
         .trim()
         .toLowerCase()
         .replace(/\s+/g, "_")
         .replace(/[^a-z0-9_\-]/g, "");
-      const fname = suggestedName || `${safeTag}_${Date.now()}.jpg`;
-      finalFile = new File([fileArg], fname, { type: "image/jpeg" });
+      fileName = suggestedName || `${safeTag}_${Date.now()}.jpg`;
+      fileType = "image/jpeg";
     }
+    
+    // ¡El re-empaquetado! SIEMPRE creamos un sobre (File) nuevo y estándar.
+    finalFile = new File([fileArg], fileName, { type: fileType });
+    // --- FIN DEL ARREGLO ---
 
     formData.append("file", finalFile);
     formData.append("tag", tag);
@@ -94,7 +109,7 @@ const ImageUploader = ({ tag, label, orderId, onUpload }) => {
       );
       // 2. Si todo sale bien, actualizamos la galería.
       onUpload(response.data.images); // Actualiza galería
-      setFile(null);
+      setFile(null); // Limpiamos el selector de archivo
     } catch (error) {
       console.error(error);
       alert(`Error al subir la imagen: ${label}`);
@@ -105,6 +120,7 @@ const ImageUploader = ({ tag, label, orderId, onUpload }) => {
 
   const handleUpload = async () => {
     if (!file || !orderId) return;
+    // Usamos el 'tag' (ej. "frontal") para el nombre del archivo
     await uploadFile(file, `${tag}_${Date.now()}.jpg`);
   };
 
@@ -326,6 +342,8 @@ function WorkOrderForm({ orderId, onClose, onSave }) {
               ...initialState.device_initial_check,
               ...(data.device_initial_check || {}),
             },
+            // Asegurarnos que el email nunca sea 'null' en el estado
+            customer_email: data.customer_email || "",
           });
         })
         .catch((err) =>
@@ -367,10 +385,17 @@ function WorkOrderForm({ orderId, onClose, onSave }) {
           customer_phone: order.customer_phone,
           customer_address: order.customer_address || null,
           customer_email: order.customer_email || null,
+          // Añadimos los campos que faltaban
+          device_password: order.device_password || null,
+          device_unlock_pattern: order.device_unlock_pattern || null,
+          device_account: order.device_account || null,
+          device_account_password: order.device_account_password || null,
         });
         setOrder((prev) => ({
           ...prev,
           ...response.data,
+          // Re-aseguramos que email no sea null
+          customer_email: response.data.customer_email || "",
         }));
         onSave(response.data);
       } else {
@@ -482,7 +507,7 @@ function WorkOrderForm({ orderId, onClose, onSave }) {
               <input
                 type="text"
                 name="customer_address"
-                value={order.customer_address}
+                value={order.customer_address || ''} // Controlado para no ser null
                 onChange={handleChange}
                 placeholder="Dirección"
                 className="p-2 border rounded md:col-span-2"
@@ -490,7 +515,7 @@ function WorkOrderForm({ orderId, onClose, onSave }) {
               <input
                 type="email"
                 name="customer_email"
-                value={order.customer_email}
+                value={order.customer_email || ''} // Controlado para no ser null
                 onChange={handleChange}
                 placeholder="Correo electrónico"
                 className="p-2 border rounded"
@@ -731,7 +756,9 @@ function WorkOrderForm({ orderId, onClose, onSave }) {
               {order.images.map((img) => (
                 <div key={img.id} className="relative">
                   <img
-                    src={`http://localhost:8000${img.image_url}`}
+                    src={`${
+                      import.meta.env.VITE_API_URL || "http://localhost:8000"
+                    }${img.image_url}`}
                     alt={img.tag}
                     className="w-full h-20 object-cover rounded shadow-md"
                   />

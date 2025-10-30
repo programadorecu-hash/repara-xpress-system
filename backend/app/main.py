@@ -278,8 +278,12 @@ def upload_product_image(
     contents = file.file.read()
     if len(contents) > MAX_BYTES:
         raise HTTPException(status_code=400, detail="Archivo demasiado grande (máx 5MB)")
-    # Volver el puntero al inicio para poder guardarlo más abajo
-    file.file.seek(0)
+    
+    # --- ARREGLO #1 (EL DEL "BODEGUERO") ---
+    # Ya no necesitamos "regresar el puntero" (file.file.seek(0))
+    # porque ahora guardaremos la variable 'contents'
+    # file.file.seek(0) # <-- ESTA LÍNEA SE VA O SE COMENTA
+    
     # ===== FIN VALIDACIÓN DE ARCHIVO =====
 
        # --- LÓGICA DE CARPETA Y NOMBRES POR PRODUCTO ---
@@ -321,8 +325,12 @@ def upload_product_image(
     file_path = os.path.join(product_dir, safe_filename)
     # --- FIN LÓGICA CARPETA/NOMBRE ---
 
+    # --- INICIO DEL ARREGLO #1 (EL DEL "BODEGUERO") ---
+    # En lugar de copiar el flujo del archivo (shutil.copyfileobj),
+    # escribimos directamente la variable 'contents' que ya tiene los datos.
     with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+        buffer.write(contents)
+    # --- FIN DEL ARREGLO ---
 
     # Nota: tu app sirve /uploads desde "/code/uploads" (app.mount en main.py)
     # Por lo tanto, devolvemos la URL relativa correcta con subcarpeta
@@ -620,7 +628,9 @@ def upload_work_order_image(
     contents = file.file.read()
     if len(contents) > MAX_BYTES:
         raise HTTPException(status_code=400, detail="Archivo demasiado grande (máx 5MB)")
-    file.file.seek(0)
+
+    # --- ARREGLO #2 (EL DEL "BODEGUERO") ---
+    # file.file.seek(0) # <-- ESTA LÍNEA SE VA O SE COMENTA
     # ===== FIN VALIDACIÓN DE ARCHIVO =====
 
 
@@ -661,10 +671,15 @@ def upload_work_order_image(
     file_extension = os.path.splitext(file.filename)[1].lower()  # ej: '.jpg'
     safe_filename = f"{file_prefix}_{next_index}{file_extension}"  # ej: 'work_order_00004_3.jpg'
 
-    # 4) Guardar archivo
+   # 4) Guardar archivo
     file_path = os.path.join(order_dir, safe_filename)
+    
+    # --- INICIO DEL ARREGLO #2 (EL DEL "BODEGUERO") ---
+    # Aplicamos la misma corrección que en productos:
+    # Escribimos la variable 'contents' que ya leímos durante la validación.
     with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+        buffer.write(contents)
+    # --- FIN DEL ARREGLO ---
 
     # 5) Persistir en BD la URL pública (recuerda: app.mount("/uploads", ...))
     image_url = f"/uploads/{order_folder}/{safe_filename}"

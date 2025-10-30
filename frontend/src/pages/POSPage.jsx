@@ -520,7 +520,11 @@ function POSPage() {
                       {/* Sección Izquierda: Imagen e Info */}
                       <div className="flex items-center space-x-3 flex-grow min-w-0 mr-3">
                         <img
-                          src={`http://localhost:8000${
+                          // Usamos la "agenda" para saber dónde está el almacén
+                          src={`${
+                            import.meta.env.VITE_API_URL ||
+                            "http://localhost:8000"
+                          }${
                             product.images[0]?.image_url || "/placeholder.png"
                           }`}
                           alt={product.name}
