@@ -428,6 +428,11 @@ def adjust_inventory_stock(
         movement = crud.adjust_stock(db=db, adjustment=adjustment, user_id=current_user.id)
         # --- LA CORRECCIÓN ESTÁ AQUÍ ---
         if movement is None:
+                    # ✅ Como este endpoint se llama directo desde el frontend,
+        # aquí SÍ debemos guardar el movimiento en la base.
+            db.commit()          # Guarda el movimiento y el cambio de stock
+            db.refresh(movement) # Vuelve a leerlo de la BD para que tenga id, timestamp y relaciones
+
             # Si no hubo cambios, es una petición "mala" porque no hace nada.
             raise HTTPException(status_code=400, detail="La cantidad especificada es la misma que la actual. No se realizó ningún ajuste.")
         return movement

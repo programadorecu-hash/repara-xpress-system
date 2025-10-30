@@ -115,11 +115,10 @@ function ProductForm({ productToEdit, onSave, onClose }) {
     try {
       const response = await api.post(
         `/products/${productToEdit.id}/upload-image/`,
-        formData,
-        {
-          headers: { "Content-Type": "multipart/form-data" },
-        }
+        formData
       );
+      // NOTA: NO forzamos 'Content-Type' aquí porque el navegador debe generar el boundary
+      // Si lo ponemos a mano, FastAPI recibe un multipart incompleto y responde 422.
       setProduct((prev) => ({ ...prev, images: response.data.images }));
       setSelectedFile(null);
     } catch (error) {
@@ -516,7 +515,6 @@ function ProductForm({ productToEdit, onSave, onClose }) {
           </div>
         )}
       </div>
-
     </div>
   );
 }
