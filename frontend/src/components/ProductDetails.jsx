@@ -32,7 +32,8 @@ function ProductDetails({ product, onClose }) {
           
           <div className="flex items-start space-x-6">
             <img 
-              src={`http://localhost:8000${product.images[0]?.image_url || '/placeholder.png'}`} 
+              // ARREGLO: Misma lógica que en la tabla. Si hay image_url, usa el backend. Si no, usa el /vite.svg local.
+              src={product.images[0]?.image_url ? `http://localhost:8000${product.images[0].image_url}` : '/vite.svg'} 
               alt={product.name}
               className="h-32 w-32 object-cover rounded-lg shadow-md"
             />

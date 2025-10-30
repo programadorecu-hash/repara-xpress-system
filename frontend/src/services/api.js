@@ -14,6 +14,17 @@ apiClient.interceptors.request.use(
       // Si existe el token, lo añadimos a la cabecera de la petición
       config.headers.Authorization = `Bearer ${token}`;
     }
+
+    // --- ¡ESTA ES LA NUEVA LÓGICA INTELIGENTE! ---
+    // Si los datos que estamos enviando son un "paquete" (FormData)...
+    if (config.data instanceof FormData) {
+      // ...le decimos al mensajero que BORRE la etiqueta de "Content-Type" (si es que la tiene).
+      // Esto fuerza al navegador a poner la etiqueta correcta por sí solo,
+      // incluyendo el código secreto ("boundary") que el servidor necesita.
+      delete config.headers['Content-Type'];
+    }
+    // --- FIN DE LA LÓGICA ---
+
     return config;
   },
   (error) => {

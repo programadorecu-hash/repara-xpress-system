@@ -98,17 +98,38 @@ function ProductForm({ productToEdit, onSave, onClose }) {
     setIsUploading(true);
     const formData = new FormData();
 
-    // Si viene de la cámara (Blob), lo convertimos a File con un nombre limpio
-    let finalFile = fileToSend;
-    if (fileToSend instanceof Blob && !(fileToSend instanceof File)) {
-      const safeName = (product.name || "producto")
-        .trim()
-        .toLowerCase()
-        .replace(/\s+/g, "_")
-        .replace(/[^a-z0-9_\-]/g, "");
-      const fname = customName || `${safeName}_${Date.now()}.jpg`;
-      finalFile = new File([fileToSend], fname, { type: "image/jpeg" });
+    // --- ¡AQUÍ ESTÁ EL ARREGLO! ---
+    // NO importa si es un Blob (cámara) o un File (subida),
+    // SIEMPRE lo vamos a "re-empacar" en una caja estándar (new File)
+    // para asegurarnos de que el "cerebro" (backend) lo entienda.
+    
+    let finalFile;
+
+    // 1. Generamos un nombre seguro
+    const safeName = (product.name || "producto")
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, "_")
+      .replace(/[^a-z0-9_\-]/g, "");
+    
+    // 2. Determinamos el nombre y el tipo del archivo
+    let fileName;
+    let fileType;
+
+    if (fileToSend instanceof File) {
+      // Si es un ARCHIVO SUBIDO (caja azul), usamos su nombre y tipo original
+      fileName = customName || fileToSend.name;
+      fileType = fileToSend.type;
+    } else {
+      // Si es un BLOB DE CÁMARA (bolsa de plástico), inventamos un nombre .jpg
+      fileName = customName || `${safeName}_${Date.now()}.jpg`;
+      fileType = "image/jpeg";
     }
+
+    // 3. ¡El re-empaquetado! Creamos la "caja marrón" estándar.
+    // Metemos el contenido (fileToSend) en la caja nueva (new File)
+    finalFile = new File([fileToSend], fileName, { type: fileType });
+    // --- FIN DEL ARREGLO ---
 
     formData.append("file", finalFile);
 

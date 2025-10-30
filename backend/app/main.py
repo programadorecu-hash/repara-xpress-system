@@ -1,6 +1,6 @@
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi import FastAPI, Depends, HTTPException, status, Form
 from fastapi.security import OAuth2PasswordRequestForm
 from typing import List
 from sqlalchemy.orm import Session
@@ -247,7 +247,9 @@ def delete_product_by_id(product_id: int, db: Session = Depends(get_db), _role_c
 def upload_product_image(
     request: Request,
     product_id: int,
-    file: UploadFile = File(...),
+    # ARREGLO: Le decimos a FastAPI que el archivo viene de un formulario
+    # y que su "nombre de compartimiento" (alias) es "file".
+    file: UploadFile = File(..., alias="file"),
     db: Session = Depends(get_db),
     _role_check: None = Depends(security.require_role(required_roles=["admin", "inventory_manager"]))
 ):
@@ -425,19 +427,37 @@ def adjust_inventory_stock(
         raise HTTPException(status_code=403, detail="No tienes permiso para ajustar el stock.")
 
     try:
+        # 1. El "empleado" (crud.py) prepara el movimiento y actualiza el stock (en memoria)
         movement = crud.adjust_stock(db=db, adjustment=adjustment, user_id=current_user.id)
-        # --- LA CORRECCIÓN ESTÁ AQUÍ ---
+        
+        # 2. Revisamos si el empleado nos devolvió algo
         if movement is None:
-                    # ✅ Como este endpoint se llama directo desde el frontend,
-        # aquí SÍ debemos guardar el movimiento en la base.
-            db.commit()          # Guarda el movimiento y el cambio de stock
-            db.refresh(movement) # Vuelve a leerlo de la BD para que tenga id, timestamp y relaciones
-
-            # Si no hubo cambios, es una petición "mala" porque no hace nada.
+            # Si no devolvió nada, es porque la cantidad no cambió.
+            # No hay nada que guardar, así que le decimos al usuario.
+            db.rollback() # Deshacemos cualquier cambio en memoria
             raise HTTPException(status_code=400, detail="La cantidad especificada es la misma que la actual. No se realizó ningún ajuste.")
+
+        # 3. ¡AQUÍ ESTÁ EL ARREGLO!
+        # Si SÍ nos devolvió un movimiento, ahora la "recepcionista" (main.py)
+        # guarda permanentemente los cambios en la base de datos.
+        db.commit()
+        
+        # 4. Y le pedimos a la base de datos el "recibo" completo (con id, fecha, etc.)
+        db.refresh(movement) 
+
+        # 5. Ahora sí, devolvemos el movimiento completo y firmado.
         return movement
+        
     except ValueError as e:
+        # Si el "empleado" (crud) nos dijo que no había stock o algo salió mal...
+        db.rollback() # Deshacemos los cambios
         raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        # Por si ocurre cualquier otro error (como el db.refresh(None) que tenías antes)
+        db.rollback() # Deshacemos todo
+        # Devolvemos un error 500 genérico pero registramos el detalle
+        print(f"Error inesperado en adjust_inventory_stock: {e}")
+        raise HTTPException(status_code=500, detail="Ocurrió un error interno al ajustar el stock.")
 
 # ===================================================================
 # --- ENDPOINTS PARA MOVIMIENTOS (KARDEX) ---
@@ -573,7 +593,9 @@ def read_single_work_order(work_order_id: int, db: Session = Depends(get_db), cu
 def upload_work_order_image(
     request: Request,
     work_order_id: int,
-    tag: str,
+    # ARREGLO: Le decimos a FastAPI que 'tag' NO viene por la URL,
+    # sino que viene DENTRO del "paquete" (Form).
+    tag: str = Form(...),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     # Eliminamos el _role_check también de aquí

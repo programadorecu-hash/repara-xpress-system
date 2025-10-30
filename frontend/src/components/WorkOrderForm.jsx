@@ -85,11 +85,14 @@ const ImageUploader = ({ tag, label, orderId, onUpload }) => {
     formData.append("tag", tag);
 
     try {
+      // 1. Enviamos el paquete (formData) sin ponerle etiquetas a mano.
+      // El navegador (api) se encargará de poner la etiqueta correcta
+      // con el código secreto (el "boundary") que el servidor necesita.
       const response = await api.post(
         `/work-orders/${orderId}/upload-image/`,
-        formData,
-        { headers: { "Content-Type": "multipart/form-data" } }
+        formData
       );
+      // 2. Si todo sale bien, actualizamos la galería.
       onUpload(response.data.images); // Actualiza galería
       setFile(null);
     } catch (error) {
