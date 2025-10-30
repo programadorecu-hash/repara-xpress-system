@@ -597,21 +597,57 @@ def upload_work_order_image(
     # ===== FIN VALIDACIÓN DE ARCHIVO =====
 
 
-    file_extension = os.path.splitext(file.filename)[1]
-    unique_filename = f"{uuid.uuid4()}{file_extension}"
-    upload_dir = "/code/uploads"
-    os.makedirs(upload_dir, exist_ok=True)
-    file_path = os.path.join(upload_dir, unique_filename)
+        # --- LÓGICA DE CARPETA Y NOMBRES POR ORDEN ---
+    base_upload_dir = "/code/uploads"
+    os.makedirs(base_upload_dir, exist_ok=True)
 
+    # 1) Nombre seguro para identificar la orden en carpeta/archivo
+    #    preferimos el número visible (p.ej. "00004"); si no existe, usamos el id
+    wo_number_raw = getattr(db_work_order, "work_order_number", None) or str(work_order_id)
+    wo_number_slug_upper = _slugify(wo_number_raw, case="upper")  # para carpeta -> "00004" -> "00004"
+    wo_number_slug_lower = _slugify(wo_number_raw, case="lower")  # para archivo -> "00004" -> "00004"
+
+    # Carpeta: WORK_ORDER_<NUMERO>, p.ej. WORK_ORDER_00004
+    order_folder = f"WORK_ORDER_{wo_number_slug_upper}"
+    order_dir = os.path.join(base_upload_dir, order_folder)
+    os.makedirs(order_dir, exist_ok=True)
+
+    # Prefijo de archivo: work_order_<numero>
+    file_prefix = f"work_order_{wo_number_slug_lower}"
+
+    # 2) Calcular siguiente índice buscando archivos existentes 'work_order_<numero>_<n>.*'
+    existing_files = [f for f in os.listdir(order_dir) if f.lower().startswith(f"{file_prefix}_")]
+    max_index = 0
+    pattern = re.compile(rf"^{re.escape(file_prefix)}_(\d+)\.", re.IGNORECASE)
+    for fname in existing_files:
+        m = pattern.match(fname)
+        if m:
+            try:
+                idx = int(m.group(1))
+                if idx > max_index:
+                    max_index = idx
+            except:
+                pass
+    next_index = max_index + 1
+
+    # 3) Armar nombre final con extensión original normalizada a lower
+    file_extension = os.path.splitext(file.filename)[1].lower()  # ej: '.jpg'
+    safe_filename = f"{file_prefix}_{next_index}{file_extension}"  # ej: 'work_order_00004_3.jpg'
+
+    # 4) Guardar archivo
+    file_path = os.path.join(order_dir, safe_filename)
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
-    image_url = f"/uploads/{unique_filename}"
+    # 5) Persistir en BD la URL pública (recuerda: app.mount("/uploads", ...))
+    image_url = f"/uploads/{order_folder}/{safe_filename}"
     crud.add_work_order_image(db, work_order_id=work_order_id, image_url=image_url, tag=tag)
 
     db.refresh(db_work_order)
     return db_work_order
+    # --- FIN LÓGICA DE CARPETA/NOMBRE POR ORDEN ---
 
+    
 # ===== Bitácora de órdenes (solo roles internos) =====
 
 @app.post("/work-orders/{work_order_id}/notes", response_model=schemas.WorkOrderNote, status_code=status.HTTP_201_CREATED)
