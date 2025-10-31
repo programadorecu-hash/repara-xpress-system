@@ -13,6 +13,7 @@ import PurchaseInvoicesPage from './pages/PurchaseInvoicesPage.jsx';
 import CashAccountsPage from './pages/CashAccountsPage.jsx';
 import CashTransactionsPage from './pages/CashTransactionsPage.jsx';
 import LostSalesPage from './pages/LostSalesPage.jsx';
+import SalesHistoryPage from './pages/SalesHistoryPage.jsx';
 
 function App() {
   return (
@@ -30,6 +31,7 @@ function App() {
         <Route path="auditoria" element={<ProtectedRoute requiredRoles={['admin']}><AuditPage /></ProtectedRoute>} />
         <Route path="ordenes" element={<WorkOrderPage />} />
         <Route path="pos" element={<POSPage />} />
+        <Route path="historial-ventas" element={<SalesHistoryPage />} />
         <Route
           path="proveedores"
           element={(

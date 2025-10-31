@@ -39,13 +39,24 @@ function Header() {
               INICIO
             </Link>
             <Link
-              to="/pos"
-              className="text-surface font-semibold hover:text-brand-mist"
-            >
-              VENDER
-            </Link>
-            <Link
-              to="/ordenes"
+            to="/pos"
+            className="text-surface font-semibold hover:text-brand-mist"
+          >
+            VENDER
+          </Link>
+
+          {/* --- INICIO DE NUESTRO CÓDIGO --- */}
+          {/* Este es el nuevo botón para el historial de ventas */}
+          <Link
+            to="/historial-ventas"
+            className="text-surface font-semibold hover:text-brand-mist"
+          >
+            HISTORIAL VENTAS
+          </Link>
+          {/* --- FIN DE NUESTRO CÓDIGO --- */}
+
+          <Link
+            to="/ordenes"
               className="text-surface font-semibold hover:text-brand-mist"
             >
               ORDENES

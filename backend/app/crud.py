@@ -786,6 +786,37 @@ def get_sale(db: Session, sale_id: int):
         .first()
     )
 
+# --- INICIO DE NUESTRO CÓDIGO ---
+# Esta es la nueva función para buscar en el "archivador"
+def get_sales(db: Session, user: models.User, skip: int = 0, limit: int = 100):
+    """
+    Obtiene el historial de ventas con lógica de permisos.
+    - Admins/Managers ven todas las ventas.
+    - Otros roles (vendedores) solo ven las de su turno activo.
+    """
+    # 1. Preparamos la consulta para buscar en la tabla 'sales'
+    query = db.query(models.Sale).options(
+        # Le pedimos que "rellene" la info del vendedor, sucursal, y los items
+        selectinload(models.Sale.user),
+        selectinload(models.Sale.location),
+        selectinload(models.Sale.items).selectinload(models.SaleItem.product),
+    )
+
+    # 2. Lógica de permisos (igual que en las órdenes de trabajo)
+    if user.role not in ["admin", "inventory_manager"]:
+        # Si no es admin, buscamos su turno activo
+        active_shift = get_active_shift_for_user(db, user_id=user.id)
+        if not active_shift:
+            return [] # Si no tiene turno, no puede ver nada
+        
+        # Filtramos para que solo vea ventas de su sucursal
+        query = query.filter(models.Sale.location_id == active_shift.location_id)
+
+    # 3. Devolvemos la lista, de la más nueva a la más vieja
+    return query.order_by(models.Sale.created_at.desc()).offset(skip).limit(limit).all()
+# --- FIN DE NUESTRO CÓDIGO ---
+
+
 # ===================================================================
 # --- GESTIÓN DE CAJA ---
 # ===================================================================

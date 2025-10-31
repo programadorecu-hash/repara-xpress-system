@@ -891,6 +891,28 @@ def create_new_sale(sale: schemas.SaleCreate, db: Session = Depends(get_db), cur
         return crud.create_sale(db=db, sale=sale, user_id=current_user.id, location_id=active_shift.location_id)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    # --- INICIO DE NUESTRO CÓDIGO ---
+    # Esta es la nueva "manguera" (endpoint) que llamará el televisor
+    except Exception as e:
+        db.rollback()
+        raise e
+
+
+@app.get("/sales/", response_model=List[schemas.Sale])
+def read_sales_history(
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(security.get_current_user)
+):
+    """
+    Obtiene una lista paginada del historial de ventas.
+    Aplica filtros de permisos basados en el rol del usuario.
+    """
+    # 1. Llama a la función del "archivador" que acabamos de crear
+    sales_history = crud.get_sales(db, user=current_user, skip=skip, limit=limit)
+    return sales_history
+# --- FIN DE NUESTRO CÓDIGO ---
 
 
 @app.get("/sales/{sale_id}/receipt", response_class=StreamingResponse)

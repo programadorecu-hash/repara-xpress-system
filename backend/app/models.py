@@ -206,16 +206,16 @@ class Sale(Base):
     subtotal_amount = Column(Float, nullable=False, default=0.0)
     tax_amount = Column(Float, nullable=False, default=0.0)
     total_amount = Column(Float, nullable=False)
-    iva_percentage = Column(Float, nullable=False, default=12.0)
+    iva_percentage = Column(Float, nullable=False, default=12.0) # El IVA se define en el frontend (0 o 15) pero aquí necesita un default
     payment_method = Column(String, nullable=False)
     payment_method_details = Column(JSON, nullable=True)
 
     # --- NUEVAS COLUMNAS PARA DATOS DEL CLIENTE ---
     customer_ci = Column(String, index=True, nullable=False) # Cédula/RUC Obligatorio
     customer_name = Column(String, index=True, nullable=False) # Nombre Obligatorio
-    customer_phone = Column(String, nullable=True)
-    customer_address = Column(String, nullable=True)
-    customer_email = Column(String, nullable=True)
+    customer_phone = Column(String, nullable=True) # Telefono es opcional
+    customer_address = Column(String, nullable=True) # Direccion es opcional
+    customer_email = Column(String, nullable=True) # Email es opcional
     # --- FIN NUEVAS COLUMNAS ---
 
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)

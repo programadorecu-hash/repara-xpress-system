@@ -422,9 +422,9 @@ class Sale(SaleBase):
     # --- NUEVOS CAMPOS PARA DATOS DEL CLIENTE (RESPUESTA) ---
     customer_ci: str
     customer_name: str
-    customer_phone: str | None = None
-    customer_address: str | None = None
-    customer_email: str | None = None
+    customer_phone: Optional[str] = None # <--- AÑADIDO 'Optional'
+    customer_address: Optional[str] = None # <--- AÑADIDO 'Optional'
+    customer_email: Optional[str] = None # <--- AÑADIDO 'Optional'
     # --- FIN NUEVOS CAMPOS ---
 
     user: UserSimple
