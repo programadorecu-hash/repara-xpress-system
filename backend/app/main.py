@@ -900,6 +900,12 @@ def create_new_sale(sale: schemas.SaleCreate, db: Session = Depends(get_db), cur
 
 @app.get("/sales/", response_model=List[schemas.Sale])
 def read_sales_history(
+    # --- INICIO DE NUESTRO CÓDIGO ---
+    # 1. Le decimos a la "manguera" que acepte estos filtros opcionales
+    start_date: date | None = None,
+    end_date: date | None = None,
+    search: str | None = None,
+    # --- FIN DE NUESTRO CÓDIGO ---
     skip: int = 0,
     limit: int = 100,
     db: Session = Depends(get_db),
@@ -909,8 +915,18 @@ def read_sales_history(
     Obtiene una lista paginada del historial de ventas.
     Aplica filtros de permisos basados en el rol del usuario.
     """
-    # 1. Llama a la función del "archivador" que acabamos de crear
-    sales_history = crud.get_sales(db, user=current_user, skip=skip, limit=limit)
+    # 2. Pasamos los filtros que recibimos directo a la función del "archivador"
+    sales_history = crud.get_sales(
+        db, 
+        user=current_user, 
+        skip=skip, 
+        limit=limit,
+        # --- NUESTRAS NUEVAS LÍNEAS ---
+        start_date=start_date,
+        end_date=end_date,
+        search=search
+        # --- FIN NUESTRAS NUEVAS LÍNEAS ---
+    )
     return sales_history
 # --- FIN DE NUESTRO CÓDIGO ---
 

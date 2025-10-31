@@ -787,32 +787,61 @@ def get_sale(db: Session, sale_id: int):
     )
 
 # --- INICIO DE NUESTRO CÓDIGO ---
-# Esta es la nueva función para buscar en el "archivador"
-def get_sales(db: Session, user: models.User, skip: int = 0, limit: int = 100):
+# Esta es la nueva función (¡MEJORADA!) para buscar en el "archivador"
+def get_sales(
+    db: Session, 
+    user: models.User, 
+    skip: int = 0, 
+    limit: int = 100,
+    # --- NUEVOS PARÁMETROS PARA EL BUSCADOR INTELIGENTE ---
+    start_date: date | None = None,
+    end_date: date | None = None,
+    search: str | None = None
+):
     """
-    Obtiene el historial de ventas con lógica de permisos.
+    Obtiene el historial de ventas con lógica de permisos Y FILTROS.
     - Admins/Managers ven todas las ventas.
     - Otros roles (vendedores) solo ven las de su turno activo.
+    - Filtra por rango de fechas y por término de búsqueda (cliente/cédula).
     """
-    # 1. Preparamos la consulta para buscar en la tabla 'sales'
+    # 1. Preparamos la consulta (esto no cambia)
     query = db.query(models.Sale).options(
-        # Le pedimos que "rellene" la info del vendedor, sucursal, y los items
         selectinload(models.Sale.user),
         selectinload(models.Sale.location),
         selectinload(models.Sale.items).selectinload(models.SaleItem.product),
     )
 
-    # 2. Lógica de permisos (igual que en las órdenes de trabajo)
+    # 2. Lógica de permisos (esto no cambia)
     if user.role not in ["admin", "inventory_manager"]:
-        # Si no es admin, buscamos su turno activo
         active_shift = get_active_shift_for_user(db, user_id=user.id)
         if not active_shift:
-            return [] # Si no tiene turno, no puede ver nada
-        
-        # Filtramos para que solo vea ventas de su sucursal
+            return [] 
         query = query.filter(models.Sale.location_id == active_shift.location_id)
 
-    # 3. Devolvemos la lista, de la más nueva a la más vieja
+    # --- INICIO DE LA NUEVA LÓGICA DE FILTROS ---
+    # 3. Aplicamos el filtro de "Fecha Inicio" si existe
+    if start_date:
+        # func.date() extrae solo la fecha (ej: '2025-10-31') de la hora completa
+        query = query.filter(func.date(models.Sale.created_at) >= start_date)
+
+    # 4. Aplicamos el filtro de "Fecha Fin" si existe
+    if end_date:
+        query = query.filter(func.date(models.Sale.created_at) <= end_date)
+
+    # 5. Aplicamos el filtro de búsqueda de texto si existe
+    if search:
+        search_term = f"%{search.lower()}%" # Buscamos el texto en mayúsculas/minúsculas
+        query = query.filter(
+            or_(
+                # Busca en el nombre del cliente
+                func.lower(models.Sale.customer_name).like(search_term),
+                # O busca en la cédula del cliente
+                func.lower(models.Sale.customer_ci).like(search_term)
+            )
+        )
+    # --- FIN DE LA NUEVA LÓGICA DE FILTROS ---
+
+    # 6. Devolvemos la lista filtrada, de la más nueva a la más vieja
     return query.order_by(models.Sale.created_at.desc()).offset(skip).limit(limit).all()
 # --- FIN DE NUESTRO CÓDIGO ---
 
