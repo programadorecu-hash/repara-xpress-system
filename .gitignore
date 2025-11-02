@@ -25,7 +25,7 @@ frontend/.cache/
 *.log
 
 # ===== Docker / Postgres data =====
-postgres_data/
+#postgres_data/
 
 # ===== SO / IDE =====
 .DS_Store
