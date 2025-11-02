@@ -127,6 +127,43 @@ async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
 def read_root():
     return {"message": "¡Bienvenido a la API de Repara Xpress Quito!"}
 
+# --- INICIO DE NUESTRO CÓDIGO (ASISTENTE DE CONFIGURACIÓN) ---
+# ===================================================================
+# --- ENDPOINTS PARA CONFIGURACIÓN INICIAL ---
+# ===================================================================
+
+@app.get("/api/setup/status")
+def get_setup_status(db: Session = Depends(get_db)):
+    """
+    Verifica si el sistema ya tiene usuarios. (La "pregunta" pública)
+    - Devuelve 'True' si (hay 1 o más usuarios) -> El sistema SÍ está configurado.
+    - Devuelve 'False' si (hay 0 usuarios) -> El sistema NO está configurado.
+    """
+    # Llama al "archivista" (crud) y le pide que cuente los usuarios.
+    # Devuelve 'True' (verdad) si el conteo es mayor a 0.
+    return crud.get_user_count(db) > 0
+
+@app.post("/api/setup/create-first-admin", response_model=schemas.User)
+def setup_first_admin(
+    user_data: schemas.FirstAdminCreate,
+    db: Session = Depends(get_db)
+):
+    """
+    Crea el primer usuario administrador. (La "URL" para la caja fuerte)
+    Esta ruta SOLO funciona si no hay ningún otro usuario en la DB.
+    """
+    try:
+        # Llama al "archivista" (crud) para crear el primer admin
+        user = crud.create_first_admin_user(db, user_data=user_data)
+        return user
+    except ValueError as e:
+        # Si el archivista nos grita "¡Ya hay gente!", devolvemos un error 403 (Prohibido)
+        raise HTTPException(status_code=403, detail=str(e))
+    except Exception as e:
+        # Cualquier otro error
+        raise HTTPException(status_code=400, detail="No se pudo crear el usuario.")
+# --- FIN DE NUESTRO CÓDIGO ---
+
 # ===================================================================
 # --- ENDPOINTS PARA USUARIOS Y AUTENTICACIÓN ---
 # ===================================================================
@@ -406,6 +443,17 @@ def delete_location_by_id(location_id: int, db: Session = Depends(get_db), _role
     if db_location is None:
         raise HTTPException(status_code=404, detail="Ubicación no encontrada para eliminar")
     return db_location
+
+# --- INICIO DE NUESTRO CÓDIGO (Ruta para el "Plomero") ---
+@app.get("/api/bodegas/", response_model=List[schemas.Location])
+def read_all_bodegas(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+    """
+    Ruta especial que devuelve SÓLO las bodegas (locaciones con parent_id).
+    Usado por el formulario de ajuste de inventario.
+    """
+    # Llama a la nueva regla del archivista
+    return crud.get_bodegas(db, skip=skip, limit=limit)
+# --- FIN DE NUESTRO CÓDIGO ---
 
 # ===================================================================
 # --- ENDPOINTS PARA STOCK ---

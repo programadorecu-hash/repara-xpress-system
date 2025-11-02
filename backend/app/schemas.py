@@ -50,6 +50,12 @@ class ShiftBase(BaseModel):
 class UserBase(BaseModel):
     email: str
     role: str
+    # --- INICIO DE NUESTRO CÓDIGO (Nuevos campos de RRHH) ---
+    is_active: bool = True # Para que la lista muestre el estado
+    full_name: str | None = None
+    id_card: str | None = None
+    emergency_contact: str | None = None
+    # --- FIN DE NUESTRO CÓDIGO ---
 
 class LostSaleLogBase(BaseModel):
     product_name: str
@@ -218,6 +224,11 @@ class UserSetPin(BaseModel):
 class UserUpdate(BaseModel):
     role: str | None = None
     is_active: bool | None = None
+    # --- INICIO DE NUESTRO CÓDIGO (Nuevos campos de RRHH) ---
+    full_name: str | None = None
+    id_card: str | None = None
+    emergency_contact: str | None = None
+    # --- FIN DE NUESTRO CÓDIGO ---
 class UserPasswordReset(BaseModel):
     new_password: str
 class LostSaleLogCreate(LostSaleLogBase):
@@ -293,6 +304,10 @@ class User(UserSimple):
 
 class UserProfile(User):
     active_shift: Shift | None = None
+    # --- INICIO DE NUESTRO CÓDIGO (Para el Guardia de PIN) ---
+    # Necesitamos saber si el PIN está vacío (None) o no
+    hashed_pin: str | None = None 
+    # --- FIN DE NUESTRO CÓDIGO ---
 
 class Stock(StockBase):
     id: int
@@ -463,6 +478,14 @@ class DashboardSummary(BaseModel):
     total_sales: float
     total_expenses: float
     work_order_summary: WorkOrderStatusSummary
+
+    # --- INICIO DE NUESTRO CÓDIGO (ASISTENTE DE CONFIGURACIÓN) ---
+class FirstAdminCreate(BaseModel):
+    # Este es el "formulario" especial que usará la página de configuración
+    email: str
+    password: str
+    pin: str # Pedimos el email, la contraseña y el PIN de una vez
+    # --- FIN DE NUESTRO CÓDIGO ---
 
 # ===================================================================
 # --- RECONSTRUCCIÓN DE MODELOS ---

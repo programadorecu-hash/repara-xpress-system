@@ -237,24 +237,75 @@ def get_location(db: Session, location_id: int):
     return db.query(models.Location).filter(models.Location.id == location_id).first()
 
 def get_locations(db: Session, skip: int = 0, limit: int = 100):
-    return db.query(models.Location).order_by(models.Location.id).offset(skip).limit(limit).all()
+    # --- INICIO DE NUESTRO CÓDIGO (Mostrar solo Sucursales, no Bodegas) ---
+    # Filtramos para que solo muestre locaciones SIN 'parent_id' (es decir, las oficinas)
+    return db.query(models.Location)\
+        .filter(models.Location.parent_id == None)\
+        .order_by(models.Location.name)\
+        .offset(skip).limit(limit).all()
+    # --- FIN DE NUESTRO CÓDIGO ---
 
 def create_location(db: Session, location: schemas.LocationCreate):
-    db_location = models.Location(**location.model_dump())
-    db.add(db_location)
+    # --- INICIO DE NUESTRO CÓDIGO (La "Magia 3-en-1") ---
+    
+    # 1. Creamos la "Oficina Principal" (La Sucursal)
+    sucursal_data = location.model_dump()
+    sucursal_data['parent_id'] = None 
+    
+    db_sucursal = models.Location(**sucursal_data)
+    db.add(db_sucursal)
+    
+    # 2. Hacemos un "pre-guardado" para que la base de datos nos dé el ID
+    db.flush() 
+
+    # 3. Creamos el "Cuarto de Almacenamiento" (La Bodega)
+    db_bodega = models.Location(
+        name=f"Bodega - {db_sucursal.name}", 
+        description=f"Almacén en {db_sucursal.name}",
+        address=db_sucursal.address, 
+        parent_id=db_sucursal.id 
+    )
+    db.add(db_bodega)
+    
+    # 4. Creamos la "Caja Fuerte de Ventas" (CashAccount)
+    db_caja_ventas = models.CashAccount(
+        name=f"Caja Ventas - {db_sucursal.name}",
+        account_type="CAJA_VENTAS", # Usamos el nuevo tipo
+        location_id=db_sucursal.id # La conectamos a la Oficina
+    )
+    db.add(db_caja_ventas)
+
+    # 5. Guardamos todo (Oficina, Bodega y Caja Fuerte)
     db.commit()
-    db.refresh(db_location)
-    return db_location
+    
+    # 6. Devolvemos la "Oficina Principal" al usuario
+    db.refresh(db_sucursal)
+    return db_sucursal
+    # --- FIN DE NUESTRO CÓDIGO ---
 
 def update_location(db: Session, location_id: int, location: schemas.LocationCreate):
+    # --- INICIO DE NUESTRO CÓDIGO (Actualizar Sucursal y Bodega) ---
+    
+    # 1. Buscamos la "Oficina Principal" (Sucursal)
     db_location = get_location(db, location_id=location_id)
     if db_location:
+        # Actualizamos los datos de la Oficina (Nombre, Descripción, Dirección)
         location_data = location.model_dump(exclude_unset=True)
         for key, value in location_data.items():
             setattr(db_location, key, value)
+            
+        # 2. Buscamos su "Cuarto de Almacenamiento" (Bodega)
+        db_bodega = get_primary_bodega_for_location(db, location_id=db_location.id)
+        if db_bodega:
+            # Actualizamos también los datos de la Bodega para que coincidan
+            db_bodega.name = f"Bodega - {db_location.name}"
+            db_bodega.address = db_location.address
+            
+        # 3. Guardamos ambos cambios
         db.commit()
         db.refresh(db_location)
     return db_location
+    # --- FIN DE NUESTRO CÓDIGO ---
 
 def delete_location(db: Session, location_id: int):
     db_location = get_location(db, location_id=location_id)
@@ -265,6 +316,19 @@ def delete_location(db: Session, location_id: int):
 
 def get_primary_bodega_for_location(db: Session, location_id: int):
     return db.query(models.Location).filter(models.Location.parent_id == location_id).first()
+
+# --- INICIO DE NUESTRO CÓDIGO (Lista solo de Bodegas) ---
+def get_bodegas(db: Session, skip: int = 0, limit: int = 100):
+    """
+    Devuelve una lista de TODAS las bodegas (cuartos de almacenamiento).
+    Filtra solo las locaciones que SÍ tienen un parent_id.
+    """
+    # Esta es la regla del "plomero": "tráeme solo los cuartos con parent_id"
+    return db.query(models.Location)\
+        .filter(models.Location.parent_id != None)\
+        .order_by(models.Location.name)\
+        .offset(skip).limit(limit).all()
+# --- FIN DE NUESTRO CÓDIGO ---
 
 # ===================================================================
 # --- STOCK ---
@@ -371,12 +435,24 @@ def get_users(db: Session, skip: int = 0, limit: int = 100):
     return db.query(models.User).order_by(models.User.id).offset(skip).limit(limit).all()
 
 def create_user(db: Session, user: schemas.UserCreate):
+    # --- INICIO DE NUESTRO CÓDIGO (RRHH: Crear empleado/gerente) ---
     hashed_password = security.get_password_hash(user.password)
-    db_user = models.User(email=user.email, hashed_password=hashed_password, role=user.role)
+    
+    # Preparamos al usuario con los datos del formulario "Crear"
+    db_user = models.User(
+        email=user.email,
+        hashed_password=hashed_password,
+        role=user.role,
+        is_active=True  # Activamos el usuario por defecto
+        # (El PIN se deja en None a propósito, para que el usuario lo cree)
+    )
     db.add(db_user)
     db.commit()
     db.refresh(db_user)
     return db_user
+    # --- FIN DE NUESTRO CÓDIGO ---
+
+    
 
 def update_user(db: Session, user_id: int, user_update: schemas.UserUpdate):
     db_user = db.query(models.User).filter(models.User.id == user_id).first()
@@ -388,12 +464,20 @@ def update_user(db: Session, user_id: int, user_update: schemas.UserUpdate):
         if admin_count <= 1:
             raise ValueError("No se puede eliminar al último administrador.")
 
+    # --- INICIO DE NUESTRO CÓDIGO (RRHH: Editar empleado/gerente) ---
+    # Le decimos que acepte los nuevos campos (full_name, id_card, etc.)
+    # exclude_unset=True es CLAVE: solo actualiza los campos que el admin tocó.
     update_data = user_update.model_dump(exclude_unset=True)
+    # --- FIN DE NUESTRO CÓDIGO ---
+
     for key, value in update_data.items():
         setattr(db_user, key, value)
+
     db.commit()
     db.refresh(db_user)
     return db_user
+
+
 
 def set_user_pin(db: Session, user_id: int, pin: str):
     db_user = db.query(models.User).filter(models.User.id == user_id).first()
@@ -412,6 +496,47 @@ def reset_user_password(db: Session, user_id: int, new_password: str):
         db.commit()
         db.refresh(db_user)
     return db_user
+
+# --- INICIO DE NUESTRO CÓDIGO (ASISTENTE DE CONFIGURACIÓN) ---
+
+def get_user_count(db: Session) -> int:
+    """
+    Cuenta el número total de usuarios en la base de datos.
+    Es como asomarse a la oficina a ver si hay alguien.
+    """
+    # Contamos cuántas filas hay en la tabla "users"
+    return db.query(models.User).count()
+
+def create_first_admin_user(db: Session, user_data: schemas.FirstAdminCreate):
+    """
+    Crea el PRIMER usuario administrador (el dueño de la caja fuerte).
+    Solo funciona si no hay otros usuarios en la base de datos.
+    """
+    # 1. Doble chequeo para seguridad:
+    # Si al asomarnos (get_user_count) vemos que hay 1 o más personas...
+    if get_user_count(db) > 0:
+        # ...cerramos la puerta y damos un error.
+        raise ValueError("La base de datos ya tiene usuarios. La configuración inicial está bloqueada.")
+    
+    # 2. Si no hay nadie (conteo es 0), creamos el usuario
+    hashed_password = security.get_password_hash(user_data.password)
+    db_user = models.User(
+        email=user_data.email,
+        hashed_password=hashed_password,
+        role="admin", # Le damos el rol de "admin" (jefe)
+        is_active=True
+    )
+    db.add(db_user)
+    db.commit() # Guardamos el usuario para obtener su ID
+    db.refresh(db_user)
+
+    # 3. Añadir el PIN
+    # (Llamamos a la función que ya existe para esto, 'set_user_pin')
+    set_user_pin(db=db, user_id=db_user.id, pin=user_data.pin)
+    
+    db.refresh(db_user)
+    return db_user
+    # --- FIN DE NUESTRO CÓDIGO ---
 
 # ===================================================================
 # --- TURNOS ---
@@ -761,6 +886,34 @@ def create_sale(db: Session, sale: schemas.SaleCreate, user_id: int, location_id
                 # Motivo: si más adelante se vuelve a “vender” esta misma orden, 
                 # no se duplicará el impuesto ni se “inflará” el total.
                 db_work_order.final_cost = subtotal_amount
+                # --- INICIO DE NUESTRO CÓDIGO (Conectar Venta con Caja) ---
+        
+        # 1. Solo registramos el movimiento de dinero si la venta fue en EFECTIVO.
+        #    (Si fue Transferencia o Tarjeta, el dinero no entra a la caja física)
+        if sale.payment_method == "EFECTIVO":
+            
+            # 2. Buscamos la "Caja Fuerte de Ventas" de esta sucursal
+            db_caja_ventas = db.query(models.CashAccount).filter(
+                models.CashAccount.location_id == location_id,
+                models.CashAccount.account_type == "CAJA_VENTAS"
+            ).first()
+
+            # 3. Si encontramos la caja...
+            if db_caja_ventas:
+                # 4. Creamos el "Recibo de Depósito" (la transacción)
+                #    (Usamos la función que ya existía)
+                db_transaction = models.CashTransaction(
+                    amount=total_amount, # El monto total de la venta
+                    description=f"Ingreso por Venta #{db_sale.id}",
+                    user_id=user_id,
+                    account_id=db_caja_ventas.id
+                )
+                db.add(db_transaction)
+            else:
+                # Si no hay caja (raro, pero puede pasar), lanzamos un error
+                raise ValueError(f"No se encontró una 'Caja de Ventas' para la sucursal ID {location_id}.")
+        
+                # --- FIN DE NUESTRO CÓDIGO ---
 
         db.commit()
         db.refresh(db_sale)

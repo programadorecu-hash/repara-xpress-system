@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import api from '../services/api';
 import { AuthContext } from '../context/AuthContext';
 
@@ -62,14 +62,39 @@ const handleSubmit = async (event) => {
               className="w-full p-3 bg-gray-100 rounded-lg text-secondary border border-gray-300 focus:outline-none focus:border-detail"
               value={selectedLocation}
               onChange={(e) => setSelectedLocation(e.target.value)}
+              disabled={locations.length === 0} // Desactivamos si no hay opciones
             >
-              {locations.map(loc => (
-                <option key={loc.id} value={loc.id}>
-                  {loc.name}
-                </option>
-              ))}
+              {/* --- INICIO DE NUESTRO CÓDIGO (Mensaje si no hay sucursales) --- */}
+              {locations.length === 0 ? (
+                <option value="">No hay sucursales creadas</option>
+              ) : (
+                locations.map(loc => (
+                  <option key={loc.id} value={loc.id}>
+                    {loc.name}
+                  </option>
+                ))
+              )}
+              {/* --- FIN DE NUESTRO CÓDIGO --- */}
             </select>
           </div>
+
+          {/* --- INICIO DE NUESTRO CÓDIGO (Atajo para crear sucursales) --- */}
+          {locations.length === 0 && (
+            <div className="mb-4 text-center text-sm">
+              <p className="text-gray-600">
+                Parece que no hay ninguna sucursal.
+              </p>
+              {/* Llevamos al admin a la nueva página que creamos */}
+              <Link 
+                to="/sucursales" 
+                className="font-semibold text-accent hover:underline"
+              >
+                Haz clic aquí para crear tu primera sucursal
+              </Link>
+            </div>
+          )}
+          {/* --- FIN DE NUESTRO CÓDIGO --- */}
+          
           <button
             type="submit"
             className="w-full bg-accent hover:bg-teal-500 text-white font-bold py-3 rounded-lg transition duration-300"

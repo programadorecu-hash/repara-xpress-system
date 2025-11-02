@@ -13,14 +13,17 @@ function InventoryAdjustmentForm({ product, onSave, onClose }) {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    // Carga todas las ubicaciones para encontrar las bodegas
-    api.get('/locations/').then(response => {
-      const bodegas = response.data.filter(loc => loc.parent_id !== null);
+    // --- INICIO DE NUESTRO CÓDIGO (Arreglo del Plomero) ---
+    // Le decimos al "plomero" que use la nueva URL /api/bodegas/
+    api.get('/api/bodegas/').then(response => {
+      // Ya no necesitamos filtrar, la API nos da solo las bodegas
+      const bodegas = response.data; 
       setLocations(bodegas);
       if (bodegas.length > 0) {
         setSelectedLocation(bodegas[0].id);
       }
     });
+    // --- FIN DE NUESTRO CÓDIGO ---
   }, []);
 
   const handleChange = (e) => {

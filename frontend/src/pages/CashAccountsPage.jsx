@@ -10,11 +10,15 @@ const emptyAccount = {
   account_type: 'CAJA_CHICA',
 };
 
+// --- INICIO DE NUESTRO CÓDIGO ---
+// Añadimos CAJA_VENTAS como una opción seleccionable
 const ACCOUNT_TYPE_OPTIONS = [
-  { value: 'CAJA_CHICA', label: 'Caja chica' },
+  { value: 'CAJA_VENTAS', label: 'Caja de Ventas (Principal)' },
+  { value: 'CAJA_CHICA', label: 'Caja chica (Gastos)' },
   { value: 'BANCO', label: 'Cuenta bancaria' },
-  { value: 'OTRO', label: 'Otro' },
+  { value: 'OTRO', label: 'Otro (Ej: Recargas, Sueltos)' },
 ];
+// --- FIN DE NUESTRO CÓDIGO ---
 
 function CashAccountsPage() {
   const { user, activeShift } = useContext(AuthContext);

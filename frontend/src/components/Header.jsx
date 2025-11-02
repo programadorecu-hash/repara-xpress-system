@@ -121,6 +121,28 @@ function Header() {
               </Link>
             )}
 
+            {/* --- INICIO DE NUESTRO CÓDIGO (Enlace a Sucursales) --- */}
+            {user?.role === "admin" && (
+              <Link
+                to="/sucursales"
+                className="text-surface font-semibold hover:text-brand-mist"
+              >
+                SUCURSALES
+              </Link>
+            )}
+            {/* --- FIN DE NUESTRO CÓDIGO --- */}
+
+            {/* --- INICIO DE NUESTRO CÓDIGO (Enlace a RRHH) --- */}
+            {user?.role === "admin" && (
+              <Link
+                to="/usuarios"
+                className="text-surface font-semibold hover:text-brand-mist"
+              >
+                USUARIOS
+              </Link>
+            )}
+            {/* --- FIN DE NUESTRO CÓDIGO --- */}
+
             {token && user && (
               <div className="flex items-center space-x-4">
                 <span className="text-surface/80">{user.email}</span>

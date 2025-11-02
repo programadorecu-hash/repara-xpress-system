@@ -10,6 +10,11 @@ class User(Base):
     __tablename__ = "users"
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String, unique=True, index=True, nullable=False)
+    # --- INICIO DE NUESTRO CÓDIGO (Nuevos campos de RRHH) ---
+    full_name = Column(String, nullable=True) # Nombre completo
+    id_card = Column(String, nullable=True) # Cédula
+    emergency_contact = Column(String, nullable=True) # Contacto de Emergencia
+    # --- FIN DE NUESTRO CÓDIGO ---
     hashed_password = Column(String, nullable=False)
     hashed_pin = Column(String, nullable=True)
     role = Column(String, nullable=False, default='viewer')
@@ -27,6 +32,7 @@ class Location(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, index=True, nullable=False)
     description = Column(String, nullable=True)
+    address = Column(String, nullable=True)
     parent_id = Column(Integer, ForeignKey("locations.id"), nullable=True)
     stock_entries = relationship("Stock", back_populates="location")
     movements = relationship("InventoryMovement", back_populates="location")

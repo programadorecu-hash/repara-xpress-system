@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useContext } from 'react';
+// 1. Importamos 'useMemo', que es nuestra "calculadora inteligente"
+import React, { useState, useEffect, useContext, useMemo } from 'react';
 import api from '../services/api'; // El mensajero
 import { AuthContext } from '../context/AuthContext'; // Para saber quién soy
 
@@ -22,6 +23,42 @@ function SalesHistoryPage() {
   const [endDate, setEndDate] = useState(getTodayString());   // Calendario Fin (default HOY)
   const [searchTerm, setSearchTerm] = useState(''); // Barra de búsqueda
   // --- FIN: "Blocs de notas" ---
+
+  // --- INICIO: NUESTRA "CALCULADORA" ---
+  // useMemo es un "calculador inteligente". Solo volverá a sumar
+  // si la lista de 'sales' (ventas) cambia.
+  const totalFilteredSales = useMemo(() => {
+    // .reduce() es como usar una calculadora para sumar una lista de números
+    // Empezamos en 0 (el '0' al final)
+    // y por cada 'sale' (venta), sumamos su 'total_amount'
+    return sales.reduce((total, sale) => total + sale.total_amount, 0);
+  }, [sales]); // <-- Le decimos que solo recalcule si 'sales' cambia
+  // --- FIN: NUESTRA "CALCULADORA" ---
+
+  // --- INICIO: NUESTRO "CLASIFICADOR DE MONEDAS" (Calculadora de Desglose) ---
+  const paymentMethodSummary = useMemo(() => {
+    // 1. Creamos un "organizador" (un objeto) vacío
+    const summary = {};
+    
+    // 2. Revisamos cada venta en la lista filtrada
+    for (const sale of sales) {
+      // 3. Obtenemos el método (Ej: "EFECTIVO") y el monto (Ej: 50)
+      const method = sale.payment_method; // (Viene del backend)
+      const amount = sale.total_amount;
+
+      // 4. Si aún no tenemos un "montón" para este método, lo creamos
+      if (!summary[method]) {
+        summary[method] = 0;
+      }
+      
+      // 5. Sumamos el monto al "montón" correcto
+      summary[method] += amount;
+    }
+    
+    // 6. Devolvemos el organizador con los montones sumados
+    return summary; // (Quedará algo como: { "EFECTIVO": 50, "TRANSFERENCIA": 100 })
+  }, [sales]); // <-- Le decimos que solo recalcule si 'sales' cambia
+  // --- FIN: NUESTRO "CLASIFICADOR DE MONEDAS" ---
 
   // Esto se ejecuta cuando abres la página
   useEffect(() => {
@@ -73,8 +110,32 @@ function SalesHistoryPage() {
 
   // Función simple para formatear la fecha
   const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleString('es-EC');
+    // Ajustamos la fecha para que se vea más limpia
+    return new Date(dateString).toLocaleString('es-EC', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
   };
+
+  // --- INICIO: NUESTRO "AYUDANTE" PARA FORMAtear NOMBRES ---
+  // Convierte "METODO_PAGO" en "Metodo pago"
+  const formatPaymentMethod = (method) => {
+    if (!method) return "Otro";
+    
+    // 1. Reemplaza guiones bajos (_) por espacios (ej: "TARJETA_CREDITO" -> "TARJETA CREDITO")
+    let spacedMethod = method.replace('_', ' ');
+    
+    // 2. Pone la primera letra en Mayúscula y el resto en minúscula
+    //    (ej: "TARJETA CREDITO" -> "Tarjeta credito")
+    let formatted = spacedMethod.charAt(0).toUpperCase() + 
+                    spacedMethod.slice(1).toLowerCase();
+                    
+    return formatted;
+  };
+  // --- FIN: NUESTRO "AYUDANTE" ---
 
   // Esta es la nueva función (CORREGIDA) para programar el botón "Ver Recibo"
   const handleViewReceipt = async (saleId) => {
@@ -163,6 +224,55 @@ function SalesHistoryPage() {
         </button>
       </form>
       {/* --- FIN: NUESTRO "BUSCADOR INTELIGENTE" --- */}
+
+
+      {/* --- INICIO: CAJA DE RESUMEN (LA PANTALLA DE LA CALCULADORA) --- */}
+      {/* 1. CAMBIAMOS A 3 COLUMNAS para que quepa la nueva caja */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {/* Caja para el Total de Ventas */}
+        <div className="bg-gray-100 p-4 rounded-lg border">
+          <h3 className="text-sm font-semibold text-gray-600 uppercase">TOTAL DE VENTAS (FILTRADO)</h3>
+          {/* Mostramos el total que calculamos, con 2 decimales */}
+          <p className="text-3xl font-bold text-secondary">
+            ${totalFilteredSales.toFixed(2)}
+          </p>
+        </div>
+        
+        {/* Caja para el Número de Ventas */}
+        <div className="bg-gray-100 p-4 rounded-lg border">
+          <h3 className="text-sm font-semibold text-gray-600 uppercase">N° DE VENTAS (FILTRADO)</h3>
+          {/* Mostramos cuántas ventas hay en la lista */}
+          <p className="text-3xl font-bold text-secondary">
+            {sales.length}
+          </p>
+        </div>
+        
+        {/* --- INICIO: NUESTRA NUEVA CAJA DE DESGLOSE --- */}
+        <div className="bg-gray-100 p-4 rounded-lg border">
+          <h3 className="text-sm font-semibold text-gray-600 uppercase">DESGLOSE POR MÉTODO</h3>
+          
+          {/* Object.keys(objeto) nos da una lista de las "claves" (Ej: ["EFECTIVO", "TRANSFERENCIA"])
+            Si la lista está vacía (length === 0), mostramos un guion.
+          */}
+          {Object.keys(paymentMethodSummary).length === 0 ? (
+            <p className="text-xl font-bold text-gray-400">---</p>
+          ) : (
+            // Si hay datos, los recorremos y mostramos uno por uno
+            <div className="space-y-1 mt-2">
+              {Object.entries(paymentMethodSummary).map(([method, total]) => (
+                <div key={method} className="flex justify-between items-baseline text-sm">
+                  {/* Usamos nuestro "ayudante" para limpiar el nombre */}
+                  <span className="font-semibold text-gray-700">{formatPaymentMethod(method)}:</span>
+                  <span className="font-bold text-secondary">${total.toFixed(2)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        {/* --- FIN: NUESTRA NUEVA CAJA DE DESGLOSE --- */}
+
+      </div>
+      {/* --- FIN: CAJA DE RESUMEN --- */}
 
 
       {error && (
