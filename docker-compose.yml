@@ -23,6 +23,13 @@ services:
     container_name: repara_xpress_frontend
     ports:
       - "5173:5173"
+    # --- INICIO DE NUESTRO CÓDIGO (El "Tubo Mágico") ---
+    volumes:
+      - ./frontend:/app
+      # Le decimos a Docker que ignore la carpeta 'node_modules' de adentro.
+      # Esto evita conflictos y hace que funcione mucho más rápido.
+      - /app/node_modules
+    # --- FIN DE NUESTRO CÓDIGO ---
     env_file:
       - .env
     environment:

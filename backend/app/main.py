@@ -1022,6 +1022,33 @@ def create_new_cash_transaction(transaction: schemas.CashTransactionCreate, db: 
 def read_transactions_for_account(account_id: int, skip: int = 0, limit: int = 100, db: Session = Depends(get_db), _role_check: None = Depends(security.require_role(required_roles=["admin", "inventory_manager"]))):
     return crud.get_cash_transactions_by_account(db, account_id=account_id, skip=skip, limit=limit)
 
+# --- INICIO DE NUESTRO CÓDIGO (Cierre de Caja) ---
+@app.get("/cash-accounts/{account_id}/balance", response_model=schemas.CashAccountBalance)
+def get_cash_account_balance_endpoint(
+    account_id: int,
+    db: Session = Depends(get_db),
+    _role_check: None = Depends(security.require_role(required_roles=["admin"]))
+):
+    """
+    Devuelve el saldo actual de una cuenta de caja específica.
+    (La "URL" para la pantalla digital).
+    """
+    # 1. Buscamos la caja para asegurarnos de que existe
+    account = crud.get_cash_account(db, account_id=account_id)
+    if not account:
+        raise HTTPException(status_code=404, detail="Cuenta de caja no encontrada.")
+    
+    # 2. Le pedimos al archivista que sume el saldo
+    balance = crud.get_cash_account_balance(db, account_id=account_id)
+    
+    # 3. Devolvemos el "formulario" con el saldo
+    return schemas.CashAccountBalance(
+        account_id=account.id,
+        account_name=account.name,
+        current_balance=balance
+    )
+# --- FIN DE NUESTRO CÓDIGO ---
+
 # ===================================================================
 # --- ENDPOINTS PARA REPORTES  - DASHBOARDS - ETC ---
 # ===================================================================

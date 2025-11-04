@@ -1,4 +1,4 @@
-import React, { useContext, useEffect, useMemo, useState } from 'react';
+import React, { useContext, useEffect, useMemo, useState, useCallback } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import DataTable from '../components/DataTable.jsx';
 import ModalForm from '../components/ModalForm.jsx';
@@ -26,6 +26,13 @@ function CashTransactionsPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [formState, setFormState] = useState(emptyForm);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // --- INICIO DE NUESTRO CÓDIGO (Cierre de Caja) ---
+  // "Pantalla digital" para el saldo actual
+  const [accountBalance, setAccountBalance] = useState(null); 
+  // Estado de carga para la "pantalla digital"
+  const [isLoadingBalance, setIsLoadingBalance] = useState(false);
+  // --- FIN DE NUESTRO CÓDIGO ---
 
   const canManageCash = user?.role === 'admin';
   const location = activeShift?.location;
@@ -77,27 +84,50 @@ function CashTransactionsPage() {
     }
   }, [accounts, searchParams]);
 
+// --- INICIO DE NUESTRO CÓDIGO (Cierre de Caja) ---
+  
+  // Función para cargar el SALDO (la "pantalla digital")
+  const loadBalance = useCallback(async () => {
+    if (!selectedAccountId) {
+      setAccountBalance(null);
+      return;
+    }
+    try {
+      setIsLoadingBalance(true);
+      // Llamamos a la nueva URL que creamos en main.py
+      const response = await api.get(`/cash-accounts/${selectedAccountId}/balance`);
+      setAccountBalance(response.data);
+    } catch (err) {
+      setError('No se pudo cargar el saldo de la cuenta.');
+    } finally {
+      setIsLoadingBalance(false);
+    }
+  }, [selectedAccountId]); // Depende de la cuenta seleccionada
+
+  // Función para cargar la LISTA de movimientos
+  const loadTransactions = useCallback(async () => {
+    if (!selectedAccountId) {
+      setTransactions([]);
+      return;
+    }
+    try {
+      setIsLoadingTransactions(true);
+      setError('');
+      const data = await fetchCashTransactions(selectedAccountId);
+      setTransactions(data);
+    } catch (err) {
+      setError('No se pudieron cargar los movimientos de caja.');
+    } finally {
+      setIsLoadingTransactions(false);
+    }
+  }, [selectedAccountId]); // Depende de la cuenta seleccionada
+
+  // Este useEffect se dispara cuando la cuenta seleccionada cambia
   useEffect(() => {
-    const loadTransactions = async () => {
-      if (!selectedAccountId) {
-        setTransactions([]);
-        return;
-      }
-
-      try {
-        setIsLoadingTransactions(true);
-        setError('');
-        const data = await fetchCashTransactions(selectedAccountId);
-        setTransactions(data);
-      } catch (err) {
-        setError('No se pudieron cargar los movimientos de caja.');
-      } finally {
-        setIsLoadingTransactions(false);
-      }
-    };
-
-    loadTransactions();
-  }, [selectedAccountId]);
+    loadTransactions(); // Carga la lista
+    loadBalance();      // Carga el saldo
+  }, [selectedAccountId, loadTransactions, loadBalance]); // Añadimos las funciones
+  // --- FIN DE NUESTRO CÓDIGO ---
 
   const handleAccountChange = (event) => {
     const { value } = event.target;
@@ -121,6 +151,28 @@ function CashTransactionsPage() {
   const handleCloseModal = () => {
     setIsModalOpen(false);
   };
+
+  // --- INICIO DE NUESTRO CÓDIGO (El "Botón Rojo") ---
+  const handleOpenCloseoutModal = () => {
+    // Si no hay saldo, o el saldo es 0, no hacemos nada
+    if (!accountBalance || accountBalance.current_balance === 0) {
+      alert("No hay saldo para cerrar en esta caja.");
+      return;
+    }
+
+    // Pre-llenamos el formulario con los datos del cierre
+    setFormState({
+      // Ponemos el saldo en NEGATIVO
+      amount: (accountBalance.current_balance * -1).toFixed(2),
+      description: 'CIERRE DE CAJA', // Descripción por defecto
+      pin: '',
+    });
+    
+    setSuccessMessage('');
+    setError('');
+    setIsModalOpen(true); // Abrimos el mismo modal
+  };
+  // --- FIN DE NUESTRO CÓDIGO ---
 
   const handleFormChange = (event) => {
     const { name, value } = event.target;
@@ -164,8 +216,15 @@ function CashTransactionsPage() {
       setIsModalOpen(false);
       setFormState(emptyForm);
       setSuccessMessage('Movimiento registrado correctamente.');
-      const updatedTransactions = await fetchCashTransactions(selectedAccountId);
-      setTransactions(updatedTransactions);
+      
+      // --- INICIO DE NUESTRO CÓDIGO (Cierre de Caja) ---
+      // Recargamos AMBAS cosas: la lista y el saldo
+      await Promise.all([
+        loadTransactions(),
+        loadBalance()
+      ]);
+      // --- FIN DE NUESTRO CÓDIGO ---
+
     } catch (err) {
       const detail = err.response?.data?.detail;
       setError(detail || 'No se pudo registrar el movimiento.');
@@ -249,13 +308,48 @@ function CashTransactionsPage() {
               ))}
             </select>
           </div>
+
+          {/* --- INICIO DE NUESTRO CÓDIGO (Pantalla Digital y Botón de Cierre) --- */}
+          
+          {/* Esta es la "Pantalla Digital" que muestra el saldo */}
+          <div className="text-right">
+            <label className="block text-sm font-semibold text-gray-700">Saldo Actual</label>
+            {isLoadingBalance ? (
+              <p className="text-lg font-bold text-gray-400">Calculando...</p>
+            ) : (
+              <p className={`text-2xl font-bold ${
+                accountBalance?.current_balance < 0 ? 'text-red-600' : 'text-secondary'
+              }`}>
+                {/* Formateamos el número como dinero */}
+                {new Intl.NumberFormat('es-EC', { style: 'currency', currency: 'USD' }).format(
+                  accountBalance?.current_balance || 0
+                )}
+              </p>
+            )}
+          </div>
+          
+          {/* Botón para Ingreso/Gasto manual (el que ya tenías) */}
           <button
             onClick={handleOpenModal}
-            className="bg-accent text-white font-semibold py-2 px-4 rounded-lg disabled:opacity-70"
+            className="bg-secondary text-white font-semibold py-2 px-4 rounded-lg disabled:opacity-70"
             disabled={!selectedAccountId}
+            title="Registrar un ingreso o gasto manual"
           >
-            + Registrar movimiento
+            + Movimiento Manual
           </button>
+
+          {/* Este es el "Botón Rojo" para Cierre de Caja */}
+          <button
+            onClick={handleOpenCloseoutModal}
+            className="bg-red-600 text-white font-bold py-2 px-4 rounded-lg disabled:opacity-50"
+            // Se deshabilita si no hay cuenta, si el saldo es 0, o si se está cargando
+            disabled={!selectedAccountId || isLoadingBalance || !accountBalance || accountBalance.current_balance === 0}
+            title="Cerrar la caja (retirar todo el saldo)"
+          >
+            Cierre de Caja
+          </button>
+          {/* --- FIN DE NUESTRO CÓDIGO --- */}
+
         </div>
       </div>
 

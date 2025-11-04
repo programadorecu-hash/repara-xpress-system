@@ -1,3 +1,14 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* --- INICIO DE NUESTRO CÓDIGO --- */
+body {
+  /* Le ponemos un "fondo de pantalla" (un gradiente sutil) a toda la app.
+    Esto usa los colores 'primary' y 'surface' de tu paleta.
+    Si ambos son iguales (ej: #F2F2F2), lo cambiamos por 'gray-100'
+    para que el efecto "cristal" tenga algo que difuminar.
+  */
+  @apply bg-gradient-to-br from-primary to-gray-100;
+}
+/* --- FIN DE NUESTRO CÓDIGO --- */

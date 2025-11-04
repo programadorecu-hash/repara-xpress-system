@@ -1036,6 +1036,22 @@ def get_cash_transactions_by_account(db: Session, account_id: int, skip: int = 0
         joinedload(models.CashTransaction.account)
     ).filter(models.CashTransaction.account_id == account_id).order_by(models.CashTransaction.timestamp.desc()).offset(skip).limit(limit).all()
 
+# --- INICIO DE NUESTRO CÓDIGO (Cierre de Caja) ---
+def get_cash_account_balance(db: Session, account_id: int) -> float:
+    """
+    Calcula el saldo total de una cuenta sumando todos sus movimientos.
+    (Esta es la "pantalla digital" de la caja).
+    """
+    # Usamos func.sum() para que la base de datos haga la suma por nosotros.
+    # Coalesce es para que devuelva 0 si no hay transacciones (en lugar de 'None').
+    total = db.query(func.sum(models.CashTransaction.amount)).filter(
+        models.CashTransaction.account_id == account_id
+    ).scalar() or 0.0
+    
+    # Redondeamos a 2 decimales por si acaso
+    return round(total, 2)
+# --- FIN DE NUESTRO CÓDIGO ---
+
 # ===================================================================
 # --- REPORTES ---
 # ===================================================================

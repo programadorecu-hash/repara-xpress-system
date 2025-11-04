@@ -462,6 +462,14 @@ class CashTransaction(CashTransactionBase):
     class Config:
         from_attributes = True
 
+# --- INICIO DE NUESTRO CÓDIGO (Cierre de Caja) ---
+class CashAccountBalance(BaseModel):
+    """Un formulario simple para devolver el saldo de una caja."""
+    account_id: int
+    account_name: str
+    current_balance: float
+# --- FIN DE NUESTRO CÓDIGO ---
+
 class TopSeller(BaseModel):
     user: UserSimple
     total_sales: float
