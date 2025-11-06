@@ -46,6 +46,7 @@ services:
       - POSTGRES_USER=repara_user
       - POSTGRES_PASSWORD=repara_password
       - POSTGRES_DB=repara_xpress_inventory_db
+      - TZ=${TZ}
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U repara_user -d repara_xpress_inventory_db"]
       interval: 5s

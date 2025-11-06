@@ -6,6 +6,9 @@ from reportlab.lib.units import mm
 from reportlab.platypus import Paragraph
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.enums import TA_CENTER
+# --- LIBRERÍAS DE TIEMPO ---
+import pytz
+import os
 
 def generate_work_order_pdf(work_order: schemas.WorkOrder):
     buffer = BytesIO()
@@ -163,9 +166,25 @@ def generate_sale_receipt_pdf(sale: schemas.Sale):
 
     c.setFont("Helvetica-Bold", 8)
     c.drawString(5 * mm, y, f"Venta N°: {sale.id}")
+    # --- INICIO DE NUESTROS CAMBIOS (Arreglo de Zona Horaria y Formato) ---
     c.setFont("Helvetica", 8)
-    sale_date = sale.created_at.strftime("%d/%m/%Y %H:%M")
-    c.drawString(30 * mm, y, f"Fecha: {sale_date}")
+    
+    # 1. Obtenemos la zona horaria (igual que en main.py)
+    try:
+        app_timezone_str = os.getenv("TZ", "America/Guayaquil")
+        ecuador_tz = pytz.timezone(app_timezone_str)
+    except pytz.UnknownTimeZoneError:
+        ecuador_tz = pytz.timezone("America/Guayaquil")
+
+    # 2. Convertimos la hora de la BD (UTC) a la hora local de Ecuador
+    local_sale_time = sale.created_at.astimezone(ecuador_tz)
+    
+    # 3. Formateamos la hora local a formato 12-horas (AM/PM)
+    sale_date = local_sale_time.strftime("%d/%m/%Y %I:%M %p") 
+    
+    # 4. (Arreglo de Maquetación) Alineamos la fecha a la DERECHA
+    c.drawRightString(width - (5 * mm), y, f"Fecha: {sale_date}")
+    # --- FIN DE NUESTROS CAMBIOS ---
     y -= 4 * mm
 
     draw_paragraph(f"<b>Sucursal:</b> {sale.location.name}", style_normal)
@@ -226,6 +245,28 @@ def generate_sale_receipt_pdf(sale: schemas.Sale):
     y -= 4 * mm
     draw_paragraph("Gracias por su compra", style_centered)
     draw_paragraph("Quito - Ecuador", style_centered)
+    # --- INICIO DE NUESTROS CAMBIOS (Añadir firmas y notas) ---
+    y -= 10 * mm  # Un espacio antes de las firmas
+
+    # Firma Cliente
+    c.line(8 * mm, y, width - (8 * mm), y)  # Línea de firma
+    y -= 4 * mm
+    draw_paragraph("Firma Cliente", style_centered)
+    draw_paragraph(f"C.C: {sale.customer_ci}", style_centered)
+
+    y -= 10 * mm  # Espacio entre firmas
+
+    # Firma Vendedor
+    c.line(8 * mm, y, width - (8 * mm), y)  # Línea de firma
+    y -= 4 * mm
+    draw_paragraph("Vendedor", style_centered)
+    draw_paragraph(f"{sale.user.email}", style_centered)
+
+    y -= 10 * mm  # Espacio para notas
+    draw_paragraph("Notas:", style_normal, margin_left=5 * mm)
+    y -= 15 * mm  # Un recuadro vacío para notas
+    c.rect(5 * mm, y, width - (10 * mm), 15 * mm)
+    # --- FIN DE NUESTROS CAMBIOS ---
 
     c.showPage()
     c.save()
