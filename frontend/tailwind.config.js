@@ -20,9 +20,10 @@ export default {
         secondary: "#00010D", // = onSurface (mantiene text-secondary existentes)
 
         // Acentos existentes (no tocamos para no romper otras pantallas)
-        accent: "#63A1F2",
-        highlight: "#F2B33D",
-        detail: "#5550F2",
+        accent: "#63A1F2", // Azul para botones de "Orden"
+        highlight: "#F2B33D", // Amarillo para "Gasto"
+        detail: "#5550F2", // Púrpura para "Balance"
+        'action-green': '#14B8A6', // El nuevo verde/turquesa para "Vender" y "Bodega"
       },
     },
   },
