@@ -12,17 +12,21 @@ WORKDIR /code
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 4) Copia el código (luego el volumen de compose lo sobre-monta para hot-reload)
+# 4) Copia el código
 COPY app ./app
 
-# 5) ¡AQUÍ ESTÁ EL ARREGLO!
-#    Le decimos a Docker que cree la carpeta "uploads" que el script app/main.py necesita.
+# 5) ¡AQUÍ ESTÁ LA NUEVA PARTE!
+#    Copiamos nuestro script de arranque
+COPY start.sh .
+#    Le damos permisos de "ejecución"
+RUN chmod +x ./start.sh
+
+# 6) Creamos la carpeta de uploads
 RUN mkdir uploads
 
-# 6) Exponemos el puerto del API
+# 7) Exponemos el puerto del API
 EXPOSE 8000
 
-# 7) ¡¡AQUÍ ESTÁ LA SOLUCIÓN DEFINITIVA!!
-#    Cambiamos el comando de inicio para que sea un shell
-#    que PRIMERO ejecute alembic y LUEGO ejecute uvicorn.
-CMD ["/bin/sh", "-c", "python -m alembic upgrade head && python -m uvicorn app.main:app --host 0.0.0.0 --port 8000"]
+# 8) ¡EL NUEVO COMANDO DE INICIO!
+#    Simplemente le decimos que ejecute nuestro script.
+CMD ["./start.sh"]
