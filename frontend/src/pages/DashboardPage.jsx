@@ -65,6 +65,17 @@ const StatusBadge = ({ status }) => {
   );
 };
 
+// --- INICIO DE NUESTRO CÓDIGO (Ayudante de formato) ---
+// (Copiado desde SalesHistoryPage.jsx)
+const formatPaymentMethod = (method) => {
+  if (!method) return "Otro";
+  let spacedMethod = method.replace('_', ' ');
+  let formatted = spacedMethod.charAt(0).toUpperCase() + 
+                  spacedMethod.slice(1).toLowerCase();
+  return formatted;
+};
+// --- FIN DE NUESTRO CÓDIGO ---
+
 
 function DashboardPage() {
   // --- Estados para las tarjetas de dinero (no cambian) ---
@@ -293,7 +304,7 @@ function DashboardPage() {
 
           {/* 2. Venta Perdida (no cambia) */}
           <form onSubmit={handleLostSaleSubmit} className="bg-white p-6 rounded-xl shadow-md border">
-            <h2 className="text-xl font-bold text-secondary mb-2">Productos no Vendidos</h2>
+            <h2 className="text-xl font-bold text-secondary mb-2">VENTAS PERDIDAS</h2>
             <p className="text-sm text-gray-500 mb-4">
               ANOTA AQUÍ CADA VEZ QUE UNA VENTA NO LOGRE COMPLETARSE
             </p>
@@ -338,15 +349,39 @@ function DashboardPage() {
                 <p className="text-gray-500 text-sm">No hay ventas registradas hoy.</p>
               ) : (
                 // Creamos la lista (hilo de recibos)
-                todaysSales.map(sale => (
-                  <div key={sale.id} className="flex justify-between items-center border-b pb-2 last:border-b-0">
-                    <div>
-                      <p className="font-semibold text-sm">{sale.customer_name}</p>
-                      <p className="text-xs text-gray-500">Venta #{sale.id} - {sale.user.email}</p>
-                    </div>
+              todaysSales.map(sale => (
+                // 1. Quitamos el "flex justify-between" del contenedor principal
+                <div key={sale.id} className="border-b pb-2 last:border-b-0 pt-2">
+                  
+                  {/* 2. Fila Principal: Cliente y Total (esto es igual que antes) */}
+                  <div className="flex justify-between items-center">
+                    <p className="font-semibold text-sm">{sale.customer_name}</p>
                     <p className="font-bold text-action-green">${sale.total_amount.toFixed(2)}</p>
                   </div>
-                ))
+
+                  {/* 3. Fila de Sub-detalles: Vendedor y Sucursal */}
+                  <div className="flex justify-between items-center text-xs text-gray-500 mt-1">
+                    <span>Venta #{sale.id} por: {sale.user.email}</span>
+                    <span className="font-medium">{sale.location.name}</span>
+                  </div>
+
+                  {/* 4. Lista de Productos Vendidos (Qué y Cuántos) */}
+                  <div className="mt-2 pl-2 border-l-2 border-gray-200">
+                    {sale.items.map(item => (
+                      <p key={item.id} className="text-xs text-gray-700">
+                        {/* (Cuántos) x (Qué) */}
+                        <span className="font-medium">{item.quantity}x</span> {item.description}
+                      </p>
+                    ))}
+                  </div>
+
+                  {/* 5. Método de Pago (usando nuestro ayudante) */}
+                  <p className="text-xs text-gray-500 mt-1 pl-2">
+                    Pagado con: <span className="font-semibold text-gray-800">{formatPaymentMethod(sale.payment_method)}</span>
+                  </p>
+
+                </div>
+              ))
               )}
             </div>
           </div>

@@ -957,6 +957,7 @@ def read_sales_history(
     start_date: date | None = None,
     end_date: date | None = None,
     search: str | None = None,
+    location_id: int | None = None,
     # --- FIN DE NUESTRO CÓDIGO ---
     skip: int = 0,
     limit: int = 100,
@@ -976,7 +977,8 @@ def read_sales_history(
         # --- NUESTRAS NUEVAS LÍNEAS ---
         start_date=start_date,
         end_date=end_date,
-        search=search
+        search=search,
+        location_id=location_id
         # --- FIN NUESTRAS NUEVAS LÍNEAS ---
     )
     return sales_history

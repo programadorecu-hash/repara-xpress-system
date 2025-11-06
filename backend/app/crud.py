@@ -949,7 +949,8 @@ def get_sales(
     # --- NUEVOS PARÁMETROS PARA EL BUSCADOR INTELIGENTE ---
     start_date: date | None = None,
     end_date: date | None = None,
-    search: str | None = None
+    search: str | None = None,
+    location_id: int | None = None  # <--- ¡AQUÍ ESTÁ EL PARÁMETRO NUEVO!
 ):
     """
     Obtiene el historial de ventas con lógica de permisos Y FILTROS.
@@ -964,12 +965,23 @@ def get_sales(
         selectinload(models.Sale.items).selectinload(models.SaleItem.product),
     )
 
-    # 2. Lógica de permisos (esto no cambia)
-    if user.role not in ["admin", "inventory_manager"]:
+    # --- INICIO DE LA LÓGICA DE PERMISOS CORREGIDA (CON INDENTACIÓN) ---
+    # 2. Lógica de permisos y filtrado por sucursal
+    if user.role in ["admin", "inventory_manager"]:
+        # Si es Admin o Gerente, PUEDE filtrar por sucursal.
+        if location_id:
+            # Si se le pasa un ID, filtra por ese ID
+            query = query.filter(models.Sale.location_id == location_id)
+        # Si location_id es None (el usuario eligió "Todas"), 
+        # no se aplica filtro y verá todas las sucursales.
+    else:
+        # Si es un empleado normal, IGNORA el location_id que haya
+        # intentado enviar y SIEMPRE filtra por su turno activo.
         active_shift = get_active_shift_for_user(db, user_id=user.id)
         if not active_shift:
-            return [] 
+            return []  # <--- ESTE 'return' AHORA SÍ ESTÁ DENTRO DE LA FUNCIÓN
         query = query.filter(models.Sale.location_id == active_shift.location_id)
+    # --- FIN DE LA LÓGICA DE PERMISOS ---
 
     # --- INICIO DE LA NUEVA LÓGICA DE FILTROS ---
     # 3. Aplicamos el filtro de "Fecha Inicio" si existe
