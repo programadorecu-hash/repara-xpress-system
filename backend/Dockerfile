@@ -12,21 +12,25 @@ WORKDIR /code
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 4) Copia el código
+# 4) ¡¡AQUÍ ESTÁ EL ARREGLO!!
+#    Copiamos los "planos" (Alembic) ANTES que el resto de la app.
+COPY alembic.ini .
+COPY alembic ./alembic
+
+# 5) Copia el código de la app
 COPY app ./app
 
-# 5) ¡AQUÍ ESTÁ LA NUEVA PARTE!
-#    Copiamos nuestro script de arranque
+# 6) Copiamos nuestro script de arranque
 COPY start.sh .
 #    Le damos permisos de "ejecución"
 RUN chmod +x ./start.sh
 
-# 6) Creamos la carpeta de uploads
+# 7) Creamos la carpeta de uploads
 RUN mkdir uploads
 
-# 7) Exponemos el puerto del API
+# 8) Exponemos el puerto del API
 EXPOSE 8000
 
-# 8) ¡EL NUEVO COMANDO DE INICIO!
+# 9) ¡EL NUEVO COMANDO DE INICIO!
 #    Simplemente le decimos que ejecute nuestro script.
 CMD ["./start.sh"]

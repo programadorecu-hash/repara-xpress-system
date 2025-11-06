@@ -1,6 +1,5 @@
 #!/bin/sh
-
-# Este es nuestro "script de arranque"
+set -e # ¡ESTA ES LA LÍNEA MÁGICA! Significa "¡Detente si algo falla!"
 
 # Paso 1: Llamar al "constructor de estantes" (Alembic)
 echo "--- Iniciando migración de la base de datos (Alembic)..."
