@@ -22,5 +22,7 @@ RUN mkdir uploads
 # 6) Exponemos el puerto del API
 EXPOSE 8000
 
-# 7) Comando por defecto (compose puede sobreescribir con --reload)
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# 7) ¡¡AQUÍ ESTÁ LA SOLUCIÓN DEFINITIVA!!
+#    Cambiamos el comando de inicio para que sea un shell
+#    que PRIMERO ejecute alembic y LUEGO ejecute uvicorn.
+CMD ["/bin/sh", "-c", "python -m alembic upgrade head && python -m uvicorn app.main:app --host 0.0.0.0 --port 8000"]
