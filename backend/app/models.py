@@ -280,11 +280,21 @@ class PurchaseInvoiceItem(Base):
 class CashAccount(Base):
     __tablename__ = "cash_accounts"
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, unique=True, index=True, nullable=False)
+    
+    # 1. Quitamos 'unique=True' de aquí. Ya no queremos que el nombre sea único POR SÍ SOLO.
+    name = Column(String, index=True, nullable=False) 
+    
     account_type = Column(String, nullable=False)
     location_id = Column(Integer, ForeignKey("locations.id"), nullable=False)
     location = relationship("Location", back_populates="cash_accounts")
     transactions = relationship("CashTransaction", back_populates="account")
+
+    # 2. Añadimos este "anexo" al final de la clase.
+    # Esta es la NUEVA REGLA: La combinación del nombre y la sucursal (location_id) debe ser única.
+    # (Esto permite "CAJA CHICA" en Sucursal 1 y "CAJA CHICA" en Sucursal 2).
+    __table_args__ = (
+        UniqueConstraint('name', 'location_id', name='_cash_account_name_location_uc'),
+    )
 
 class CashTransaction(Base):
     __tablename__ = "cash_transactions"

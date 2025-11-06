@@ -400,6 +400,12 @@ function POSPage() {
       setLastSuccessfulSale(response.data); // Guardamos info para mostrar el mensaje de éxito
       setIsPaymentModalOpen(false); // Cerramos el modal de pago
 
+      // --- ¡AQUÍ TOCAMOS LA CAMPANA! ---
+      // Creamos un item en el "almacén del navegador" (localStorage)
+      // El Dashboard está escuchando este item específico.
+      localStorage.setItem('rx-sale-event', Date.now());
+      // --- FIN DE LA CAMPANA ---
+
       // Devolvemos la respuesta por si quien llama (el modal) la necesita
       return response.data;
     } catch (error) {

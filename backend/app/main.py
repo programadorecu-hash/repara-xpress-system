@@ -4,11 +4,15 @@ from fastapi import FastAPI, Depends, HTTPException, status, Form
 from fastapi.security import OAuth2PasswordRequestForm
 from typing import List
 from sqlalchemy.orm import Session
-from datetime import date
+
 from fastapi import File, UploadFile
 
 from fastapi.responses import StreamingResponse, PlainTextResponse
 from slowapi import Limiter                      # Núcleo del limitador
+# --- AÑADIMOS ESTAS "HERRAMIENTAS DE RELOJERÍA" ---
+from datetime import date, datetime
+import pytz
+# --- FIN DE HERRAMIENTAS ---
 from slowapi.util import get_remote_address      # Cómo identificar al cliente (por IP)
 from slowapi.errors import RateLimitExceeded     # Error cuando se excede el límite
 from slowapi.middleware import SlowAPIMiddleware # Middleware que activa el limitador
@@ -1070,7 +1074,23 @@ def get_dashboard_summary_report(
     if not active_shift:
         raise HTTPException(status_code=400, detail="El usuario debe tener un turno activo para ver el resumen.")
     
-    today = date.today()
+    # --- ¡AQUÍ ESTÁ EL ARREGLO DEL RELOJ! ---
+    try:
+        # 1. Leemos la zona horaria que pusiste en tu archivo .env (America/Guayaquil)
+        #
+        app_timezone_str = os.getenv("TZ", "America/Guayaquil")
+        ecuador_tz = pytz.timezone(app_timezone_str)
+    except pytz.UnknownTimeZoneError:
+        # Si la zona horaria está mal escrita, usamos una de respaldo (Quito)
+        ecuador_tz = pytz.timezone("America/Guayaquil")
+    
+    # 2. Obtenemos la hora EXACTA en esa zona horaria
+    now_in_ecuador = datetime.now(ecuador_tz)
+    
+    # 3. Extraemos solo la FECHA de Ecuador (ej: "5 de Noviembre")
+    today = now_in_ecuador.date()
+    # --- FIN DEL ARREGLO ---
+
     summary = crud.get_dashboard_summary(db, location_id=active_shift.location_id, target_date=today)
     return summary
 
