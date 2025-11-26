@@ -14,7 +14,8 @@ import {
   HiOutlineShoppingCart, // <-- Ícono para "Vender"
   HiOutlineCog,           // <-- Ícono para "Orden"
   HiOutlineCash,          // <-- Ícono para "Gasto"
-  HiOutlineArchive        // <-- Ícono para "Bodega"
+  HiOutlineArchive,        // <-- Ícono para "Bodega"
+  HiOutlineExclamationCircle
 } from 'react-icons/hi';
 // --- AÑADIMOS EL NUEVO FORMULARIO DE GASTO ---
 import ExpenseModal from '../components/ExpenseModal.jsx';
@@ -97,8 +98,11 @@ function DashboardPage() {
   const [activeOrders, setActiveOrders] = useState([]); // "Pizarra de tareas"
   const [loadingLists, setLoadingLists] = useState(true); // "Cargando..." para ambas listas
 
-  // Traemos el turno activo para saber la sucursal (no cambia)
-  const { activeShift } = useContext(AuthContext);
+  // --- NUEVO: Estado para las alertas de stock ---
+  const [lowStockItems, setLowStockItems] = useState([]);
+
+  // Traemos el USUARIO y el turno activo
+  const { user, activeShift } = useContext(AuthContext);
 
   // --- NUEVA FUNCIÓN "WALKIE-TALKIE" ---
   // Esto es lo que se ejecutará cuando el "vale de gasto" nos avise.
@@ -160,18 +164,17 @@ function DashboardPage() {
     }
   };
 
-  // 2. "Actualizar Lista" (Listas de abajo)
-  // También la sacamos para poder recargarla
+// 2. "Actualizar Lista" (Listas de abajo y Alertas)
   const fetchDashboardLists = async () => {
-    // Revisamos si tenemos un turno activo antes de llamar
-    if (!activeShift?.location?.id) {
-      setLoadingLists(false);
-      return; // No podemos cargar listas sin una sucursal
-    }
-
+    // Revisamos si tenemos un turno activo (o si es admin) antes de llamar
+    // Nota: Los admins siempre pueden ver, aunque no tengan turno en frontend, el backend lo maneja.
+    
     try {
       setLoadingLists(true);
-      const today = new Date().toISOString().slice(0, 10);
+      // --- ARREGLO DE ZONA HORARIA ---
+      // Obtenemos la fecha local (Ecuador) en formato YYYY-MM-DD
+      // 'en-CA' es un truco para obtener formato ISO (año-mes-día) usando la hora local del PC
+      const today = new Date().toLocaleDateString('en-CA');
 
       // Pedimos el "hilo de recibos" (Ventas)
       const salesPromise = api.get('/sales/', {
@@ -179,23 +182,24 @@ function DashboardPage() {
           start_date: today,
           end_date: today,
           limit: 20, 
-          // --- ¡AQUÍ ESTÁ EL ARREGLO DEL DESFASE! ---
-          // Le decimos que filtre por la sucursal activa.
-          // Ahora el "Archivo" (lista) y "Contabilidad" (tarjeta) mostrarán lo mismo.
-          location_id: activeShift.location.id 
+          // Si hay turno, filtramos. Si es admin sin turno, el backend puede mostrar todo o nada según config.
+          // Por ahora mantenemos la lógica segura del frontend:
+          location_id: activeShift?.location?.id 
         }
       });
 
       // Pedimos la "pizarra de tareas" (Órdenes)
-      const ordersPromise = api.get('/work-orders/', {
-        params: { 
-          limit: 20 
-          // (Esta ya filtra por sucursal en el backend si no eres admin)
-        }
-      });
+      const ordersPromise = api.get('/work-orders/', { params: { limit: 20 } });
 
-      // Esperamos a que ambas peticiones terminen
-      const [salesResponse, ordersResponse] = await Promise.all([salesPromise, ordersPromise]);
+      // --- NUEVO: Pedimos las alertas de stock ---
+      const stockPromise = api.get('/reports/low-stock');
+
+      // Esperamos a que las 3 peticiones terminen
+      const [salesResponse, ordersResponse, stockResponse] = await Promise.all([
+        salesPromise, 
+        ordersPromise,
+        stockPromise // <-- Añadido
+      ]);
 
       setTodaysSales(salesResponse.data);
 
@@ -205,8 +209,12 @@ function DashboardPage() {
       );
       setActiveOrders(activeOrders);
 
+      // --- Guardamos las alertas ---
+      setLowStockItems(stockResponse.data);
+
     } catch (err) {
-      setError('No se pudieron cargar las listas de ventas y órdenes.');
+      console.error(err);
+      setError('No se pudieron cargar los datos del tablero.');
     } finally {
       setLoadingLists(false);
     }
@@ -390,6 +398,38 @@ function DashboardPage() {
 
         {/* --- COLUMNA DERECHA --- */}
         <div className="space-y-6">
+
+          {/* --- NUEVO: Alertas de Stock Bajo --- */}
+          {lowStockItems.length > 0 && (
+            <div className="bg-red-50 p-6 rounded-xl shadow-md border border-red-200 mb-6">
+              <div className="flex items-center mb-4 text-red-700">
+                <HiOutlineExclamationCircle className="h-6 w-6 mr-2" />
+                <h2 className="text-lg font-bold">¡Atención! Stock Bajo</h2>
+              </div>
+              
+              <div className="space-y-2 max-h-48 overflow-y-auto pr-2">
+                {lowStockItems.map((item, index) => (
+                  <div key={index} className="flex justify-between items-center bg-white p-3 rounded border border-red-100 shadow-sm">
+                    <div>
+                      <p className="font-semibold text-sm text-gray-800">{item.product_name}</p>
+                      <p className="text-xs text-gray-500">
+                        {/* Si es admin, mostramos la sucursal. Si no, es obvio. */}
+                        {user?.role === 'admin' || user?.role === 'inventory_manager' 
+                          ? `📍 ${item.location_name}` 
+                          : item.sku}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <span className="bg-red-100 text-red-800 text-xs font-bold px-2 py-1 rounded-full">
+                        Quedan: {item.quantity}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {/* --- FIN Alertas de Stock Bajo --- */}
 
           {/* 3. Tarjetas de Dinero (no cambia) */}
           <div className="bg-white p-6 rounded-xl shadow-md border space-y-4">

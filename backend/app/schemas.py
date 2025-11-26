@@ -482,6 +482,14 @@ class WorkOrderStatusSummary(BaseModel):
     entregado: int
     sin_reparacion: int
 
+# --- INICIO DE NUESTRO CÓDIGO (Moldes para Alertas de Stock) ---
+class LowStockItem(BaseModel):
+    product_name: str
+    sku: str
+    quantity: int
+    location_name: str
+# --- FIN DE NUESTRO CÓDIGO ---
+
 class DashboardSummary(BaseModel):
     total_sales: float
     total_expenses: float

@@ -1106,3 +1106,25 @@ def get_inventory_audit_report(
 ):
     movements = crud.get_inventory_audit(db, start_date=start_date, end_date=end_date, user_id=user_id)
     return movements
+
+# --- ENDPOINT DE ALERTAS DE PRODUCTO ESCASO ---
+@app.get("/reports/low-stock", response_model=List[schemas.LowStockItem])
+def get_low_stock_report(
+    db: Session = Depends(get_db),
+    current_user: schemas.User = Depends(security.get_current_user)
+):
+    # 1. Llamamos a la función del archivista
+    stock_items = crud.get_low_stock_items(db, user=current_user)
+    
+    # 2. Convertimos los datos de la base de datos al formato "LowStockItem"
+    results = []
+    for item in stock_items:
+        results.append({
+            "product_name": item.product.name,
+            "sku": item.product.sku,
+            "quantity": item.quantity,
+            "location_name": item.location.name
+        })
+    
+    return results
+# --- FIN DE NUESTRO CÓDIGO ---
