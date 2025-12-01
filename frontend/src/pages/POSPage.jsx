@@ -505,7 +505,8 @@ function POSPage() {
               } // Placeholder dinámico
               className="w-full p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-detail"
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              // Convertimos a mayúsculas lo que se escribe en el buscador
+              onChange={(e) => setSearchTerm(e.target.value.toUpperCase())}
             />
           </div>
           <div className="h-96 overflow-y-auto border rounded-lg p-2 bg-gray-50">
@@ -829,9 +830,10 @@ function POSPage() {
                 </label>
                 <input
                   id="customerCI"
-                  type="text" // Mantenemos text para RUCs que pueden tener guion, pero pattern ayuda
+                  type="text"
                   value={customerCI}
-                  onChange={(e) => setCustomerCI(e.target.value)}
+                  // Cédula/RUC en mayúsculas (útil si tiene letras como pasaportes)
+                  onChange={(e) => setCustomerCI(e.target.value.toUpperCase())}
                   className="w-full p-1.5 border rounded-md text-sm"
                   required
                   placeholder="Ej: 1712345678 o 1712345678001"
@@ -851,7 +853,8 @@ function POSPage() {
                   id="customerName"
                   type="text"
                   value={customerName}
-                  onChange={(e) => setCustomerName(e.target.value)}
+                  // Nombre siempre en mayúsculas
+                  onChange={(e) => setCustomerName(e.target.value.toUpperCase())}
                   className="w-full p-1.5 border rounded-md text-sm"
                   required
                   placeholder="Nombre Completo"
@@ -888,7 +891,8 @@ function POSPage() {
                   id="customerAddress"
                   type="text"
                   value={customerAddress}
-                  onChange={(e) => setCustomerAddress(e.target.value)}
+                  // Dirección en mayúsculas
+                  onChange={(e) => setCustomerAddress(e.target.value.toUpperCase())}
                   className="w-full p-1.5 border rounded-md text-sm"
                   placeholder="Dirección Domiciliaria"
                 />

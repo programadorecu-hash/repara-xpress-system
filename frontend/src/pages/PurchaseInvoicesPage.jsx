@@ -81,9 +81,12 @@ function PurchaseInvoicesPage() {
 
   const handleInvoiceChange = (event) => {
     const { name, value } = event.target;
+    // Número de factura en mayúsculas, el resto (PIN/IDs) igual
+    const val = name === 'invoice_number' ? value.toUpperCase() : value;
+    
     setFormState((prev) => ({
       ...prev,
-      [name]: value,
+      [name]: val,
     }));
   };
 

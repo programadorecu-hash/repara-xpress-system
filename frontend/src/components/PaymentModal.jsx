@@ -180,11 +180,12 @@ function PaymentModal({
                 Referencia (Opcional)
               </label>
               <input
-                id="reference"
-                type="text"
-                value={reference}
-                onChange={(e) => setReference(e.target.value)}
-                className="w-full p-2 border rounded-lg"
+                  id="reference"
+                  type="text"
+                  value={reference}
+                  // Referencia en mayúsculas
+                  onChange={(e) => setReference(e.target.value.toUpperCase())}
+                  className="w-full p-2 border rounded-lg"
                 placeholder="Ej: # Transf, Lote Tarjeta"
               />
             </div>

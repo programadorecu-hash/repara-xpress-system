@@ -49,14 +49,17 @@ function ProductForm({ productToEdit, onSave, onClose }) {
   // Maneja los cambios en los campos del formulario.
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
-    const val =
-      type === "checkbox"
-        ? checked
-        : name.startsWith("price") || name === "category_id"
-        ? value
-          ? parseFloat(value)
-          : null
-        : value;
+    
+    let val;
+    if (type === "checkbox") {
+      val = checked;
+    } else if (name.startsWith("price") || name === "category_id") {
+      val = value ? parseFloat(value) : null;
+    } else {
+      // Si es texto (SKU, Nombre, Descripción), lo forzamos a mayúsculas
+      val = value ? value.toUpperCase() : "";
+    }
+
     setProduct((prev) => ({ ...prev, [name]: val }));
   };
 
@@ -362,7 +365,8 @@ function ProductForm({ productToEdit, onSave, onClose }) {
                 <input
                   type="text"
                   value={newCategoryName}
-                  onChange={(e) => setNewCategoryName(e.target.value)}
+                  // Categoría en mayúsculas
+                  onChange={(e) => setNewCategoryName(e.target.value.toUpperCase())}
                   className="w-full p-2 border rounded"
                   placeholder="Ej: Accesorios de Celular"
                 />

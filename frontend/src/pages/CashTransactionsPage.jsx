@@ -176,9 +176,12 @@ function CashTransactionsPage() {
 
   const handleFormChange = (event) => {
     const { name, value } = event.target;
+    // Si es descripción, mayúsculas. Si es PIN o monto, normal.
+    const val = name === 'description' ? value.toUpperCase() : value;
+    
     setFormState((prev) => ({
       ...prev,
-      [name]: value,
+      [name]: val,
     }));
   };
 

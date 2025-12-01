@@ -99,7 +99,17 @@ function UserManagementPage() {
 
   const handleEditFormChange = (event) => {
     const { name, value, type, checked } = event.target;
-    const val = type === 'checkbox' ? checked : value;
+    
+    let val;
+    if (type === 'checkbox') {
+      val = checked;
+    } else if (name === 'role') {
+      val = value; // El rol es un valor interno, no lo tocamos
+    } else {
+      // Nombre, Cédula, Contacto -> Mayúsculas
+      val = value.toUpperCase();
+    }
+
     setEditFormState((prev) => ({ ...prev, [name]: val }));
   };
 

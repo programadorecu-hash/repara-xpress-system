@@ -113,9 +113,12 @@ function LostSalesPage() {
 
   const handleFormChange = (event) => {
     const { name, value } = event.target;
+    // Si no es ID de ubicación, es texto libre -> Mayúsculas
+    const val = name === 'location_id' ? value : value.toUpperCase();
+
     setFormState((previous) => ({
       ...previous,
-      [name]: value,
+      [name]: val,
     }));
   };
 

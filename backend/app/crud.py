@@ -1148,29 +1148,38 @@ def get_inventory_audit(db: Session, start_date: date | None = None, end_date: d
 
     return query.order_by(models.InventoryMovement.timestamp.desc()).all()
 
-# --- INICIO DE NUESTRO CÓDIGO (Buscador de Productos Escasos) ---
+# --- INICIO DE NUESTRO CÓDIGO (Buscador de Productos Escasos - CORREGIDO) ---
 def get_low_stock_items(db: Session, user: models.User, threshold: int = 5):
     """
-    Busca productos con stock igual o menor al límite (5).
-    - Admins/Gerentes: Ven productos bajos de TODAS las sucursales.
-    - Empleados: Ven solo los de su sucursal actual.
+    Busca productos con stock igual o menor al límite.
+    - Admins: Ven todo, agrupado por bodega.
+    - Empleados: Ven lo de la BODEGA de su sucursal actual.
     """
-    # 1. Empezamos buscando en la tabla de Stock
-    #    Unimos con Producto y Ubicación para tener los nombres
+    # 1. Base de la consulta: Stock + Producto + Ubicación
     query = db.query(models.Stock).join(models.Product).join(models.Location)
 
-    # 2. Filtramos solo los que tienen cantidad baja (<= 5)
+    # 2. Filtro de cantidad
     query = query.filter(models.Stock.quantity <= threshold)
 
-    # 3. REGLA DE SEGURIDAD: Filtro por Rol
+    # 3. Filtro por Rol
     if user.role not in ["admin", "inventory_manager"]:
         # Si es empleado, buscamos su turno
         active_shift = get_active_shift_for_user(db, user.id)
         if not active_shift:
-            return [] # Si no ha marcado entrada, no ve nada
-        # Filtramos solo su sucursal
-        query = query.filter(models.Stock.location_id == active_shift.location_id)
+            return [] 
+        
+        # --- ARREGLO: BUSCAR LA BODEGA, NO LA OFICINA ---
+        # El turno está en la "Sucursal" (ej: ID 1), pero el stock está en la "Bodega" (ej: ID 5).
+        # Buscamos la bodega que pertenece a esta sucursal.
+        bodega = get_primary_bodega_for_location(db, location_id=active_shift.location_id)
+        
+        if bodega:
+            # Si encontramos bodega, filtramos por ESE id
+            query = query.filter(models.Stock.location_id == bodega.id)
+        else:
+            # Si por alguna razón no tiene bodega (raro), no mostramos nada para evitar errores
+            return []
     
-    # 4. Ordenamos: Primero por Sucursal, luego por Nombre del producto
+    # 4. Ordenamos: Primero por Nombre de Bodega, luego por Nombre de Producto
     return query.order_by(models.Location.name, models.Product.name).all()
 # --- FIN DE NUESTRO CÓDIGO ---

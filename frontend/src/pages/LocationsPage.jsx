@@ -72,7 +72,7 @@ function LocationsPage() {
     const { name, value } = event.target;
     setFormState((prev) => ({
       ...prev,
-      [name]: value,
+      [name]: value.toUpperCase(),
     }));
   };
 

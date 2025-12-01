@@ -62,9 +62,14 @@ function SuppliersPage() {
 
   const handleChange = (event) => {
     const { name, value } = event.target;
+    // Solo Nombre y Contacto van en mayúsculas
+    const val = (name === 'name' || name === 'contact_person') 
+      ? value.toUpperCase() 
+      : value;
+
     setFormState((prev) => ({
       ...prev,
-      [name]: value,
+      [name]: val,
     }));
   };
 

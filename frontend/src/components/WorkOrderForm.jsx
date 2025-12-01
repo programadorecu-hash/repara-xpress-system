@@ -357,7 +357,30 @@ function WorkOrderForm({ orderId, onClose, onSave }) {
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
-    const val = type === "checkbox" ? checked : value;
+    
+    let val;
+    if (type === "checkbox") {
+      val = checked;
+    } else {
+      // Lista negra: campos que NO deben ser mayúsculas (correos, claves, pines)
+      const sensitiveFields = [
+        'customer_email', 
+        'customer_phone', 
+        'device_password', 
+        'device_account', 
+        'device_account_password', 
+        'pin'
+      ];
+
+      // Si el campo NO está en la lista negra, lo hacemos mayúscula
+      if (!sensitiveFields.includes(name)) {
+        val = value ? value.toUpperCase() : "";
+      } else {
+        // Si es sensible, lo dejamos tal cual
+        val = value;
+      }
+    }
+    
     setOrder((prev) => ({ ...prev, [name]: val }));
   };
 

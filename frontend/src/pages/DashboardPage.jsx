@@ -1,24 +1,24 @@
 // useContext nos permite preguntar "¿quién está conectado ahora?"
-import React, { useState, useEffect, useContext } from 'react'; 
-import api from '../services/api'; // <-- Importamos nuestro mensajero
-import { Link } from 'react-router-dom'; // <-- Para los botones de acción
+import React, { useState, useEffect, useContext } from "react";
+import api from "../services/api"; // <-- Importamos nuestro mensajero
+import { Link } from "react-router-dom"; // <-- Para los botones de acción
 // Importamos el "mensajero" que sabe cómo registrar la venta perdida
-import { createLostSaleLog } from '../services/lostSales.js'; 
+import { createLostSaleLog } from "../services/lostSales.js";
 // Importamos el "contexto" para saber qué usuario y sucursal están activos
-import { AuthContext } from '../context/AuthContext.jsx'; 
+import { AuthContext } from "../context/AuthContext.jsx";
 // Importamos todos los íconos que usaremos
-import { 
-  HiOutlineCurrencyDollar, 
-  HiOutlineArrowCircleDown, 
+import {
+  HiOutlineCurrencyDollar,
+  HiOutlineArrowCircleDown,
   HiOutlineScale,
   HiOutlineShoppingCart, // <-- Ícono para "Vender"
-  HiOutlineCog,           // <-- Ícono para "Orden"
-  HiOutlineCash,          // <-- Ícono para "Gasto"
-  HiOutlineArchive,        // <-- Ícono para "Bodega"
-  HiOutlineExclamationCircle
-} from 'react-icons/hi';
+  HiOutlineCog, // <-- Ícono para "Orden"
+  HiOutlineCash, // <-- Ícono para "Gasto"
+  HiOutlineArchive, // <-- Ícono para "Bodega"
+  HiOutlineExclamationCircle,
+} from "react-icons/hi";
 // --- AÑADIMOS EL NUEVO FORMULARIO DE GASTO ---
-import ExpenseModal from '../components/ExpenseModal.jsx';
+import ExpenseModal from "../components/ExpenseModal.jsx";
 
 // --- Molde para los Botones de Acción (no cambia) ---
 const ActionButton = ({ to, icon, label, colorClass }) => (
@@ -51,17 +51,19 @@ const ActionButtonAsButton = ({ onClick, icon, label, colorClass }) => (
 // --- NUEVO: Molde para colorear los estados de las órdenes ---
 // Esto nos ayudará a pintar el estado de cada orden en la lista
 const StatusBadge = ({ status }) => {
-  let colorClass = 'bg-gray-200 text-gray-800'; // Color por defecto
+  let colorClass = "bg-gray-200 text-gray-800"; // Color por defecto
   // Asignamos colores según el estado de la orden
-  if (status === 'RECIBIDO') colorClass = 'bg-blue-200 text-blue-800';
-  if (status === 'EN_REVISION') colorClass = 'bg-yellow-200 text-yellow-800';
-  if (status === 'REPARANDO') colorClass = 'bg-orange-200 text-orange-800';
-  if (status === 'LISTO') colorClass = 'bg-green-200 text-green-800';
+  if (status === "RECIBIDO") colorClass = "bg-blue-200 text-blue-800";
+  if (status === "EN_REVISION") colorClass = "bg-yellow-200 text-yellow-800";
+  if (status === "REPARANDO") colorClass = "bg-orange-200 text-orange-800";
+  if (status === "LISTO") colorClass = "bg-green-200 text-green-800";
 
   return (
-    <span className={`px-2 py-1 text-xs font-semibold rounded-full ${colorClass}`}>
+    <span
+      className={`px-2 py-1 text-xs font-semibold rounded-full ${colorClass}`}
+    >
       {/* Reemplazamos guiones bajos por espacios, ej: "EN_REVISION" -> "EN REVISION" */}
-      {status.replace('_', ' ')}
+      {status.replace("_", " ")}
     </span>
   );
 };
@@ -70,28 +72,27 @@ const StatusBadge = ({ status }) => {
 // (Copiado desde SalesHistoryPage.jsx)
 const formatPaymentMethod = (method) => {
   if (!method) return "Otro";
-  let spacedMethod = method.replace('_', ' ');
-  let formatted = spacedMethod.charAt(0).toUpperCase() + 
-                  spacedMethod.slice(1).toLowerCase();
+  let spacedMethod = method.replace("_", " ");
+  let formatted =
+    spacedMethod.charAt(0).toUpperCase() + spacedMethod.slice(1).toLowerCase();
   return formatted;
 };
 // --- FIN DE NUESTRO CÓDIGO ---
-
 
 function DashboardPage() {
   // --- Estados para las tarjetas de dinero (no cambian) ---
   const [summary, setSummary] = useState(null);
   const [loadingSummary, setLoadingSummary] = useState(true); // Renombrado para claridad
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
 
   // --- NUEVO "interruptor" para mostrar/ocultar el pop-up de gastos ---
   const [isExpenseModalOpen, setIsExpenseModalOpen] = useState(false);
 
   // --- Estados para el formulario de Venta Perdida (no cambian) ---
-  const [lostSaleProduct, setLostSaleProduct] = useState('');
-  const [lostSaleReason, setLostSaleReason] = useState('');
+  const [lostSaleProduct, setLostSaleProduct] = useState("");
+  const [lostSaleReason, setLostSaleReason] = useState("");
   const [lostSaleLoading, setLostSaleLoading] = useState(false);
-  const [lostSaleMessage, setLostSaleMessage] = useState('');
+  const [lostSaleMessage, setLostSaleMessage] = useState("");
 
   // --- NUEVO: Estados para las nuevas listas ---
   const [todaysSales, setTodaysSales] = useState([]); // "Hilo de recibos"
@@ -115,17 +116,19 @@ function DashboardPage() {
 
   // Función para guardar Venta Perdida (no cambia)
   const handleLostSaleSubmit = async (e) => {
-    e.preventDefault(); 
+    e.preventDefault();
     if (!activeShift || !activeShift.location) {
-      setLostSaleMessage('Error: No tienes un turno activo. No se puede registrar la venta perdida.');
+      setLostSaleMessage(
+        "Error: No tienes un turno activo. No se puede registrar la venta perdida."
+      );
       return;
     }
     if (!lostSaleProduct || !lostSaleReason) {
-      setLostSaleMessage('Error: Debes llenar ambos campos.');
+      setLostSaleMessage("Error: Debes llenar ambos campos.");
       return;
     }
     setLostSaleLoading(true);
-    setLostSaleMessage('');
+    setLostSaleMessage("");
     try {
       const payload = {
         product_name: lostSaleProduct,
@@ -133,12 +136,12 @@ function DashboardPage() {
         location_id: activeShift.location.id, // ¡Usamos la sucursal del turno activo!
       };
       await createLostSaleLog(payload);
-      setLostSaleMessage('¡Venta perdida registrada! Gracias.');
-      setLostSaleProduct('');
-      setLostSaleReason('');
-      setTimeout(() => setLostSaleMessage(''), 5000);
+      setLostSaleMessage("¡Venta perdida registrada! Gracias.");
+      setLostSaleProduct("");
+      setLostSaleReason("");
+      setTimeout(() => setLostSaleMessage(""), 5000);
     } catch (err) {
-      setLostSaleMessage('Error al guardar. Intenta de nuevo.');
+      setLostSaleMessage("Error al guardar. Intenta de nuevo.");
       console.error(err);
     } finally {
       setLostSaleLoading(false);
@@ -154,72 +157,71 @@ function DashboardPage() {
   const fetchSummary = async () => {
     setLoadingSummary(true); // Poner "cargando..."
     try {
-      const response = await api.get('/reports/dashboard-summary');
+      const response = await api.get("/reports/dashboard-summary");
       setSummary(response.data);
-      setError(''); // Limpiar errores viejos si la carga es exitosa
+      setError(""); // Limpiar errores viejos si la carga es exitosa
     } catch (err) {
-      setError('No se pudo cargar el resumen. ¿Iniciaste un turno?');
+      setError("No se pudo cargar el resumen. ¿Iniciaste un turno?");
     } finally {
       setLoadingSummary(false); // Quitar "cargando..."
     }
   };
 
-// 2. "Actualizar Lista" (Listas de abajo y Alertas)
+  // 2. "Actualizar Lista" (Listas de abajo y Alertas)
   const fetchDashboardLists = async () => {
     // Revisamos si tenemos un turno activo (o si es admin) antes de llamar
     // Nota: Los admins siempre pueden ver, aunque no tengan turno en frontend, el backend lo maneja.
-    
+
     try {
       setLoadingLists(true);
       // --- ARREGLO DE ZONA HORARIA ---
       // Obtenemos la fecha local (Ecuador) en formato YYYY-MM-DD
       // 'en-CA' es un truco para obtener formato ISO (año-mes-día) usando la hora local del PC
-      const today = new Date().toLocaleDateString('en-CA');
+      const today = new Date().toLocaleDateString("en-CA");
 
       // Pedimos el "hilo de recibos" (Ventas)
-      const salesPromise = api.get('/sales/', {
+      const salesPromise = api.get("/sales/", {
         params: {
           start_date: today,
           end_date: today,
-          limit: 20, 
+          limit: 20,
           // Si hay turno, filtramos. Si es admin sin turno, el backend puede mostrar todo o nada según config.
           // Por ahora mantenemos la lógica segura del frontend:
-          location_id: activeShift?.location?.id 
-        }
+          location_id: activeShift?.location?.id,
+        },
       });
 
       // Pedimos la "pizarra de tareas" (Órdenes)
-      const ordersPromise = api.get('/work-orders/', { params: { limit: 20 } });
+      const ordersPromise = api.get("/work-orders/", { params: { limit: 20 } });
 
       // --- NUEVO: Pedimos las alertas de stock ---
-      const stockPromise = api.get('/reports/low-stock');
+      const stockPromise = api.get("/reports/low-stock");
 
       // Esperamos a que las 3 peticiones terminen
       const [salesResponse, ordersResponse, stockResponse] = await Promise.all([
-        salesPromise, 
+        salesPromise,
         ordersPromise,
-        stockPromise // <-- Añadido
+        stockPromise, // <-- Añadido
       ]);
 
       setTodaysSales(salesResponse.data);
 
       const allOrders = ordersResponse.data;
-      const activeOrders = allOrders.filter(order => 
-        order.status !== 'ENTREGADO' && order.status !== 'SIN_REPARACION'
+      const activeOrders = allOrders.filter(
+        (order) =>
+          order.status !== "ENTREGADO" && order.status !== "SIN_REPARACION"
       );
       setActiveOrders(activeOrders);
 
       // --- Guardamos las alertas ---
       setLowStockItems(stockResponse.data);
-
     } catch (err) {
       console.error(err);
-      setError('No se pudieron cargar los datos del tablero.');
+      setError("No se pudieron cargar los datos del tablero.");
     } finally {
       setLoadingLists(false);
     }
   };
-
 
   // 3. Este es el "Arranque" de la página
   useEffect(() => {
@@ -229,14 +231,13 @@ function DashboardPage() {
     // IMPORTANTE: Le decimos que se re-ejecute si el turno cambia
   }, [activeShift]);
 
-// --- NUEVO "ESCUCHA-CAMPANAS" (PARA VENTAS) ---
+  // --- NUEVO "ESCUCHA-CAMPANAS" (PARA VENTAS) ---
   // Este useEffect se encarga de escuchar la "campana" de otras pestañas
   useEffect(() => {
-    
     // 1. Definimos la función que se ejecuta al oír la campana
     const handleStorageEvent = (event) => {
       // Si la campana que sonó es la de 'rx-sale-event'
-      if (event.key === 'rx-sale-event') {
+      if (event.key === "rx-sale-event") {
         // ¡Actualizamos AMBAS cosas!
         fetchSummary(); // El tablero de puntuación
         fetchDashboardLists(); // La lista de ventas de abajo
@@ -244,19 +245,20 @@ function DashboardPage() {
     };
 
     // 2. Le decimos al navegador que "escuche"
-    window.addEventListener('storage', handleStorageEvent);
+    window.addEventListener("storage", handleStorageEvent);
 
     // 3. Le decimos cómo "dejar de escuchar" si salimos de la página
     return () => {
-      window.removeEventListener('storage', handleStorageEvent);
+      window.removeEventListener("storage", handleStorageEvent);
     };
-    
+
     // 4. Le decimos que "re-arme" esta función si las funciones de recarga cambian
-  }, [fetchSummary, fetchDashboardLists]); 
+  }, [fetchSummary, fetchDashboardLists]);
   // --- FIN DEL "ESCUCHA-CAMPANAS" ---
 
   // --- Cálculo de Balance (no cambia) ---
-  const totalBalance = (summary?.total_sales || 0) - (summary?.total_expenses || 0);
+  const totalBalance =
+    (summary?.total_sales || 0) - (summary?.total_expenses || 0);
 
   // --- ESTADO DE CARGA PRINCIPAL ---
   // Mostramos "Cargando..." solo si CUALQUIERA de las cargas está activa
@@ -273,10 +275,8 @@ function DashboardPage() {
     <>
       {/* Contenedor principal (no cambia) */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        
         {/* --- COLUMNA IZQUIERDA --- */}
         <div className="space-y-6">
-          
           {/* 1. Botones de Acción (MODIFICADO) */}
           <div className="grid grid-cols-2 gap-4">
             <ActionButton
@@ -311,8 +311,13 @@ function DashboardPage() {
           </div>
 
           {/* 2. Venta Perdida (no cambia) */}
-          <form onSubmit={handleLostSaleSubmit} className="bg-white p-6 rounded-xl shadow-md border">
-            <h2 className="text-xl font-bold text-secondary mb-2">VENTAS PERDIDAS</h2>
+          <form
+            onSubmit={handleLostSaleSubmit}
+            className="bg-white p-6 rounded-xl shadow-md border"
+          >
+            <h2 className="text-xl font-bold text-secondary mb-2">
+              VENTAS PERDIDAS
+            </h2>
             <p className="text-sm text-gray-500 mb-4">
               ANOTA AQUÍ CADA VEZ QUE UNA VENTA NO LOGRE COMPLETARSE
             </p>
@@ -338,10 +343,16 @@ function DashboardPage() {
                 className="w-full py-2 px-4 bg-accent text-white font-semibold rounded-lg hover:bg-blue-600 disabled:bg-gray-400"
                 disabled={lostSaleLoading}
               >
-                {lostSaleLoading ? 'Registrando...' : 'REGISTRAR VENTA PERDIDA'}
+                {lostSaleLoading ? "Registrando..." : "REGISTRAR VENTA PERDIDA"}
               </button>
               {lostSaleMessage && (
-                <p className={`text-sm text-center font-medium ${lostSaleMessage.startsWith('Error') ? 'text-red-500' : 'text-green-600'}`}>
+                <p
+                  className={`text-sm text-center font-medium ${
+                    lostSaleMessage.startsWith("Error")
+                      ? "text-red-500"
+                      : "text-green-600"
+                  }`}
+                >
                   {lostSaleMessage}
                 </p>
               )}
@@ -350,86 +361,72 @@ function DashboardPage() {
 
           {/* --- 5. NUEVO: Panel "Ventas de Hoy" --- */}
           <div className="bg-white p-6 rounded-xl shadow-md border">
-            <h2 className="text-xl font-bold text-secondary mb-4">Ventas de Hoy</h2>
+            <h2 className="text-xl font-bold text-secondary mb-4">
+              Ventas de Hoy
+            </h2>
             {/* Le damos un alto máximo y scroll */}
-            <div className="space-y-3 max-h-64 overflow-y-auto"> 
+            <div className="space-y-3 max-h-64 overflow-y-auto">
               {todaysSales.length === 0 ? (
-                <p className="text-gray-500 text-sm">No hay ventas registradas hoy.</p>
+                <p className="text-gray-500 text-sm">
+                  No hay ventas registradas hoy.
+                </p>
               ) : (
                 // Creamos la lista (hilo de recibos)
-              todaysSales.map(sale => (
-                // 1. Quitamos el "flex justify-between" del contenedor principal
-                <div key={sale.id} className="border-b pb-2 last:border-b-0 pt-2">
-                  
-                  {/* 2. Fila Principal: Cliente y Total (esto es igual que antes) */}
-                  <div className="flex justify-between items-center">
-                    <p className="font-semibold text-sm">{sale.customer_name}</p>
-                    <p className="font-bold text-action-green">${sale.total_amount.toFixed(2)}</p>
-                  </div>
-
-                  {/* 3. Fila de Sub-detalles: Vendedor y Sucursal */}
-                  <div className="flex justify-between items-center text-xs text-gray-500 mt-1">
-                    <span>Venta #{sale.id} por: {sale.user.email}</span>
-                    <span className="font-medium">{sale.location.name}</span>
-                  </div>
-
-                  {/* 4. Lista de Productos Vendidos (Qué y Cuántos) */}
-                  <div className="mt-2 pl-2 border-l-2 border-gray-200">
-                    {sale.items.map(item => (
-                      <p key={item.id} className="text-xs text-gray-700">
-                        {/* (Cuántos) x (Qué) */}
-                        <span className="font-medium">{item.quantity}x</span> {item.description}
+                todaysSales.map((sale) => (
+                  // 1. Quitamos el "flex justify-between" del contenedor principal
+                  <div
+                    key={sale.id}
+                    className="border-b pb-2 last:border-b-0 pt-2"
+                  >
+                    {/* 2. Fila Principal: Cliente y Total (esto es igual que antes) */}
+                    <div className="flex justify-between items-center">
+                      <p className="font-semibold text-sm">
+                        {sale.customer_name}
                       </p>
-                    ))}
+                      <p className="font-bold text-action-green">
+                        ${sale.total_amount.toFixed(2)}
+                      </p>
+                    </div>
+
+                    {/* 3. Fila de Sub-detalles: Vendedor y Sucursal */}
+                    <div className="flex justify-between items-center text-xs text-gray-500 mt-1">
+                      <span>
+                        Venta #{sale.id} por: {sale.user.email}
+                      </span>
+                      <span className="font-medium">{sale.location.name}</span>
+                    </div>
+
+                    {/* 4. Lista de Productos Vendidos (Qué y Cuántos) */}
+                    <div className="mt-2 pl-2 border-l-2 border-gray-200">
+                      {sale.items.map((item) => (
+                        <p key={item.id} className="text-xs text-gray-700">
+                          {/* (Cuántos) x (Qué) */}
+                          <span className="font-medium">
+                            {item.quantity}x
+                          </span>{" "}
+                          {item.description}
+                        </p>
+                      ))}
+                    </div>
+
+                    {/* 5. Método de Pago (usando nuestro ayudante) */}
+                    <p className="text-xs text-gray-500 mt-1 pl-2">
+                      Pagado con:{" "}
+                      <span className="font-semibold text-gray-800">
+                        {formatPaymentMethod(sale.payment_method)}
+                      </span>
+                    </p>
                   </div>
-
-                  {/* 5. Método de Pago (usando nuestro ayudante) */}
-                  <p className="text-xs text-gray-500 mt-1 pl-2">
-                    Pagado con: <span className="font-semibold text-gray-800">{formatPaymentMethod(sale.payment_method)}</span>
-                  </p>
-
-                </div>
-              ))
+                ))
               )}
             </div>
           </div>
-
         </div>
 
         {/* --- COLUMNA DERECHA --- */}
         <div className="space-y-6">
-
-          {/* --- NUEVO: Alertas de Stock Bajo --- */}
-          {lowStockItems.length > 0 && (
-            <div className="bg-red-50 p-6 rounded-xl shadow-md border border-red-200 mb-6">
-              <div className="flex items-center mb-4 text-red-700">
-                <HiOutlineExclamationCircle className="h-6 w-6 mr-2" />
-                <h2 className="text-lg font-bold">¡Atención! Stock Bajo</h2>
-              </div>
-              
-              <div className="space-y-2 max-h-48 overflow-y-auto pr-2">
-                {lowStockItems.map((item, index) => (
-                  <div key={index} className="flex justify-between items-center bg-white p-3 rounded border border-red-100 shadow-sm">
-                    <div>
-                      <p className="font-semibold text-sm text-gray-800">{item.product_name}</p>
-                      <p className="text-xs text-gray-500">
-                        {/* Si es admin, mostramos la sucursal. Si no, es obvio. */}
-                        {user?.role === 'admin' || user?.role === 'inventory_manager' 
-                          ? `📍 ${item.location_name}` 
-                          : item.sku}
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <span className="bg-red-100 text-red-800 text-xs font-bold px-2 py-1 rounded-full">
-                        Quedan: {item.quantity}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-          {/* --- FIN Alertas de Stock Bajo --- */}
+          
+          
 
           {/* 3. Tarjetas de Dinero (no cambia) */}
           <div className="bg-white p-6 rounded-xl shadow-md border space-y-4">
@@ -438,7 +435,9 @@ function DashboardPage() {
                 <HiOutlineCurrencyDollar className="h-6 w-6" />
               </div>
               <div className="ml-4">
-                <p className="text-sm font-medium text-action-green uppercase">Ventas de Hoy</p>
+                <p className="text-sm font-medium text-action-green uppercase">
+                  Ventas de Hoy
+                </p>
                 <p className="text-2xl font-bold text-secondary">
                   ${(summary?.total_sales || 0).toFixed(2)}
                 </p>
@@ -449,14 +448,16 @@ function DashboardPage() {
                 <HiOutlineArrowCircleDown className="h-6 w-6" />
               </div>
               <div className="ml-4">
-                <p className="text-sm font-medium text-highlight uppercase">Gastos de Hoy</p>
+                <p className="text-sm font-medium text-highlight uppercase">
+                  Gastos de Hoy
+                </p>
                 <p className="text-2xl font-bold text-secondary">
                   ${(summary?.total_expenses || 0).toFixed(2)}
                 </p>
               </div>
             </div>
           </div>
-          
+
           {/* 4. Tarjeta de Balance Diario (no cambia) */}
           <div className="bg-detail p-6 rounded-xl shadow-md text-white">
             <div className="flex justify-between items-center mb-2">
@@ -473,21 +474,33 @@ function DashboardPage() {
 
           {/* --- 6. NUEVO: Panel "Órdenes Activas" --- */}
           <div className="bg-white p-6 rounded-xl shadow-md border">
-            <h2 className="text-xl font-bold text-secondary mb-4">Órdenes Activas en Sucursal</h2>
+            <h2 className="text-xl font-bold text-secondary mb-4">
+              Órdenes Activas en Sucursal
+            </h2>
             {/* Le damos un alto máximo y scroll */}
-            <div className="space-y-3 max-h-64 overflow-y-auto"> 
+            <div className="space-y-3 max-h-64 overflow-y-auto">
               {activeOrders.length === 0 ? (
-                <p className="text-gray-500 text-sm">No hay órdenes pendientes.</p>
+                <p className="text-gray-500 text-sm">
+                  No hay órdenes pendientes.
+                </p>
               ) : (
                 // Creamos la lista (pizarra de tareas)
-                activeOrders.map(order => (
-                  <div key={order.id} className="flex justify-between items-center border-b pb-2 last:border-b-0">
+                activeOrders.map((order) => (
+                  <div
+                    key={order.id}
+                    className="flex justify-between items-center border-b pb-2 last:border-b-0"
+                  >
                     <div>
                       {/* Hacemos que el N° de orden sea un enlace a la página de órdenes */}
-                      <Link to={`/ordenes`} className="font-semibold text-sm text-accent hover:underline">
+                      <Link
+                        to={`/ordenes`}
+                        className="font-semibold text-sm text-accent hover:underline"
+                      >
                         #{order.work_order_number} - {order.customer_name}
                       </Link>
-                      <p className="text-xs text-gray-500">{order.device_brand} {order.device_model}</p>
+                      <p className="text-xs text-gray-500">
+                        {order.device_brand} {order.device_model}
+                      </p>
                     </div>
                     {/* Usamos nuestro "molde" de colores para el estado */}
                     <StatusBadge status={order.status} />
@@ -496,17 +509,60 @@ function DashboardPage() {
               )}
             </div>
           </div>
+          {/* --- NUEVO: Alertas de Stock Bajo (AGRUPADO) --- */}
+          {lowStockItems.length > 0 && (
+            <div className="bg-red-50 p-6 rounded-xl shadow-md border border-red-200 mt-6">
+              <div className="flex items-center mb-4 text-red-700">
+                <HiOutlineExclamationCircle className="h-6 w-6 mr-2" />
+                <h2 className="text-lg font-bold">¡Atención! Stock Bajo</h2>
+              </div>
+              
+              <div className="space-y-4 max-h-64 overflow-y-auto pr-2">
+                {/* Lógica de Agrupación Visual */}
+                {(() => {
+                  let lastLocation = null;
+                  return lowStockItems.map((item, index) => {
+                    const showHeader = item.location_name !== lastLocation;
+                    lastLocation = item.location_name;
 
+                    return (
+                      <div key={index}>
+                        {/* Cabecera de Grupo (Sucursal/Bodega) */}
+                        {showHeader && (
+                          <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 mt-3 border-b pb-1">
+                            {item.location_name}
+                          </h3>
+                        )}
+
+                        {/* Item del Producto */}
+                        <div className="flex justify-between items-center bg-white p-3 rounded border border-red-100 shadow-sm mb-1">
+                          <div>
+                            <p className="font-semibold text-sm text-gray-800">{item.product_name}</p>
+                            <p className="text-xs text-gray-500 font-mono">{item.sku}</p>
+                          </div>
+                          <div className="text-right">
+                            <span className={`text-xs font-bold px-2 py-1 rounded-full ${item.quantity === 0 ? 'bg-red-600 text-white' : 'bg-red-100 text-red-800'}`}>
+                              {item.quantity === 0 ? 'AGOTADO' : `Quedan: ${item.quantity}`}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  });
+                })()}
+              </div>
+            </div>
+          )}
+          {/* --- FIN Alertas de Stock Bajo --- */}
         </div>
-
       </div>
 
-        {/* Esto "dibuja" nuestro formulario emergente, pero lo mantiene oculto */}
-        {/* hasta que el interruptor (isExpenseModalOpen) se encienda */}
+      {/* Esto "dibuja" nuestro formulario emergente, pero lo mantiene oculto */}
+      {/* hasta que el interruptor (isExpenseModalOpen) se encienda */}
       {/* Ahora le pasamos el "walkie-talkie" (onExpenseSaved) */}
-      <ExpenseModal 
-        isOpen={isExpenseModalOpen} 
-        onClose={() => setIsExpenseModalOpen(false)} 
+      <ExpenseModal
+        isOpen={isExpenseModalOpen}
+        onClose={() => setIsExpenseModalOpen(false)}
         onExpenseSaved={handleExpenseSaved} // 1. Le pasamos el "walkie-talkie"
       />
     </>
