@@ -1183,3 +1183,92 @@ def get_low_stock_items(db: Session, user: models.User, threshold: int = 5):
     # 4. Ordenamos: Primero por Nombre de Bodega, luego por Nombre de Producto
     return query.order_by(models.Location.name, models.Product.name).all()
 # --- FIN DE NUESTRO CÓDIGO ---
+
+# --- INICIO DE NUESTRO CÓDIGO (Lógica de Asistencia) ---
+def get_personnel_report(db: Session, start_date: date, end_date: date, user_id: int | None = None, location_id: int | None = None):
+    """
+    Genera un reporte de asistencia agrupado por Día y Empleado.
+    Calcula horas reales trabajadas y lista las sucursales visitadas.
+    """
+    # 1. Consultamos los turnos (Shifts)
+    query = db.query(models.Shift).join(models.User).join(models.Location)
+    
+    # Filtros de fecha (usamos la fecha de inicio del turno)
+    query = query.filter(func.date(models.Shift.start_time) >= start_date)
+    query = query.filter(func.date(models.Shift.start_time) <= end_date)
+    
+    if user_id:
+        query = query.filter(models.Shift.user_id == user_id)
+    if location_id:
+        # Si filtramos por sucursal, traemos los turnos que ocurrieron en esa sucursal
+        query = query.filter(models.Shift.location_id == location_id)
+
+    # Ordenamos por usuario y luego por hora de inicio
+    shifts = query.order_by(models.Shift.user_id, models.Shift.start_time).all()
+
+    # 2. Agrupamos en memoria (Python)
+    # Usaremos un diccionario donde la clave sea (user_id, fecha)
+    report_data = {}
+
+    for shift in shifts:
+        # Convertimos a fecha local (simplificado: tomamos la fecha del objeto datetime)
+        # Nota: Idealmente convertiríamos UTC a Local aquí, pero para efectos de agrupación
+        # usaremos la fecha tal cual viene (UTC) o ajustada si usas la config de TZ.
+        # Para consistencia con el dashboard, asumimos que shift.start_time viene de la BD.
+        
+        # Truco: Usamos la fecha del start_time.
+        work_date = shift.start_time.date()
+        key = (shift.user_id, work_date)
+
+        if key not in report_data:
+            report_data[key] = {
+                "date": work_date,
+                "user_id": shift.user.id,
+                "user_email": shift.user.email,
+                "user_name": shift.user.full_name or "Sin nombre",
+                "first_clock_in": shift.start_time,
+                "last_clock_out": shift.end_time, # Puede ser None si está activo
+                "total_seconds": 0,
+                "locations": set() # Usamos un set para no repetir nombres
+            }
+        
+        # Actualizamos datos del grupo
+        entry = report_data[key]
+        
+        # Actualizamos última salida (si este turno terminó después o sigue abierto)
+        if shift.end_time:
+            if entry["last_clock_out"] is None or shift.end_time > entry["last_clock_out"]:
+                entry["last_clock_out"] = shift.end_time
+            
+            # Sumar tiempo trabajado
+            duration = (shift.end_time - shift.start_time).total_seconds()
+            entry["total_seconds"] += duration
+        else:
+            # Si el turno sigue abierto, tomamos "ahora" para calcular el parcial, 
+            # o lo dejamos abierto. Para reporte, dejémoslo como "En curso".
+            # Pero para first/last, si está abierto, es el último.
+            entry["last_clock_out"] = None 
+        
+        # Agregamos la ubicación
+        entry["locations"].add(shift.location.name)
+
+    # 3. Formateamos para la respuesta
+    results = []
+    for key, data in report_data.items():
+        total_hours = round(data["total_seconds"] / 3600, 2)
+        
+        results.append(schemas.DailyAttendance(
+            date=data["date"],
+            user_id=data["user_id"],
+            user_email=data["user_email"],
+            user_name=data["user_name"],
+            first_clock_in=data["first_clock_in"],
+            last_clock_out=data["last_clock_out"],
+            total_hours=total_hours,
+            locations_visited=list(data["locations"]) # Convertir set a list
+        ))
+    
+    # Ordenar por fecha descendente
+    results.sort(key=lambda x: x.date, reverse=True)
+    return results
+# --- FIN DE NUESTRO CÓDIGO ---

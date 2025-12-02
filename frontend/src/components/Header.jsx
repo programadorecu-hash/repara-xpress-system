@@ -12,7 +12,8 @@ import {
   HiOutlineArchive, HiOutlineTruck, HiOutlineShoppingBag, 
   HiOutlineExclamationCircle, HiOutlineDocumentReport, 
   HiOutlineInbox, HiOutlineCash, HiOutlineOfficeBuilding, 
-  HiOutlineUsers, HiOutlineLogout, HiOutlineMenu, HiOutlineX
+  HiOutlineUsers, HiOutlineLogout, HiOutlineMenu, HiOutlineX,
+  HiOutlineIdentification,
 } from "react-icons/hi";
 // --- FIN DE NUESTRO CÓDIGO ---
 
@@ -116,6 +117,9 @@ function Header({ isMenuOpen, onToggle }) {
         )}
         {canManageInventory && (
           <NavItem to="/compras" label="Compras" icon={<HiOutlineShoppingBag />} isExpanded={isMenuOpen} />
+        )}
+        {user?.role === "admin" && (
+          <NavItem to="/personal" label="Control Personal" icon={<HiOutlineIdentification />} isExpanded={isMenuOpen} />
         )}
         {canManageInventory && (
           <NavItem to="/ventas-perdidas" label="Ventas Perdidas" icon={<HiOutlineExclamationCircle />} isExpanded={isMenuOpen} />

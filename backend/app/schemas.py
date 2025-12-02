@@ -490,6 +490,18 @@ class LowStockItem(BaseModel):
     location_name: str
 # --- FIN DE NUESTRO CÓDIGO ---
 
+# --- INICIO DE NUESTRO CÓDIGO (Reporte de Personal) ---
+class DailyAttendance(BaseModel):
+    date: date
+    user_id: int
+    user_email: str
+    user_name: str | None = None
+    first_clock_in: datetime
+    last_clock_out: datetime | None = None
+    total_hours: float
+    locations_visited: List[str]
+# --- FIN DE NUESTRO CÓDIGO ---
+
 class DashboardSummary(BaseModel):
     total_sales: float
     total_expenses: float

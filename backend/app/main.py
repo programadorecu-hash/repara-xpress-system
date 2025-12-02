@@ -545,19 +545,22 @@ def clock_in_user(
     db: Session = Depends(get_db),
     current_user: schemas.User = Depends(security.get_current_user)
 ):
-    # Buscamos si el usuario tiene un turno activo
+    # 1. Buscamos si el usuario ya tiene un turno abierto
     existing_shift = crud.get_active_shift_for_user(db, user_id=current_user.id)
     
     if existing_shift:
-        # --- LÓGICA INTELIGENTE AÑADIDA ---
-        # Si el turno es de un día anterior, lo cerramos automáticamente
-        if existing_shift.start_time.date() < date.today():
-            crud.clock_out(db, user_id=current_user.id)
-        else:
-            # Si es de hoy, entonces sí es un error
-            raise HTTPException(status_code=400, detail="El usuario ya tiene un turno activo hoy.")
+        # 2. Si ya está en la MISMA sucursal que intenta abrir...
+        if existing_shift.location_id == shift_in.location_id:
+            # ...simplemente le devolvemos su turno actual (Idempotencia).
+            # No creamos uno nuevo ni damos error. "Pasa, ya estás aquí".
+            return existing_shift
+        
+        # 3. Si está en OTRA sucursal (o es un turno viejo)...
+        # ...cerramos el turno anterior automáticamente para evitar conflictos.
+        # Esto permite que el empleado se mueva entre sucursales libremente.
+        crud.clock_out(db, user_id=current_user.id)
     
-    # Procedemos a crear el nuevo turno para hoy
+    # 4. Procedemos a crear el nuevo turno en la nueva ubicación
     return crud.clock_in(db=db, user_id=current_user.id, location_id=shift_in.location_id)
 
 @app.post("/shifts/clock-out", response_model=schemas.Shift)
@@ -566,6 +569,26 @@ def clock_out_user(db: Session = Depends(get_db), current_user: schemas.User = D
     if not shift:
         raise HTTPException(status_code=404, detail="No se encontró un turno activo para cerrar.")
     return shift
+
+
+# --- INICIO DE NUESTRO CÓDIGO (Endpoint de Personal) ---
+@app.get("/reports/personnel", response_model=List[schemas.DailyAttendance])
+def get_personnel_report_endpoint(
+    start_date: date,
+    end_date: date,
+    user_id: int | None = None,
+    location_id: int | None = None,
+    db: Session = Depends(get_db),
+    _role_check: None = Depends(security.require_role(required_roles=["admin", "inventory_manager"]))
+):
+    return crud.get_personnel_report(
+        db, 
+        start_date=start_date, 
+        end_date=end_date, 
+        user_id=user_id, 
+        location_id=location_id
+    )
+# --- FIN DE NUESTRO CÓDIGO ---
 
 # ===================================================================
 # --- ENDPOINTS PARA VENTAS PERDIDAS ---
