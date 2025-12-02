@@ -14,6 +14,7 @@ import {
   HiOutlineInbox, HiOutlineCash, HiOutlineOfficeBuilding, 
   HiOutlineUsers, HiOutlineLogout, HiOutlineMenu, HiOutlineX,
   HiOutlineIdentification,
+  HiOutlineBell, // <-- El ícono de la campana para las alertas
 } from "react-icons/hi";
 // --- FIN DE NUESTRO CÓDIGO ---
 
@@ -138,6 +139,15 @@ function Header({ isMenuOpen, onToggle }) {
         )}
         {user?.role === "admin" && (
           <NavItem to="/usuarios" label="Usuarios" icon={<HiOutlineUsers />} isExpanded={isMenuOpen} />
+        )}
+        {/* Botón visible para Admin y Gerentes */}
+        {(user?.role === "admin" || user?.role === "inventory_manager") && (
+          <NavItem 
+            to="/configuracion/notificaciones" 
+            label="Config. Alertas" 
+            icon={<HiOutlineBell />} 
+            isExpanded={isMenuOpen} 
+          />
         )}
       </nav>
 

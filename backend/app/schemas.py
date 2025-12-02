@@ -482,7 +482,7 @@ class WorkOrderStatusSummary(BaseModel):
     entregado: int
     sin_reparacion: int
 
-# --- INICIO DE NUESTRO CÓDIGO (Moldes para Alertas de Stock) ---
+# --- (Moldes para Alertas de Stock) ---
 class LowStockItem(BaseModel):
     product_name: str
     sku: str
@@ -490,7 +490,7 @@ class LowStockItem(BaseModel):
     location_name: str
 # --- FIN DE NUESTRO CÓDIGO ---
 
-# --- INICIO DE NUESTRO CÓDIGO (Reporte de Personal) ---
+# ---  (Reporte de Personal) ---
 class DailyAttendance(BaseModel):
     date: date
     user_id: int
@@ -507,7 +507,25 @@ class DashboardSummary(BaseModel):
     total_expenses: float
     work_order_summary: WorkOrderStatusSummary
 
-    # --- INICIO DE NUESTRO CÓDIGO (ASISTENTE DE CONFIGURACIÓN) ---
+# --- INICIO DE NUESTRO CÓDIGO (Schemas Notificaciones) ---
+class NotificationRuleBase(BaseModel):
+    name: str
+    event_type: str
+    message: str
+    delay_seconds: int = 5
+    active: bool = True
+    condition: str = "ALWAYS"
+
+class NotificationRuleCreate(NotificationRuleBase):
+    pass
+
+class NotificationRule(NotificationRuleBase):
+    id: int
+    class Config:
+        from_attributes = True
+# --- FIN DE NUESTRO CÓDIGO ---
+
+    # --- (ASISTENTE DE CONFIGURACIÓN) ---
 class FirstAdminCreate(BaseModel):
     # Este es el "formulario" especial que usará la página de configuración
     email: str

@@ -1272,3 +1272,59 @@ def get_personnel_report(db: Session, start_date: date, end_date: date, user_id:
     results.sort(key=lambda x: x.date, reverse=True)
     return results
 # --- FIN DE NUESTRO CÓDIGO ---
+
+
+# --- INICIO DE NUESTRO CÓDIGO (Lógica de Notificaciones) ---
+def create_notification_rule(db: Session, rule: schemas.NotificationRuleCreate):
+    db_rule = models.NotificationRule(**rule.model_dump())
+    db.add(db_rule)
+    db.commit()
+    db.refresh(db_rule)
+    return db_rule
+
+def get_notification_rules(db: Session):
+    return db.query(models.NotificationRule).all()
+
+def delete_notification_rule(db: Session, rule_id: int):
+    db_rule = db.query(models.NotificationRule).filter(models.NotificationRule.id == rule_id).first()
+    if db_rule:
+        db.delete(db_rule)
+        db.commit()
+    return db_rule
+
+def check_active_notifications(db: Session, user_id: int, event_type: str):
+    """
+    Revisa qué notificaciones aplican para este usuario en este momento exacto.
+    """
+    # 1. Traemos todas las reglas activas para este evento (ej: CLOCK_IN)
+    rules = db.query(models.NotificationRule).filter(
+        models.NotificationRule.event_type == event_type,
+        models.NotificationRule.active == True
+    ).all()
+
+    applicable_rules = []
+    
+    # 2. Filtramos según la condición
+    today = date.today()
+    
+    # Contamos cuántos turnos tiene el usuario HOY
+    # (Usamos start_time para contar)
+    shifts_today_count = db.query(models.Shift).filter(
+        models.Shift.user_id == user_id,
+        func.date(models.Shift.start_time) == today
+    ).count()
+
+    for rule in rules:
+        if rule.condition == "ALWAYS":
+            # Si es "Siempre", pasa directo
+            applicable_rules.append(rule)
+        
+        elif rule.condition == "FIRST_SHIFT":
+            # Si es "Primera vez del día"...
+            # Si el contador es 1 (el que acaba de abrir) o 0 (antes de abrir), aplica.
+            # Como llamaremos a esto DESPUÉS de abrir turno, el conteo será 1.
+            if shifts_today_count <= 1:
+                applicable_rules.append(rule)
+
+    return applicable_rules
+# --- FIN DE NUESTRO CÓDIGO ---

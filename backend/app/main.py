@@ -1151,3 +1151,30 @@ def get_low_stock_report(
     
     return results
 # --- FIN DE NUESTRO CÓDIGO ---
+
+
+# --- INICIO DE NUESTRO CÓDIGO (Endpoints de Notificaciones) ---
+
+# 1. Para que el Admin cree reglas
+@app.post("/notifications/rules", response_model=schemas.NotificationRule)
+def create_rule(rule: schemas.NotificationRuleCreate, db: Session = Depends(get_db), _role: None = Depends(security.require_role(["admin", "inventory_manager"]))):
+    return crud.create_notification_rule(db, rule)
+
+@app.get("/notifications/rules", response_model=List[schemas.NotificationRule])
+def list_rules(db: Session = Depends(get_db), _role: None = Depends(security.require_role(["admin", "inventory_manager"]))):
+    return crud.get_notification_rules(db)
+
+@app.delete("/notifications/rules/{rule_id}")
+def delete_rule(rule_id: int, db: Session = Depends(get_db), _role: None = Depends(security.require_role(["admin", "inventory_manager"]))):
+    return crud.delete_notification_rule(db, rule_id)
+
+# 2. Para que el sistema (Frontend) pregunte si debe mostrar alerta
+@app.get("/notifications/check", response_model=List[schemas.NotificationRule])
+def check_notifications(
+    event_type: str,
+    db: Session = Depends(get_db),
+    current_user: schemas.User = Depends(security.get_current_user)
+):
+    # El frontend llama esto: /notifications/check?event_type=CLOCK_IN
+    return crud.check_active_notifications(db, user_id=current_user.id, event_type=event_type)
+# --- FIN DE NUESTRO CÓDIGO ---

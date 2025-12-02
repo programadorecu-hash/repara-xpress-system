@@ -315,3 +315,16 @@ class ProductImage(Base):
     product_id = Column(Integer, ForeignKey("products.id"), nullable=False)
 
     product = relationship("Product", back_populates="images")
+
+
+# --- Tabla de Reglas de Notificación ---
+class NotificationRule(Base):
+    __tablename__ = "notification_rules"
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False)  # Nombre interno (ej: "Alerta Caja")
+    event_type = Column(String, nullable=False) # Cuándo ocurre (ej: "CLOCK_IN")
+    message = Column(String, nullable=False) # Lo que dice el cartel
+    delay_seconds = Column(Integer, default=5) # Cuánto tiempo bloquea (ej: 5)
+    active = Column(Boolean, default=True) # Si está prendida o apagada
+    condition = Column(String, default="ALWAYS") # "ALWAYS" (Siempre) o "FIRST_SHIFT" (Solo primera vez)
+# --- FIN DE NUESTRO CÓDIGO ---

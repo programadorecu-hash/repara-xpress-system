@@ -29,6 +29,7 @@ import LocationsPage from './pages/LocationsPage.jsx';
 import UserManagementPage from './pages/UserManagementPage.jsx';
 import CreatePinPage from './pages/CreatePinPage.jsx';
 import PersonnelPage from './pages/PersonnelPage.jsx';
+import NotificationRulesPage from './pages/NotificationRulesPage.jsx';
 
 // Esta es la "Guardia" que revisa si la caja fuerte está configurada
 function SetupGuard() {
@@ -103,6 +104,15 @@ function SetupGuard() {
           element={(
             <ProtectedRoute requiredRoles={['admin', 'inventory_manager']}>
               <PersonnelPage />
+            </ProtectedRoute>
+          )}
+        />
+        {/* --- Nueva Ruta para Configurar Alertas --- */}
+        <Route
+          path="configuracion/notificaciones"
+          element={(
+            <ProtectedRoute requiredRoles={['admin', 'inventory_manager']}>
+              <NotificationRulesPage />
             </ProtectedRoute>
           )}
         />
