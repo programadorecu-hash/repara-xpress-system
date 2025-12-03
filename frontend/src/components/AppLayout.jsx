@@ -1,44 +1,91 @@
 // frontend/src/components/AppLayout.jsx
-import React, { useState } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import { Outlet } from 'react-router-dom';
 import Header from './Header.jsx'; 
+import api from '../services/api';
+import { AuthContext } from '../context/AuthContext';
+import MandatoryNotificationModal from './MandatoryNotificationModal';
 
 function AppLayout() {
-  
-  // --- INICIO DE NUESTRO CÓDIGO (¡CORREGIDO!) ---
-
-  // 1. Arreglo #1: El "interruptor" ahora empieza en 'false' (contraído).
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const { user } = useContext(AuthContext); // Necesitamos saber si hay usuario
   
+  // Estado para las alertas programadas
+  const [scheduledRules, setScheduledRules] = useState([]);
+  // Memoria para no mostrar la misma alerta dos veces en el mismo minuto
+  const [seenAlerts, setSeenAlerts] = useState({}); 
+
   const toggleMenu = () => {
     setIsMenuOpen(!isMenuOpen);
   };
-  // --- FIN DE NUESTRO CÓDIGO ---
+
+  // --- VIGILANTE DEL RELOJ ---
+  useEffect(() => {
+    if (!user) return; // Si no hay usuario logueado, no vigilamos
+
+    const checkScheduledAlerts = async () => {
+      try {
+        // Preguntamos al backend si hay algo para AHORA
+        const response = await api.get('/notifications/check', {
+          params: { event_type: 'SCHEDULED' }
+        });
+        
+        const activeRules = response.data;
+        const now = new Date();
+        const currentMinuteKey = `${now.getHours()}:${now.getMinutes()}`; // Ej: "13:30"
+
+        // Filtramos: Solo mostramos si NO la hemos visto en este minuto exacto
+        const newRulesToShow = activeRules.filter(rule => {
+          const lastSeenTime = seenAlerts[rule.id];
+          return lastSeenTime !== currentMinuteKey;
+        });
+
+        if (newRulesToShow.length > 0) {
+          setScheduledRules(newRulesToShow);
+          
+          // Marcamos como vistas para este minuto
+          setSeenAlerts(prev => {
+            const updated = { ...prev };
+            newRulesToShow.forEach(r => updated[r.id] = currentMinuteKey);
+            return updated;
+          });
+        }
+
+      } catch (error) {
+        console.error("Error chequeando alertas programadas", error);
+      }
+    };
+
+    // Revisamos cada 45 segundos para asegurar que atrapamos el minuto
+    // (Si revisamos cada 60s exactos, podríamos saltarnos un minuto por ms de desface)
+    const intervalId = setInterval(checkScheduledAlerts, 45000);
+    
+    // Chequeo inicial al montar
+    checkScheduledAlerts();
+
+    return () => clearInterval(intervalId);
+  }, [user, seenAlerts]);
+
+  const handleCloseModal = () => {
+    // Limpiamos las reglas para cerrar el modal
+    setScheduledRules([]);
+  };
 
   return (
     <div className="flex h-screen text-secondary">
       
-      {/* El Header (menú) sigue recibiendo el interruptor */}
+      {/* El Header (menú) */}
       <Header isMenuOpen={isMenuOpen} onToggle={toggleMenu} /> 
 
-      {/* 2. Arreglo #2: El "plano" del contenido principal.
-           - 'flex-1': Ocupa todo el espacio.
-           - 'overflow-y-auto': Permite scroll solo en el contenido.
-           - 'p-8': Padding general.
-           - 'pl-20': ¡Esta es la clave! Le damos un padding izquierdo FIJO
-             que coincide con el ancho del menú "contraído" (w-20).
-           - Ya no hay lógica condicional (isMenuOpen ? ... : ...).
-      */}
-      {/* Arreglo:
-        - 'p-8': Lo quitamos de aquí, porque 'pl-20' lo estaba sobreescribiendo.
-        - 'pl-20': Lo mantenemos para dejar el espacio del menú contraído (5rem).
-        - 'pr-8 pb-8 pt-8': Añadimos el padding para arriba, abajo y la derecha manualmente.
-        - 'pl-28': (pl-20 + p-8 = 5rem + 2rem = 7rem) 
-                   Ajustamos el padding izquierdo para que sea el espacio del menú (20) MÁS el padding normal (8).
-      */}
       <main className={`flex-1 overflow-y-auto pr-8 pb-8 pt-8 pl-28 transition-all duration-300`}>
         <Outlet />
       </main>
+
+      {/* --- MODAL DE ALERTAS PROGRAMADAS --- */}
+      <MandatoryNotificationModal 
+        rules={scheduledRules} 
+        onClose={handleCloseModal} 
+      />
     </div>
   );
 }

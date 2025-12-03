@@ -1174,7 +1174,23 @@ def check_notifications(
     event_type: str,
     db: Session = Depends(get_db),
     current_user: schemas.User = Depends(security.get_current_user)
+    
 ):
+    
     # El frontend llama esto: /notifications/check?event_type=CLOCK_IN
     return crud.check_active_notifications(db, user_id=current_user.id, event_type=event_type)
+
+@app.put("/notifications/rules/{rule_id}", response_model=schemas.NotificationRule)
+def update_rule(
+    rule_id: int, 
+    rule: schemas.NotificationRuleCreate, 
+    db: Session = Depends(get_db), 
+    _role: None = Depends(security.require_role(["admin", "inventory_manager"]))
+):
+    updated_rule = crud.update_notification_rule(db, rule_id, rule)
+    if not updated_rule:
+        raise HTTPException(status_code=404, detail="Regla no encontrada")
+    return updated_rule
+
+
 # --- FIN DE NUESTRO CÓDIGO ---

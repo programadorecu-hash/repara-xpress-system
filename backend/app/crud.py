@@ -3,7 +3,8 @@ from collections import defaultdict
 from decimal import Decimal, ROUND_HALF_UP
 from sqlalchemy.sql import func, and_, case, literal_column, or_, text
 from sqlalchemy.orm import Session, joinedload, outerjoin, selectinload
-from datetime import date
+from datetime import date, datetime # Añadimos datetime
+import pytz # Añadimos pytz para la zona horaria
 from decimal import Decimal
 from app.utils.money import money, calc_tax, calc_total
 
@@ -1274,12 +1275,24 @@ def get_personnel_report(db: Session, start_date: date, end_date: date, user_id:
 # --- FIN DE NUESTRO CÓDIGO ---
 
 
-# --- INICIO DE NUESTRO CÓDIGO (Lógica de Notificaciones) ---
+# --- INICIO DE NUESTRO CÓDIGO (Lógica de Notificaciones ACTUALIZADA) ---
 def create_notification_rule(db: Session, rule: schemas.NotificationRuleCreate):
     db_rule = models.NotificationRule(**rule.model_dump())
     db.add(db_rule)
     db.commit()
     db.refresh(db_rule)
+    return db_rule
+
+def update_notification_rule(db: Session, rule_id: int, rule_update: schemas.NotificationRuleCreate):
+    """Permite editar una regla existente."""
+    db_rule = db.query(models.NotificationRule).filter(models.NotificationRule.id == rule_id).first()
+    if db_rule:
+        # Actualizamos solo los campos enviados
+        update_data = rule_update.model_dump(exclude_unset=True)
+        for key, value in update_data.items():
+            setattr(db_rule, key, value)
+        db.commit()
+        db.refresh(db_rule)
     return db_rule
 
 def get_notification_rules(db: Session):
@@ -1294,9 +1307,9 @@ def delete_notification_rule(db: Session, rule_id: int):
 
 def check_active_notifications(db: Session, user_id: int, event_type: str):
     """
-    Revisa qué notificaciones aplican para este usuario en este momento exacto.
+    Revisa reglas para el evento dado (CLOCK_IN o SCHEDULED).
     """
-    # 1. Traemos todas las reglas activas para este evento (ej: CLOCK_IN)
+    # 1. Filtro básico por tipo y activo
     rules = db.query(models.NotificationRule).filter(
         models.NotificationRule.event_type == event_type,
         models.NotificationRule.active == True
@@ -1304,25 +1317,35 @@ def check_active_notifications(db: Session, user_id: int, event_type: str):
 
     applicable_rules = []
     
-    # 2. Filtramos según la condición
-    today = date.today()
-    
-    # Contamos cuántos turnos tiene el usuario HOY
-    # (Usamos start_time para contar)
-    shifts_today_count = db.query(models.Shift).filter(
-        models.Shift.user_id == user_id,
-        func.date(models.Shift.start_time) == today
-    ).count()
+    # Zona Horaria Ecuador
+    ecuador_tz = pytz.timezone("America/Guayaquil")
+    now_ecuador = datetime.now(ecuador_tz)
+    today = now_ecuador.date()
+    current_time_str = now_ecuador.strftime("%H:%M") # Ej: "13:00"
+
+    # Contamos turnos de hoy (solo si es necesario para FIRST_SHIFT)
+    shifts_today_count = 0
+    # Optimizamos: solo consultamos si hay alguna regla FIRST_SHIFT
+    if any(r.condition == "FIRST_SHIFT" for r in rules):
+         shifts_today_count = db.query(models.Shift).filter(
+            models.Shift.user_id == user_id,
+            func.date(models.Shift.start_time) == today
+        ).count()
 
     for rule in rules:
+        # --- LÓGICA PARA ALERTAS PROGRAMADAS (RELOJ) ---
+        if event_type == "SCHEDULED":
+            # Si la regla tiene horas definidas y la hora actual está en la lista
+            if rule.schedule_times and current_time_str in rule.schedule_times:
+                applicable_rules.append(rule)
+            continue # Pasamos a la siguiente regla
+
+        # --- LÓGICA PARA ALERTAS DE ENTRADA (CLOCK_IN) ---
         if rule.condition == "ALWAYS":
-            # Si es "Siempre", pasa directo
             applicable_rules.append(rule)
         
         elif rule.condition == "FIRST_SHIFT":
-            # Si es "Primera vez del día"...
-            # Si el contador es 1 (el que acaba de abrir) o 0 (antes de abrir), aplica.
-            # Como llamaremos a esto DESPUÉS de abrir turno, el conteo será 1.
+            # Si es la primera vez (conteo <= 1 porque acabamos de crear el turno)
             if shifts_today_count <= 1:
                 applicable_rules.append(rule)
 

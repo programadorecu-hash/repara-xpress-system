@@ -321,10 +321,12 @@ class ProductImage(Base):
 class NotificationRule(Base):
     __tablename__ = "notification_rules"
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, nullable=False)  # Nombre interno (ej: "Alerta Caja")
-    event_type = Column(String, nullable=False) # Cuándo ocurre (ej: "CLOCK_IN")
-    message = Column(String, nullable=False) # Lo que dice el cartel
-    delay_seconds = Column(Integer, default=5) # Cuánto tiempo bloquea (ej: 5)
-    active = Column(Boolean, default=True) # Si está prendida o apagada
-    condition = Column(String, default="ALWAYS") # "ALWAYS" (Siempre) o "FIRST_SHIFT" (Solo primera vez)
+    name = Column(String, nullable=False)
+    event_type = Column(String, nullable=False) # "CLOCK_IN" o "SCHEDULED"
+    message = Column(String, nullable=False)
+    delay_seconds = Column(Integer, default=5)
+    active = Column(Boolean, default=True)
+    condition = Column(String, default="ALWAYS")
+    # --- NUEVO: Lista de horas programadas (ej: ["13:00", "20:00"]) ---
+    schedule_times = Column(JSON, nullable=True)
 # --- FIN DE NUESTRO CÓDIGO ---

@@ -515,6 +515,8 @@ class NotificationRuleBase(BaseModel):
     delay_seconds: int = 5
     active: bool = True
     condition: str = "ALWAYS"
+    # --- NUEVO: Campo opcional para las horas ---
+    schedule_times: List[str] | None = None
 
 class NotificationRuleCreate(NotificationRuleBase):
     pass
