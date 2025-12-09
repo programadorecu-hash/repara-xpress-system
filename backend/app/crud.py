@@ -640,10 +640,58 @@ def get_work_orders(db: Session, user: models.User, skip: int = 0, limit: int = 
     return query.order_by(models.WorkOrder.created_at.desc()).offset(skip).limit(limit).all()
 
 def create_work_order(db: Session, work_order: schemas.WorkOrderCreate, user_id: int, location_id: int):
-    work_order_data = work_order.model_dump(exclude={"pin"})
+    # 1. Crear la Orden de Trabajo básica
+    work_order_data = work_order.model_dump(exclude={"pin", "deposit_payment_method"})
     db_work_order = models.WorkOrder(**work_order_data, user_id=user_id, location_id=location_id)
     db.add(db_work_order)
-    db.commit()
+    db.flush() # Obtenemos el ID de la orden
+
+    # --- INICIO LÓGICA ADELANTO = VENTA ---
+    # Si hay un adelanto mayor a 0, creamos una VENTA automática
+    if work_order.deposit_amount > 0:
+        # Preparamos el ítem de venta
+        deposit_item = schemas.SaleItemCreate(
+            product_id=None, # No es un producto físico
+            description=f"ADELANTO ORDEN #{db_work_order.id} - {work_order.device_model}",
+            quantity=1,
+            unit_price=work_order.deposit_amount
+        )
+
+        # Preparamos el pago
+        payment_detail = schemas.PaymentDetail(
+            method=work_order.deposit_payment_method,
+            amount=work_order.deposit_amount,
+            reference="Adelanto Automático"
+        )
+
+        # Creamos la estructura de venta
+        sale_create = schemas.SaleCreate(
+            payment_method="MIXTO",
+            payments=[payment_detail],
+            iva_percentage=0, # Usualmente adelantos no desglosan IVA hasta el final, o según tu política.
+            customer_ci=work_order.customer_id_card,
+            customer_name=work_order.customer_name,
+            customer_phone=work_order.customer_phone,
+            customer_address=work_order.customer_address,
+            customer_email=work_order.customer_email,
+            items=[deposit_item],
+            pin=work_order.pin, # Reusamos el PIN
+            work_order_id=db_work_order.id # Vinculamos la venta a la orden
+        )
+
+        # Llamamos a nuestra función de venta existente (ella se encarga de la caja, el cliente inteligente, etc.)
+        # Nota: create_sale hace commit, así que la orden también se guardará.
+        try:
+            create_sale(db, sale_create, user_id, location_id)
+        except Exception as e:
+            # Si falla la venta del adelanto, fallamos todo
+            db.rollback()
+            raise e
+    else:
+        # Si no hubo adelanto, hacemos commit solo de la orden
+        db.commit()
+    # --- FIN LÓGICA ADELANTO = VENTA ---
+
     db.refresh(db_work_order)
     return db_work_order
 
@@ -812,6 +860,7 @@ def create_purchase_invoice(db: Session, invoice: schemas.PurchaseInvoiceCreate,
 # ===================================================================
 # --- VENTAS ---
 # ===================================================================
+# --- INICIO DE NUESTRO CÓDIGO (Venta con Pagos Mixtos) ---
 def create_sale(db: Session, sale: schemas.SaleCreate, user_id: int, location_id: int):
     try:
         bodega = get_primary_bodega_for_location(db, location_id=location_id)
@@ -820,7 +869,33 @@ def create_sale(db: Session, sale: schemas.SaleCreate, user_id: int, location_id
 
         if not sale.items:
             raise ValueError("La venta debe incluir al menos un ítem.")
+        
+        # --- INICIO LÓGICA CLIENTE INTELIGENTE ---
+        # 1. Buscamos si el cliente ya existe por su cédula
+        existing_customer = get_customer_by_id_card(db, id_card=sale.customer_ci)
+        
+        if existing_customer:
+            # 2. Si existe, ACTUALIZAMOS sus datos (por si cambió de teléfono o dirección)
+            existing_customer.name = sale.customer_name
+            existing_customer.phone = sale.customer_phone
+            existing_customer.email = sale.customer_email
+            existing_customer.address = sale.customer_address
+        else:
+            # 3. Si NO existe, lo CREAMOS automáticamente
+            new_customer = models.Customer(
+                id_card=sale.customer_ci,
+                name=sale.customer_name,
+                phone=sale.customer_phone,
+                email=sale.customer_email,
+                address=sale.customer_address,
+                # Guardamos la sucursal donde se hizo la primera compra
+                location_id=location_id, 
+                notes="Cliente registrado automáticamente desde Venta"
+            )
+            db.add(new_customer)
+        # --- FIN LÓGICA CLIENTE INTELIGENTE ---
 
+        # 1. Calcular totales de productos
         subtotal_decimal = Decimal("0.00")
         sale_items_to_create = []
         for item in sale.items:
@@ -843,21 +918,33 @@ def create_sale(db: Session, sale: schemas.SaleCreate, user_id: int, location_id
         tax_amount = float(tax_amount_decimal)
         total_amount = float(total_amount_decimal)
 
+        # 2. Validar que los pagos cubran el total
+        total_paid = sum(p.amount for p in sale.payments)
+        # Usamos una pequeña tolerancia por decimales
+        if abs(total_paid - total_amount) > 0.02:
+             raise ValueError(f"El total pagado (${total_paid}) no coincide con el total de la venta (${total_amount}).")
+
+        # 3. Determinar método principal
+        main_method = "MIXTO"
+        if len(sale.payments) == 1:
+            main_method = sale.payments[0].method
+
+        # 4. Guardar detalles de pago en el JSON
+        payment_details_json = [p.model_dump() for p in sale.payments]
+
         db_sale = models.Sale(
             subtotal_amount=subtotal_amount,
             tax_amount=tax_amount,
             total_amount=total_amount,
             iva_percentage=sale.iva_percentage,
-            payment_method=sale.payment_method,
-            payment_method_details=sale.payment_method_details,
-
-            # --- PASAR DATOS DEL CLIENTE ---
+            payment_method=main_method,
+            payment_method_details=payment_details_json, # Guardamos la lista aquí
+            
             customer_ci=sale.customer_ci,
             customer_name=sale.customer_name,
             customer_phone=sale.customer_phone,
             customer_address=sale.customer_address,
             customer_email=sale.customer_email,
-            # --- FIN DATOS CLIENTE ---
 
             user_id=user_id,
             location_id=location_id,
@@ -867,6 +954,7 @@ def create_sale(db: Session, sale: schemas.SaleCreate, user_id: int, location_id
         db.add(db_sale)
         db.flush()
 
+        # 5. Mover inventario
         for item in sale.items:
             if item.product_id:
                 movement = schemas.InventoryMovementCreate(
@@ -879,53 +967,57 @@ def create_sale(db: Session, sale: schemas.SaleCreate, user_id: int, location_id
                 )
                 create_inventory_movement(db=db, movement=movement, user_id=user_id)
 
+        # 6. Procesar Pagos (Mover dinero a caja si es Efectivo)
+        db_caja_ventas = db.query(models.CashAccount).filter(
+            models.CashAccount.location_id == location_id,
+            models.CashAccount.account_type == "CAJA_VENTAS"
+        ).first()
+
+        for payment in sale.payments:
+            if payment.method == "EFECTIVO":
+                if db_caja_ventas:
+                    db_transaction = models.CashTransaction(
+                        amount=payment.amount,
+                        description=f"Ingreso Venta #{db_sale.id} (Parte en Efectivo)",
+                        user_id=user_id,
+                        account_id=db_caja_ventas.id
+                    )
+                    db.add(db_transaction)
+                else:
+                    # Opcional: Crear caja ventas si no existe o lanzar error
+                    pass
+
+        # 7. Actualizar Orden de Trabajo (si aplica)
         if sale.work_order_id:
             db_work_order = get_work_order(db, work_order_id=sale.work_order_id)
             if db_work_order:
-                db_work_order.status = "ENTREGADO"
-                # Guardamos el costo final de la orden como SUBTOTAL (¡sin IVA!)
-                # Motivo: si más adelante se vuelve a “vender” esta misma orden, 
-                # no se duplicará el impuesto ni se “inflará” el total.
-                db_work_order.final_cost = subtotal_amount
-                # --- INICIO DE NUESTRO CÓDIGO (Conectar Venta con Caja) ---
-        
-        # 1. Solo registramos el movimiento de dinero si la venta fue en EFECTIVO.
-        #    (Si fue Transferencia o Tarjeta, el dinero no entra a la caja física)
-        if sale.payment_method == "EFECTIVO":
-            
-            # 2. Buscamos la "Caja Fuerte de Ventas" de esta sucursal
-            db_caja_ventas = db.query(models.CashAccount).filter(
-                models.CashAccount.location_id == location_id,
-                models.CashAccount.account_type == "CAJA_VENTAS"
-            ).first()
-
-            # 3. Si encontramos la caja...
-            if db_caja_ventas:
-                # 4. Creamos el "Recibo de Depósito" (la transacción)
-                #    (Usamos la función que ya existía)
-                db_transaction = models.CashTransaction(
-                    amount=total_amount, # El monto total de la venta
-                    description=f"Ingreso por Venta #{db_sale.id}",
-                    user_id=user_id,
-                    account_id=db_caja_ventas.id
-                )
-                db.add(db_transaction)
-            else:
-                # Si no hay caja (raro, pero puede pasar), lanzamos un error
-                raise ValueError(f"No se encontró una 'Caja de Ventas' para la sucursal ID {location_id}.")
-        
-                # --- FIN DE NUESTRO CÓDIGO ---
+                # --- CORRECCIÓN: NO marcar entregado si es solo un adelanto parcial ---
+                
+                # 1. Calculamos cuánto faltaba por pagar (Saldo Teórico)
+                #    (Costo Total - Lo que ya tenía anotado como abono)
+                pending_balance = db_work_order.estimated_cost - db_work_order.deposit_amount
+                
+                # 2. Verificamos si ESTA venta cubre ese saldo restante.
+                #    Usamos un margen de 0.02 para evitar errores de decimales.
+                #    Si (Venta >= Saldo Pendiente), entonces completó el pago.
+                if subtotal_amount >= (pending_balance - 0.02):
+                    db_work_order.status = "ENTREGADO"
+                    db_work_order.final_cost = db_work_order.estimated_cost
+                
+                # Si la venta es menor al saldo (ej: Abono de $10 para una deuda de $30),
+                # NO hacemos nada con el estado. La orden sigue abierta.
 
         db.commit()
         db.refresh(db_sale)
         return db_sale
+
     except ValueError as e:
         db.rollback()
-        # Re-raise as a generic exception so the endpoint can handle it
         raise Exception(str(e))
     except Exception as e:
         db.rollback()
         raise e
+# --- FIN DE NUESTRO CÓDIGO ---
 
 
 def get_sale(db: Session, sale_id: int):
@@ -1078,9 +1170,11 @@ def get_dashboard_summary(db: Session, location_id: int, target_date: date):
     ).scalar() or 0.0
 
     # Calcula gastos totales del día en la ubicación
+    # CORRECCIÓN: Solo sumamos gastos que salieron de la CAJA DE VENTAS (dinero del día).
+    # La Caja Chica es un fondo aparte y no debe afectar el balance diario de ventas.
     cash_accounts = db.query(models.CashAccount).filter(
         models.CashAccount.location_id == location_id,
-        models.CashAccount.account_type == 'CAJA_CHICA'
+        models.CashAccount.account_type == 'CAJA_VENTAS' 
     ).all()
     account_ids = [acc.id for acc in cash_accounts]
 
@@ -1350,4 +1444,114 @@ def check_active_notifications(db: Session, user_id: int, event_type: str):
                 applicable_rules.append(rule)
 
     return applicable_rules
+# --- FIN DE NUESTRO CÓDIGO ---
+
+# --- INICIO DE NUESTRO CÓDIGO (Lógica de Clientes) ---
+def get_customer(db: Session, customer_id: int):
+    return db.query(models.Customer).filter(models.Customer.id == customer_id).first()
+
+def get_customer_by_id_card(db: Session, id_card: str):
+    return db.query(models.Customer).filter(models.Customer.id_card == id_card).first()
+
+def get_customers(db: Session, skip: int = 0, limit: int = 100, search: str | None = None):
+    # Cargamos la relación 'location' para saber el nombre de la sucursal
+    query = db.query(models.Customer).options(joinedload(models.Customer.location))
+    if search:
+        search_term = f"%{search.lower()}%"
+        query = query.filter(
+            or_(
+                func.lower(models.Customer.name).like(search_term),
+                func.lower(models.Customer.id_card).like(search_term)
+            )
+        )
+    return query.order_by(models.Customer.name).offset(skip).limit(limit).all()
+
+def create_customer(db: Session, customer: schemas.CustomerCreate, location_id: int | None = None):
+    # Añadimos el location_id al crear
+    data = customer.model_dump()
+    db_customer = models.Customer(**data, location_id=location_id)
+    db.add(db_customer)
+    db.commit()
+    db.refresh(db_customer)
+    return db_customer
+
+def update_customer(db: Session, customer_id: int, customer_update: schemas.CustomerCreate):
+    db_customer = get_customer(db, customer_id=customer_id)
+    if db_customer:
+        update_data = customer_update.model_dump(exclude_unset=True)
+        for key, value in update_data.items():
+            setattr(db_customer, key, value)
+        db.commit()
+        db.refresh(db_customer)
+    return db_customer
+
+def delete_customer(db: Session, customer_id: int):
+    db_customer = get_customer(db, customer_id=customer_id)
+    if db_customer:
+        db.delete(db_customer)
+        db.commit()
+    return db_customer
+# --- FIN DE NUESTRO CÓDIGO ---
+
+# --- INICIO DE NUESTRO CÓDIGO (Lógica de Reembolsos) ---
+import uuid
+
+def process_refund(db: Session, refund: schemas.RefundCreate, user: models.User, location_id: int):
+    # 1. Validar PIN
+    if not user.hashed_pin or not security.verify_password(refund.pin, user.hashed_pin):
+        raise ValueError("PIN incorrecto.")
+
+    # 2. Buscar la venta original
+    sale = get_sale(db, sale_id=refund.sale_id)
+    if not sale:
+        raise ValueError("Venta no encontrada.")
+
+    # 3. REGLA DE ORO: Validar Permisos para Efectivo
+    if refund.type == "CASH":
+        if user.role not in ["admin", "inventory_manager"]:
+            raise ValueError("No tienes autorización para devolver efectivo. Solo puedes emitir Nota de Crédito.")
+        
+        # Procesar salida de dinero (Gasto)
+        # Buscamos la Caja de Ventas para sacar la plata de ahí
+        cash_account = db.query(models.CashAccount).filter(
+            models.CashAccount.location_id == location_id,
+            models.CashAccount.account_type == "CAJA_VENTAS"
+        ).first()
+        
+        if not cash_account:
+            raise ValueError("No hay Caja de Ventas configurada en esta sucursal.")
+
+        # Creamos el egreso
+        transaction = models.CashTransaction(
+            amount = refund.amount * -1, # Negativo porque sale dinero
+            description = f"DEVOLUCIÓN VENTA #{sale.id}: {refund.reason}",
+            user_id = user.id,
+            account_id = cash_account.id
+        )
+        db.add(transaction)
+        return {"status": "success", "message": "Dinero devuelto de caja exitosamente."}
+
+    elif refund.type == "CREDIT_NOTE":
+        # Generar Código Único (ej: NC-ABCD)
+        code = f"NC-{str(uuid.uuid4())[:8].upper()}"
+        
+        # Buscar ID de cliente si existe en BD
+        customer = get_customer_by_id_card(db, sale.customer_ci)
+        customer_id = customer.id if customer else None
+
+        credit_note = models.CreditNote(
+            code=code,
+            amount=refund.amount,
+            reason=f"Devolución Venta #{sale.id}: {refund.reason}",
+            user_id=user.id,
+            customer_id=customer_id,
+            sale_id=sale.id
+        )
+        db.add(credit_note)
+        db.commit()
+        db.refresh(credit_note)
+        return credit_note
+
+    else:
+        raise ValueError("Tipo de reembolso inválido.")
 # --- FIN DE NUESTRO CÓDIGO ---

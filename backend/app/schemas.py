@@ -110,6 +110,27 @@ class WorkOrderNote(WorkOrderNoteBase):
         from_attributes = True
 # ===== Fin schemas bitácora =====
 
+# --- INICIO DE NUESTRO CÓDIGO (Schemas de Clientes) ---
+class CustomerBase(BaseModel):
+    id_card: str
+    name: str
+    email: str | None = None
+    phone: str | None = None
+    address: str | None = None
+    notes: str | None = None
+
+class CustomerCreate(CustomerBase):
+    pass
+
+class Customer(CustomerBase):
+    id: int
+    created_at: datetime
+    # Incluimos la info básica de la ubicación
+    location: Optional["LocationSimple"] = None 
+    class Config:
+        from_attributes = True
+# --- FIN DE NUESTRO CÓDIGO ---
+
 
 class SupplierBase(BaseModel):
     name: str
@@ -136,7 +157,9 @@ class SaleItemBase(BaseModel):
     
 class SaleBase(BaseModel):
     payment_method: str
-    payment_method_details: Dict[str, Any] | None = None
+    # --- CORRECCIÓN ERROR 500: Permitimos que sea Cualquier cosa (Any) para aceptar Listas o Dicts ---
+    payment_method_details: Any | None = None
+    # ------------------------------------------------------------------------------------------------
     work_order_id: int | None = None
     # Valor por defecto actualizado a 15.0
     iva_percentage: float = 15.0
@@ -235,6 +258,8 @@ class LostSaleLogCreate(LostSaleLogBase):
     pass
 class WorkOrderCreate(WorkOrderBase):
     pin: str
+    # --- NUEVO: Método de pago del adelanto (si hay adelanto) ---
+    deposit_payment_method: str = "EFECTIVO" # Por defecto efectivo
 class WorkOrderUpdate(BaseModel):
     status: str | None = None
     final_cost: float | None = None
@@ -249,8 +274,20 @@ class PurchaseInvoiceCreate(PurchaseInvoiceBase):
     pin: str
 class SaleItemCreate(SaleItemBase):
     pass
+# --- INICIO CAMBIO PAGOS MIXTOS ---
+class PaymentDetail(BaseModel):
+    method: str      # "EFECTIVO", "TRANSFERENCIA", etc.
+    amount: float
+    reference: str | None = None
+
 class SaleCreate(SaleBase):
     pin: str
+    # Ahora aceptamos una lista de pagos. 
+    # Hacemos payment_method opcional aquí porque lo calcularemos nosotros.
+    payment_method: str = "MIXTO" 
+    payments: List[PaymentDetail] 
+# --- FIN CAMBIO PAGOS MIXTOS ---
+
 class CashAccountCreate(CashAccountBase):
     pass
 class CashTransactionCreate(CashTransactionBase):
@@ -534,6 +571,24 @@ class FirstAdminCreate(BaseModel):
     password: str
     pin: str # Pedimos el email, la contraseña y el PIN de una vez
     # --- FIN DE NUESTRO CÓDIGO ---
+
+    # --- INICIO DE NUESTRO CÓDIGO (Schemas Reembolsos) ---
+class RefundCreate(BaseModel):
+    sale_id: int
+    amount: float
+    reason: str
+    type: str # "CASH" (Efectivo) o "CREDIT_NOTE" (Nota de Crédito)
+    pin: str # PIN del usuario que autoriza
+
+class CreditNote(BaseModel):
+    id: int
+    code: str
+    amount: float
+    reason: str
+    created_at: datetime
+    class Config:
+        from_attributes = True
+# --- FIN DE NUESTRO CÓDIGO ---
 
 # ===================================================================
 # --- RECONSTRUCCIÓN DE MODELOS ---

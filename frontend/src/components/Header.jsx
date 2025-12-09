@@ -14,7 +14,8 @@ import {
   HiOutlineInbox, HiOutlineCash, HiOutlineOfficeBuilding, 
   HiOutlineUsers, HiOutlineLogout, HiOutlineMenu, HiOutlineX,
   HiOutlineIdentification,
-  HiOutlineBell, // <-- El ícono de la campana para las alertas
+  HiOutlineBell,
+  HiOutlineUserGroup, // <-- Ícono para Clientes
 } from "react-icons/hi";
 // --- FIN DE NUESTRO CÓDIGO ---
 
@@ -111,6 +112,7 @@ function Header({ isMenuOpen, onToggle }) {
         <NavItem to="/pos" label="Vender" icon={<HiOutlineShoppingCart />} isExpanded={isMenuOpen} />
         <NavItem to="/historial-ventas" label="Historial Ventas" icon={<HiOutlineClock />} isExpanded={isMenuOpen} />
         <NavItem to="/ordenes" label="Ordenes" icon={<HiOutlineCog />} isExpanded={isMenuOpen} />
+        <NavItem to="/clientes" label="Clientes" icon={<HiOutlineUserGroup />} isExpanded={isMenuOpen} />
         <NavItem to="/inventario" label="Bodega" icon={<HiOutlineArchive />} isExpanded={isMenuOpen} />
         
         {canManageInventory && (

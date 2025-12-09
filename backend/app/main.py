@@ -1194,3 +1194,57 @@ def update_rule(
 
 
 # --- FIN DE NUESTRO CÓDIGO ---
+
+# --- INICIO DE NUESTRO CÓDIGO (Endpoints de Clientes) ---
+@app.post("/customers/", response_model=schemas.Customer, status_code=status.HTTP_201_CREATED)
+def create_new_customer(
+    customer: schemas.CustomerCreate, 
+    db: Session = Depends(get_db), 
+    current_user: schemas.User = Depends(security.get_current_user)
+):
+    if crud.get_customer_by_id_card(db, id_card=customer.id_card):
+        raise HTTPException(status_code=400, detail="Ya existe un cliente con esta Cédula/RUC.")
+    
+    # Buscamos la sucursal activa del usuario para asignarla al cliente
+    active_shift = crud.get_active_shift_for_user(db, user_id=current_user.id)
+    location_id = active_shift.location_id if active_shift else None
+
+    return crud.create_customer(db=db, customer=customer, location_id=location_id)
+
+@app.get("/customers/", response_model=List[schemas.Customer])
+def read_customers(skip: int = 0, limit: int = 100, search: str | None = None, db: Session = Depends(get_db), current_user: schemas.User = Depends(security.get_current_user)):
+    return crud.get_customers(db, skip=skip, limit=limit, search=search)
+
+@app.put("/customers/{customer_id}", response_model=schemas.Customer)
+def update_customer_details(customer_id: int, customer: schemas.CustomerCreate, db: Session = Depends(get_db), current_user: schemas.User = Depends(security.get_current_user)):
+    updated = crud.update_customer(db, customer_id=customer_id, customer_update=customer)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Cliente no encontrado.")
+    return updated
+
+@app.delete("/customers/{customer_id}", response_model=schemas.Customer)
+def delete_customer_endpoint(customer_id: int, db: Session = Depends(get_db), _role: None = Depends(security.require_role(["admin", "inventory_manager"]))):
+    deleted = crud.delete_customer(db, customer_id=customer_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Cliente no encontrado.")
+    return deleted
+# --- FIN DE NUESTRO CÓDIGO ---
+
+# --- INICIO DE NUESTRO CÓDIGO (Endpoint Reembolsos) ---
+@app.post("/sales/refund", status_code=status.HTTP_200_OK)
+def refund_sale(
+    refund: schemas.RefundCreate,
+    db: Session = Depends(get_db),
+    current_user: schemas.User = Depends(security.get_current_user)
+):
+    # Verificamos turno activo para saber de qué sucursal sacar el dinero (si es efectivo)
+    active_shift = crud.get_active_shift_for_user(db, user_id=current_user.id)
+    if not active_shift:
+        raise HTTPException(status_code=400, detail="Debes tener turno activo.")
+
+    try:
+        result = crud.process_refund(db, refund, current_user, active_shift.location_id)
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+# --- FIN DE NUESTRO CÓDIGO ---

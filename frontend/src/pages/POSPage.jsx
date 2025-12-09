@@ -2,8 +2,29 @@ import React, { useState, useEffect, useContext } from "react";
 import api from "../services/api";
 import { AuthContext } from "../context/AuthContext";
 import PaymentModal from "../components/PaymentModal.jsx";
+import { HiOutlineSearch } from "react-icons/hi";
 
 function POSPage() {
+  // --- FUNCIÓN PARA BUSCAR CLIENTE ---
+  const searchCustomerByCI = async () => {
+    if (!customerCI) return;
+    try {
+      // Usamos el endpoint de búsqueda
+      const response = await api.get('/customers/', { params: { search: customerCI } });
+      const found = response.data.find(c => c.id_card === customerCI);
+      
+      if (found) {
+        setCustomerName(found.name);
+        setCustomerPhone(found.phone || "");
+        setCustomerAddress(found.address || "");
+        setCustomerEmail(found.email || "");
+        // Feedback visual sutil (borde verde temporal o algo)
+        console.log("Cliente encontrado");
+      }
+    } catch (error) {
+      console.error("Error buscando cliente:", error);
+    }
+  };
   const [searchTerm, setSearchTerm] = useState(""); // Para la búsqueda
   const [searchResults, setSearchResults] = useState([]); // Resultados de búsqueda
   const [cart, setCart] = useState([]); // Los items en el carrito
@@ -369,6 +390,9 @@ function POSPage() {
     const saleData = {
       payment_method: saleDataFromModal.payment_method,
       payment_method_details: saleDataFromModal.payment_method_details,
+      // --- CORRECCIÓN 422: Pasamos la lista de pagos que viene del modal ---
+      payments: saleDataFromModal.payments, 
+      // --------------------------------------------------------------------
       pin: saleDataFromModal.pin,
       items: itemsPayload,
       iva_percentage:
@@ -828,19 +852,31 @@ function POSPage() {
                 >
                   Cédula / RUC*
                 </label>
-                <input
-                  id="customerCI"
-                  type="text"
-                  value={customerCI}
-                  // Cédula/RUC en mayúsculas (útil si tiene letras como pasaportes)
-                  onChange={(e) => setCustomerCI(e.target.value.toUpperCase())}
-                  className="w-full p-1.5 border rounded-md text-sm"
-                  required
-                  placeholder="Ej: 1712345678 o 1712345678001"
-                  pattern="[0-9]*" // <-- SOLO NÚMEROS (para Cédula) - RUC necesitaría ajuste
-                  maxLength="13" // <-- Longitud máxima RUC Ecuador
-                  title="Ingrese solo números para Cédula o RUC." // Mensaje de ayuda
-                />
+                {/* Input de Cédula con Botón de Búsqueda */}
+            <div className="relative">
+              <input
+                id="customerCI"
+                type="text"
+                value={customerCI}
+                onChange={(e) => setCustomerCI(e.target.value.toUpperCase())}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault(); 
+                    searchCustomerByCI();
+                  }
+                }}
+                className="w-full p-2 pr-10 border rounded-md text-sm uppercase font-bold text-gray-800"
+                placeholder="Cédula / RUC"
+              />
+              <button
+                type="button"
+                onClick={searchCustomerByCI}
+                className="absolute right-1 top-1 p-1 bg-blue-100 text-blue-600 rounded hover:bg-blue-200 transition"
+                title="Buscar Cliente"
+              >
+                <HiOutlineSearch className="w-5 h-5" />
+              </button>
+            </div>
               </div>
               <div>
                 <label

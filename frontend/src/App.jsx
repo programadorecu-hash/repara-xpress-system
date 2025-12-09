@@ -30,6 +30,7 @@ import UserManagementPage from './pages/UserManagementPage.jsx';
 import CreatePinPage from './pages/CreatePinPage.jsx';
 import PersonnelPage from './pages/PersonnelPage.jsx';
 import NotificationRulesPage from './pages/NotificationRulesPage.jsx';
+import CustomersPage from './pages/CustomersPage.jsx';
 
 // Esta es la "Guardia" que revisa si la caja fuerte está configurada
 function SetupGuard() {
@@ -97,6 +98,8 @@ function SetupGuard() {
         <Route path="inventario" element={<ProductPage />} />
         <Route path="auditoria" element={<ProtectedRoute requiredRoles={['admin']}><AuditPage /></ProtectedRoute>} />
         <Route path="ordenes" element={<WorkOrderPage />} />
+        {/* --- Ruta para Directorio de Clientes --- */}
+        
         <Route path="pos" element={<POSPage />} />
         <Route path="historial-ventas" element={<SalesHistoryPage />} />
         <Route
@@ -177,6 +180,14 @@ function SetupGuard() {
           )}
         />
         {/* --- FIN DE NUESTRO CÓDIGO --- */}
+        <Route
+          path="clientes"
+          element={(
+            <ProtectedRoute requiredRoles={['admin', 'inventory_manager', 'warehouse_operator']}>
+              <CustomersPage />
+            </ProtectedRoute>
+          )}
+        />
 
       </Route>
     </Routes>

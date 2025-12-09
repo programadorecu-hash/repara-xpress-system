@@ -301,6 +301,9 @@ function WorkOrderForm({ orderId, onClose, onSave }) {
     reported_issue: "",
     estimated_cost: 0,
     deposit_amount: 0,
+    // --- NUEVO: Por defecto el adelanto es en Efectivo ---
+    deposit_payment_method: "EFECTIVO", 
+    // ----------------------------------------------------
     pin: "",
     status: "RECIBIDO",
     // --- NUEVOS CAMPOS ---
@@ -833,6 +836,25 @@ function WorkOrderForm({ orderId, onClose, onSave }) {
                   disabled={!!orderId}
                 />
               </div>
+              {/* --- NUEVO: Selector de Pago para el Adelanto --- */}
+            {/* Solo aparece si es orden nueva (no tiene ID) y hay un monto mayor a 0 */}
+            {!orderId && parseFloat(order.deposit_amount) > 0 && (
+              <div className="animate-fade-in-down">
+                <label className="block text-sm font-medium text-gray-700">Método de Pago (Anticipo)</label>
+                <select
+                  name="deposit_payment_method"
+                  value={order.deposit_payment_method}
+                  onChange={handleChange}
+                  className="w-full p-2 border rounded bg-yellow-50 border-yellow-200 text-yellow-800 font-bold"
+                >
+                  <option value="EFECTIVO">💵 Efectivo</option>
+                  <option value="TRANSFERENCIA">🏦 Transferencia</option>
+                  <option value="TARJETA">💳 Tarjeta</option>
+                  <option value="OTRO">🔖 Otro</option>
+                </select>
+              </div>
+            )}
+            {/* ------------------------------------------------ */}
             </div>
           </fieldset>
 

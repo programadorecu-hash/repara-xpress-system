@@ -330,3 +330,45 @@ class NotificationRule(Base):
     # --- NUEVO: Lista de horas programadas (ej: ["13:00", "20:00"]) ---
     schedule_times = Column(JSON, nullable=True)
 # --- FIN DE NUESTRO CÓDIGO ---
+
+# --- INICIO DE NUESTRO CÓDIGO (Tabla de Clientes) ---
+class Customer(Base):
+    __tablename__ = "customers"
+    id = Column(Integer, primary_key=True, index=True)
+    # La cédula/RUC debe ser única para no duplicar clientes
+    id_card = Column(String, unique=True, index=True, nullable=False) 
+    name = Column(String, index=True, nullable=False)
+    email = Column(String, nullable=True)
+    phone = Column(String, nullable=True)
+    address = Column(String, nullable=True)
+    
+    # Campo extra para notas internas (ej: "Cliente conflictivo", "Paga tarde")
+    notes = Column(String, nullable=True) 
+    
+    # Fecha de registro
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    # --- NUEVO: Sucursal de Origen ---
+    location_id = Column(Integer, ForeignKey("locations.id"), nullable=True)
+    location = relationship("Location")
+# --- FIN DE NUESTRO CÓDIGO ---
+
+# --- INICIO DE NUESTRO CÓDIGO (Tabla Notas de Crédito) ---
+class CreditNote(Base):
+    __tablename__ = "credit_notes"
+    id = Column(Integer, primary_key=True, index=True)
+    code = Column(String, unique=True, index=True, nullable=False) # Código único (ej: NC-2025-001)
+    amount = Column(Float, nullable=False)
+    reason = Column(String, nullable=False)
+    is_active = Column(Boolean, default=True) # True = Tiene saldo, False = Ya se usó
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    # Relaciones
+    customer_id = Column(Integer, ForeignKey("customers.id"), nullable=True) # Opcional si es consumidor final
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False) # Quién la emitió
+    sale_id = Column(Integer, ForeignKey("sales.id"), nullable=True) # Venta original (si aplica)
+    
+    customer = relationship("Customer")
+    user = relationship("User")
+    sale = relationship("Sale")
+# --- FIN DE NUESTRO CÓDIGO ---

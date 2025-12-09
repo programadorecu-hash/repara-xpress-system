@@ -166,6 +166,11 @@ def generate_sale_receipt_pdf(sale: schemas.Sale):
 
     c.setFont("Helvetica-Bold", 8)
     c.drawString(5 * mm, y, f"Venta N°: {sale.id}")
+    
+    # --- CORRECCIÓN SOLAPAMIENTO: Bajamos una línea (y) para que la fecha no choque ---
+    y -= 4 * mm 
+    # ---------------------------------------------------------------------------------
+
     # --- INICIO DE NUESTROS CAMBIOS (Arreglo de Zona Horaria y Formato) ---
     c.setFont("Helvetica", 8)
     
@@ -182,10 +187,11 @@ def generate_sale_receipt_pdf(sale: schemas.Sale):
     # 3. Formateamos la hora local a formato 12-horas (AM/PM)
     sale_date = local_sale_time.strftime("%d/%m/%Y %I:%M %p") 
     
-    # 4. (Arreglo de Maquetación) Alineamos la fecha a la DERECHA
-    c.drawRightString(width - (5 * mm), y, f"Fecha: {sale_date}")
+    # 4. Dibujamos la fecha a la IZQUIERDA (debajo del N° Venta)
+    c.drawString(5 * mm, y, f"Fecha: {sale_date}")
     # --- FIN DE NUESTROS CAMBIOS ---
-    y -= 4 * mm
+    
+    y -= 4 * mm # Espacio extra antes de la siguiente sección
 
     draw_paragraph(f"<b>Sucursal:</b> {sale.location.name}", style_normal)
     draw_paragraph(f"<b>Atendido por:</b> {sale.user.email}", style_normal)
@@ -231,10 +237,29 @@ def generate_sale_receipt_pdf(sale: schemas.Sale):
         style_normal,
     )
     if sale.payment_method_details:
-        details_str = ", ".join(
-            f"{key}: {value}" for key, value in sale.payment_method_details.items()
-        )
-        draw_paragraph(details_str, style_normal, margin_left=6 * mm)
+        # --- CORRECCIÓN: Compatibilidad con Pagos Mixtos (Lista) y Antiguos (Dict) ---
+        if isinstance(sale.payment_method_details, list):
+            # NUEVO: Si es una lista de varios pagos (Lo que usa tu POS ahora)
+            for p in sale.payment_method_details:
+                # Extraemos los datos con seguridad
+                method = p.get("method", "PAGO")
+                amount = p.get("amount", 0)
+                ref = p.get("reference", "")
+                
+                # Formato: "- EFECTIVO: $10.00" o "- TRANSFERENCIA: $5.00 (Ref: 123)"
+                text = f"- {method}: ${float(amount):.2f}"
+                if ref:
+                    text += f" (Ref: {ref})"
+                
+                draw_paragraph(text, style_normal, margin_left=6 * mm)
+        
+        elif isinstance(sale.payment_method_details, dict):
+            # ANTIGUO: Por si hay ventas viejas guardadas como diccionario
+            details_str = ", ".join(
+                f"{key}: {value}" for key, value in sale.payment_method_details.items()
+            )
+            draw_paragraph(details_str, style_normal, margin_left=6 * mm)
+        # -----------------------------------------------------------------------------
 
     if sale.work_order_id:
         draw_paragraph(
