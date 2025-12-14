@@ -1,10 +1,10 @@
 import axios from 'axios';
 
-// Creamos una instancia de Axios con la URL base de nuestro backend
+// Creamos una instancia de Axios
 const apiClient = axios.create({
-  // LEEMOS LA DIRECCIÓN DE LA "AGENDA" (.env)
-  // Si no la encuentra, usa "http://localhost:8000" como respaldo.
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8000',
+  // Ya no necesitamos lógica compleja ni "OR". 
+  // Vite reemplazará esta variable con "/api" directamente gracias al config.
+  baseURL: import.meta.env.VITE_API_URL,
 });
 
 // ¡La Magia! Un "interceptor" que se ejecuta ANTES de cada petición.

@@ -1,5 +1,5 @@
 import React, { useState, useContext } from "react";
-import axios from "axios";
+import apiClient from "../services/api";
 import { useNavigate } from "react-router-dom";
 import { AuthContext } from "../context/AuthContext.jsx";
 
@@ -19,8 +19,8 @@ function LoginPage() {
       formData.append("username", email);
       formData.append("password", password);
 
-      const response = await axios.post(
-        "http://localhost:8000/token",
+      const response = await apiClient.post(
+        "/token", // ¡Sin localhost! Solo la ruta.
         formData
       );
 

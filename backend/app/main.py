@@ -89,20 +89,25 @@ app = FastAPI(title="API de Inventarios de Repara Xpress")
 
 app.mount("/uploads", StaticFiles(directory="/code/uploads"), name="uploads")
 
-# --- MIDELWARE PARA CONECTAR EL FRONTEND ---
-cors_origins = os.getenv("CORS_ORIGINS", "http://localhost:5173")
-allowed = [o.strip() for o in cors_origins.split(",") if o.strip()]
+# --- MIDELWARE PARA CONECTAR EL FRONTEND (PUERTA DE ENLACE ROBUSTA) ---
+# 1. Leemos las direcciones de la lista segura (.env)
+raw_origins = os.getenv("CORS_ORIGINS", "http://localhost:5173")
+
+# 2. Las limpiamos (quitamos espacios que se hayan colado por error humano)
+allowed_origins = [origin.strip() for origin in raw_origins.split(",") if origin.strip()]
+
+# 3. Avisamos por consola quiénes pueden entrar (Útil para confirmar que Guayaquil está en la lista)
+print(f"--> SISTEMA LISTO. Aceptando conexiones desde: {allowed_origins}")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=allowed,                 # Orígenes permitidos desde env
+    allow_origins=allowed_origins,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=[
-        "Authorization", "Content-Type", "Accept",
-        "X-Requested-With", "Origin"
-    ],
-    expose_headers=["Content-Disposition"] # Necesario para descargas (PDFs)
+    # Hacemos al portero más flexible con los tipos de mensajes (GET, POST, etc.)
+    # para evitar errores raros cuando la conexión viaja por internet.
+    allow_methods=["*"], 
+    allow_headers=["*"], 
+    expose_headers=["Content-Disposition"]
 )
 
 # ===== Rate limiting: limitar intentos de login =====

@@ -1,9 +1,14 @@
+version: '3.8'
+
 services:
+  # --- CEREBRO (Backend) ---
   api:
     build: ./backend
     container_name: repara_xpress_api
-    ports:
-      - "8000:8000"
+    restart: always
+    # Ya no exponemos el puerto 8000 al mundo, solo a la red interna (seguridad)
+    expose:
+      - "8000"
     volumes:
       - ./backend:/code
     env_file:
@@ -16,42 +21,71 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    command: sh -c "python -m alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
 
+  # --- CARA (Frontend) ---
   frontend:
     build: ./frontend
     container_name: repara_xpress_frontend
-    ports:
-      - "5173:5173"
-    # --- INICIO DE NUESTRO CÓDIGO (El "Tubo Mágico") ---
+    restart: always
+    # Ya no exponemos el 5173 al mundo, solo a la red interna
+    expose:
+      - "5173"
     volumes:
       - ./frontend:/app
-      # Le decimos a Docker que ignore la carpeta 'node_modules' de adentro.
-      # Esto evita conflictos y hace que funcione mucho más rápido.
       - /app/node_modules
-    # --- FIN DE NUESTRO CÓDIGO ---
     env_file:
       - .env
     environment:
-      - VITE_API_URL=${VITE_API_URL}
+      # Forzamos la dirección correcta directamente aquí para evitar errores de lectura
+      - VITE_API_URL=/api
     depends_on:
       - api
 
-  db:
-    image: postgres:15-alpine
-    container_name: repara_xpress_db
+  # --- RECEPCIONISTA (Nginx) ---
+  nginx:
+    image: nginx:latest
+    container_name: repara_xpress_nginx
+    restart: always
+    ports:
+      # Esta es la ÚNICA puerta abierta al mundo (Puerto estándar web)
+      - "80:80"
     volumes:
-      - ./postgres_data:/var/lib/postgresql/data
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - api
+      - frontend
+
+  # --- EL TÚNEL (Cloudflare) ---
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    restart: always
+    command: tunnel --url http://nginx:80
+    # Esto le dice: "Cava un túnel público que lleve a la puerta del recepcionista (nginx)"
+
+  # --- MEMORIA (Base de Datos) ---
+  db:
+    image: postgres:15
+    container_name: repara_xpress_db
+    restart: always
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backups:/backups
+    env_file:
+      - .env
     environment:
       - POSTGRES_USER=repara_user
       - POSTGRES_PASSWORD=repara_password
       - POSTGRES_DB=repara_xpress_inventory_db
-      - TZ=${TZ}
+    ports:
+      - "5432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U repara_user -d repara_xpress_inventory_db"]
       interval: 5s
       timeout: 5s
       retries: 5
-    ports:
-      - "5432:5432"
 
+
+
+volumes:
+  postgres_data:
