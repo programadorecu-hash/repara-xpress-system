@@ -1555,3 +1555,25 @@ def process_refund(db: Session, refund: schemas.RefundCreate, user: models.User,
     else:
         raise ValueError("Tipo de reembolso inválido.")
 # --- FIN DE NUESTRO CÓDIGO ---
+
+
+# --- INICIO LÓGICA CIERRE AUTOMÁTICO (CRON JOB) ---
+def auto_close_all_open_shifts(db: Session):
+    """
+    Busca todos los turnos que siguen abiertos (end_time es NULL)
+    y les pone la hora actual como hora de salida.
+    """
+    # 1. Buscamos los turnos abiertos
+    open_shifts = db.query(models.Shift).filter(models.Shift.end_time == None).all()
+    
+    count = 0
+    # 2. Los cerramos uno por uno con la hora actual del servidor
+    now = func.now()
+    for shift in open_shifts:
+        shift.end_time = now
+        count += 1
+    
+    # 3. Guardamos cambios
+    db.commit()
+    return count
+# --- FIN LÓGICA CIERRE AUTOMÁTICO ---

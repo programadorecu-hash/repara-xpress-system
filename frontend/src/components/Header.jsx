@@ -66,48 +66,37 @@ function Header({ isMenuOpen, onToggle }) {
   };
 
   return (
-    // 1. El <aside> (panel lateral)
-    // 2. Estilos Clave:
-    //    - 'fixed', 'z-50', 'h-screen': Flota sobre todo.
-    //    - 'transition-all duration-300': ¡La animación!
-    //    - (Ancho condicional) {isMenuOpen ? 'w-64' : 'w-20'}
-    // 3. ¡El Efecto Cristal!
-    //    - 'bg-brand/50': Tu color 'brand' al 50% de transparencia.
-    //    - 'backdrop-blur-md': ¡El difuminado!
-    <aside className={`fixed left-0 top-0 z-50 h-screen 
+    // CAMBIO: h-dvh para móviles, y estructura flexible para scroll
+    <aside className={`fixed left-0 top-0 z-50 h-dvh 
                       flex flex-col p-4 
                       bg-brand/50 text-surface 
                       backdrop-blur-md border-r border-white/10 shadow-2xl
                       transition-all duration-300 ${isMenuOpen ? 'w-64' : 'w-20'}`}>
       
-      {/* --- Sección Superior: Logo y Botón de Colapsar --- */}
-      <div className={`flex ${isMenuOpen ? 'justify-between' : 'justify-center'} items-center px-2`}>
-        {/* Mostramos el logo/nombre solo si está expandido */}
+      {/* Sección Superior: Logo - flex-shrink-0 evita que se aplaste */}
+      <div className={`flex ${isMenuOpen ? 'justify-between' : 'justify-center'} items-center px-2 flex-shrink-0`}>
         {isMenuOpen && (
           <div className="text-white font-bold text-xl">
             Repara Xpress
           </div>
         )}
         
-        {/* El botón de "hamburguesa" que llama a la función onToggle */}
         <button 
           onClick={onToggle} 
           className="text-surface/80 hover:text-surface p-2 rounded-lg hover:bg-surface/10"
         >
-          {/* Muestra un ícono u otro dependiendo del estado */}
           {isMenuOpen ? <HiOutlineX className="w-6 h-6" /> : <HiOutlineMenu className="w-6 h-6" />}
         </button>
       </div>
       
-      {/* La sucursal (se oculta si está contraído) */}
       {isMenuOpen && activeShift && (
-        <div className="text-sm text-surface/80 font-semibold px-2 mt-2">
+        <div className="text-sm text-surface/80 font-semibold px-2 mt-2 flex-shrink-0">
           Sucursal: {activeShift.location.name}
         </div>
       )}
 
-      {/* --- Sección Media: Enlaces de Navegación --- */}
-      <nav className="flex flex-col space-y-1 mt-8">
+      {/* Sección Media: Navegación - flex-1 y overflow-y-auto habilitan el scroll solo aquí */}
+      <nav className="flex flex-col space-y-1 mt-8 flex-1 overflow-y-auto min-h-0">
         <NavItem to="/" label="Inicio" icon={<HiOutlineHome />} isExpanded={isMenuOpen} />
         <NavItem to="/pos" label="Vender" icon={<HiOutlineShoppingCart />} isExpanded={isMenuOpen} />
         <NavItem to="/historial-ventas" label="Historial Ventas" icon={<HiOutlineClock />} isExpanded={isMenuOpen} />
@@ -142,7 +131,6 @@ function Header({ isMenuOpen, onToggle }) {
         {user?.role === "admin" && (
           <NavItem to="/usuarios" label="Usuarios" icon={<HiOutlineUsers />} isExpanded={isMenuOpen} />
         )}
-        {/* Botón visible para Admin y Gerentes */}
         {(user?.role === "admin" || user?.role === "inventory_manager") && (
           <NavItem 
             to="/configuracion/notificaciones" 
@@ -153,18 +141,16 @@ function Header({ isMenuOpen, onToggle }) {
         )}
       </nav>
 
-      {/* --- Sección Inferior: Usuario y Salir --- */}
-      <div className="mt-auto pt-4 border-t border-white/10">
+      {/* Sección Inferior: Usuario y Salir - flex-shrink-0 asegura que NUNCA se oculte */}
+      <div className="mt-auto pt-4 border-t border-white/10 flex-shrink-0">
         {token && user && (
           <div className="flex flex-col space-y-3">
-            {/* Mostramos el email solo si está expandido */}
             {isMenuOpen && (
               <span className="text-sm text-surface/80 px-3 truncate" title={user.email}>
                 {user.email}
               </span>
             )}
             
-            {/* El botón de Salir cambia para mostrar solo el ícono */}
             <button
               onClick={handleLogout}
               className={`w-full flex items-center space-x-3 py-2 px-3 rounded-lg text-surface/80 hover:bg-red-500/50 hover:text-white font-bold transition-colors ${!isMenuOpen ? 'justify-center' : ''}`}

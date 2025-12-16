@@ -72,7 +72,9 @@ function AppLayout() {
   };
 
   return (
-    <div className="flex h-screen text-secondary">
+    // CAMBIO CLAVE: Usamos 'h-dvh' (Dynamic Height) para celulares y 'overflow-hidden'
+    // para que el scroll sea interno y no se pelee con el navegador.
+    <div className="flex h-dvh overflow-hidden text-secondary">
       
       {/* El Header (menú) */}
       <Header isMenuOpen={isMenuOpen} onToggle={toggleMenu} /> 

@@ -9,23 +9,32 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [activeShift, setActiveShift] = useState(null);
 
+   // --- INICIO DE NUESTRO CÓDIGO (Guardia de PIN) ---
+  const navigate = useNavigate(); // Para poder redirigir
+
   useEffect(() => {
-    // Si detectamos un token al cargar la app, buscamos el perfil del usuario
     if (token) {
       api.get('/users/me/profile')
         .then(response => {
-          setUser(response.data);
-          setActiveShift(response.data.active_shift);
+          const userProfile = response.data;
+          setUser(userProfile);
+          setActiveShift(userProfile.active_shift);
+
+          // --- GUARDIA DE PIN REFORZADO (Patrulla Constante) ---
+          // Si el usuario ya cargó, NO tiene PIN y NO es admin...
+          if (userProfile && !userProfile.hashed_pin) {
+            // ...¡Lo mandamos a crear su PIN inmediatamente!
+            navigate('/crear-pin');
+          }
+          // --- FIN DEL REFUERZO ---
         })
         .catch(() => {
-          // Si el token es inválido, limpiamos todo
           logout();
         });
     }
-  }, [token]);
+  }, [token, navigate]); // Agregamos 'navigate' a las dependencias
 
-  // --- INICIO DE NUESTRO CÓDIGO (Guardia de PIN) ---
-  const navigate = useNavigate(); // Para poder redirigir
+ 
 
   const login = async (newToken) => {
   localStorage.setItem('accessToken', newToken);

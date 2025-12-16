@@ -12,6 +12,8 @@ from slowapi import Limiter                      # Núcleo del limitador
 # --- AÑADIMOS ESTAS "HERRAMIENTAS DE RELOJERÍA" ---
 from datetime import date, datetime
 import pytz
+from apscheduler.schedulers.background import BackgroundScheduler # IMPORTAR PLANIFICADOR
+from .database import SessionLocal # IMPORTAR SESION
 # --- FIN DE HERRAMIENTAS ---
 from slowapi.util import get_remote_address      # Cómo identificar al cliente (por IP)
 from slowapi.errors import RateLimitExceeded     # Error cuando se excede el límite
@@ -1253,3 +1255,26 @@ def refund_sale(
     except ValueError as e:
         raise HTTPException(status_code=403, detail=str(e))
 # --- FIN DE NUESTRO CÓDIGO ---
+
+
+# ===================================================================
+# --- TAREA PROGRAMADA: CIERRE AUTOMÁTICO DE TURNOS (23:55) ---
+# ===================================================================
+
+def run_auto_close_shifts():
+    """Esta función es la que ejecuta el Reloj Automático."""
+    print("⏰ [CRON JOB] Iniciando cierre automático de turnos...")
+    # Creamos una sesión de base de datos "desechable" solo para esta tarea
+    db = SessionLocal()
+    try:
+        count = crud.auto_close_all_open_shifts(db)
+        print(f"✅ [CRON JOB] Turnos cerrados automáticamente: {count}")
+    except Exception as e:
+        print(f"❌ [CRON JOB] Error cerrando turnos: {e}")
+    finally:
+        db.close() # ¡Muy importante cerrar la sesión!
+
+# Configuramos el planificador para que corra a las 23:55 todos los días
+scheduler = BackgroundScheduler()
+scheduler.add_job(run_auto_close_shifts, 'cron', hour=23, minute=55)
+scheduler.start()

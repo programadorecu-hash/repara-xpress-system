@@ -31,21 +31,23 @@ function LoginPage() {
       // El "Guardia de PIN" (en AuthContext) se encarga de redirigir a /crear-pin si es necesario.
       // Nosotros solo nos preocupamos de si tiene turno activo o no.
 
-      // Si el perfil se cargó Y el usuario NO fue redirigido a /crear-pin...
-      if (
-        userProfile &&
-        !userProfile.hashed_pin &&
-        userProfile.role !== "admin"
-      ) {
-        // ... no hacemos nada, porque el Guardia ya lo mandó a /crear-pin.
-      } else if (userProfile && userProfile.active_shift) {
-        // Si tiene PIN (o es admin) Y tiene turno activo, va al inicio
+      // --- LÓGICA DE REDIRECCIÓN CORREGIDA ---
+      
+      // 1. REGLA DE ORO: Si no tiene PIN, a crear PIN (¡Sea quien sea!)
+      if (userProfile && !userProfile.hashed_pin) {
+        navigate("/crear-pin");
+        return; // ¡Importante! Detenemos aquí para que no siga ejecutando.
+      }
+
+      // 2. Si ya tiene PIN y tiene turno activo -> Al Dashboard
+      if (userProfile && userProfile.active_shift) {
         navigate("/");
-      } else if (userProfile) {
-        // Si tiene PIN (o es admin) pero NO tiene turno, va a iniciar turno
+      } 
+      // 3. Si tiene PIN pero NO tiene turno -> A Iniciar Turno
+      else {
         navigate("/iniciar-turno");
       }
-      // --- FIN DE NUESTRO CÓDIGO ---
+      // --- FIN ---
     } catch (err) {
       setError("Email o contraseña incorrectos.");
     }
