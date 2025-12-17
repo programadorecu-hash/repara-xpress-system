@@ -3,6 +3,7 @@
 // --- INICIO DE NUESTRO CÓDIGO (ASISTENTE DE CONFIGURACIÓN) ---
 // Importamos las herramientas que necesitamos
 import React, { useState, useEffect } from 'react';
+import { HiOutlineRefresh } from "react-icons/hi";
 // Importamos 'useNavigate' para poder redirigir al usuario
 import { Routes, Route, useNavigate } from 'react-router-dom';
 // Usamos axios directo para la revisión (no necesita token de login)
@@ -35,7 +36,8 @@ import CustomersPage from './pages/CustomersPage.jsx';
 // Esta es la "Guardia" que revisa si la caja fuerte está configurada
 function SetupGuard() {
   // null = "aún no sé"
-  const [isSetupComplete, setIsSetupComplete] = useState(null); 
+  const [isSetupComplete, setIsSetupComplete] = useState(null);
+  const [connectionError, setConnectionError] = useState(false);
   const navigate = useNavigate(); // Para poder redirigir
 
   useEffect(() => {
@@ -63,19 +65,37 @@ function SetupGuard() {
         }
       })
       .catch(error => {
-        // Si el backend no responde, mostramos un error feo
-        console.error("Error grave: No se puede conectar al backend.", error);
-        // Esto reemplaza toda la página con un error claro
-        document.body.innerHTML = "<h1>Error: No se puede conectar al servidor. Revisa que el backend (repara_xpress_api) esté funcionando.</h1>";
+        console.error("Error conectando al backend:", error);
+        // En lugar de matar la página, activamos el estado de error
+        setConnectionError(true); 
       });
   }, [navigate]); // 'navigate' es una dependencia
 
-  // 3. Si todavía no sabemos la respuesta (isSetupComplete es null)...
+  // 3. ...
+  // Si hubo error de conexión, mostramos pantalla de reintento
+  if (connectionError) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen bg-gray-100 p-4">
+        <div className="bg-white p-8 rounded-lg shadow-md text-center max-w-sm">
+          <h2 className="text-xl font-bold text-red-600 mb-2">Conexión Fallida</h2>
+          <p className="text-gray-600 mb-6">No pudimos contactar con el sistema.</p>
+          <button 
+            onClick={() => window.location.reload()} 
+            className="flex items-center justify-center w-full bg-blue-600 text-white font-bold py-3 rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            <HiOutlineRefresh className="mr-2 text-xl" />
+            Reintentar
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Si todavía cargando...
   if (isSetupComplete === null) {
-    // ...mostramos un mensaje de "Cargando..." en pantalla completa
     return (
       <div className="flex items-center justify-center min-h-screen bg-primary">
-        <p className="text-xl text-secondary">Verificando configuración...</p>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white"></div>
       </div>
     );
   }

@@ -201,15 +201,18 @@ def delete_product_image(db: Session, image_id: int):
 
         # --- ¡LA LÓGICA CLAVE! ---
         # Ahora, borramos el archivo físico del disco duro del servidor.
-        full_file_path = f"/code{image_path_to_delete}"
+        # --- LÓGICA SEGURA CORREGIDA ---
+        # Usamos os.path.join para evitar errores si falta el "/" inicial
+        # .lstrip("/") quita la barra inicial si la tiene, para que join funcione bien
+        full_file_path = os.path.join("/code", image_path_to_delete.lstrip("/"))
         
-        # Comprobamos si el archivo existe antes de intentar borrarlo para evitar errores.
         try:
             if os.path.exists(full_file_path):
                 os.remove(full_file_path)
-                print(f"Archivo eliminado: {full_file_path}") # Un log para nosotros
+                print(f"Archivo eliminado correctamente: {full_file_path}")
         except OSError as e:
-            print(f"Error eliminando el archivo {full_file_path}: {e}")
+            print(f"Advertencia: No se pudo borrar el archivo físico {full_file_path}: {e}")
+        # -------------------------------
             
     return db_image
 
@@ -1162,11 +1165,12 @@ def get_cash_account_balance(db: Session, account_id: int) -> float:
 # ===================================================================
 def get_dashboard_summary(db: Session, location_id: int, target_date: date):
     # Calcula ventas totales del día en la ubicación
-    # ARREGLO: Usamos 'AT TIME ZONE' para que Postgres convierta la hora UTC a Ecuador antes de sacar la fecha.
-    # Si eran las 00:30 UTC del día 26, al restar 5 horas serán las 19:30 del día 25.
+    # CORRECCIÓN: Leemos la zona horaria del sistema, no la ponemos a fuego.
+    app_timezone = os.getenv("TZ", "America/Guayaquil")
+
     total_sales = db.query(func.sum(models.Sale.total_amount)).filter(
         models.Sale.location_id == location_id,
-        func.date(func.timezone('America/Guayaquil', models.Sale.created_at)) == target_date
+        func.date(func.timezone(app_timezone, models.Sale.created_at)) == target_date
     ).scalar() or 0.0
 
     # Calcula gastos totales del día en la ubicación
@@ -1180,11 +1184,12 @@ def get_dashboard_summary(db: Session, location_id: int, target_date: date):
 
     total_expenses = 0.0
     if account_ids:
+        # Reutilizamos la variable app_timezone que definimos arriba
         total_expenses = db.query(func.sum(models.CashTransaction.amount)).filter(
             models.CashTransaction.account_id.in_(account_ids),
             models.CashTransaction.amount < 0,
             # ARREGLO: Aplicamos la misma conversión de zona horaria para los gastos
-            func.date(func.timezone('America/Guayaquil', models.CashTransaction.timestamp)) == target_date
+            func.date(func.timezone(app_timezone, models.CashTransaction.timestamp)) == target_date
         ).scalar() or 0.0
     total_expenses = abs(total_expenses)
 
