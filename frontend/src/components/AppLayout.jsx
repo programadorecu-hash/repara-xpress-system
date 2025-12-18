@@ -3,6 +3,7 @@ import React, { useState, useEffect, useContext } from 'react';
 import { Outlet } from 'react-router-dom';
 import Header from './Header.jsx'; 
 import api from '../services/api';
+import { HiOutlineMenu } from "react-icons/hi"; // <-- IMPORTACIÓN NUEVA
 import { AuthContext } from '../context/AuthContext';
 import MandatoryNotificationModal from './MandatoryNotificationModal';
 
@@ -72,18 +73,26 @@ function AppLayout() {
   };
 
   return (
-    // CAMBIO CLAVE: Usamos 'h-dvh' (Dynamic Height) para celulares y 'overflow-hidden'
-    // para que el scroll sea interno y no se pelee con el navegador.
-    <div className="flex h-dvh overflow-hidden text-secondary">
+    <div className="flex h-dvh overflow-hidden text-secondary bg-gray-50">
       
-      {/* El Header (menú) */}
+      {/* Botón Flotante para Celulares (Abre el menú) */}
+      <button 
+        onClick={() => setIsMenuOpen(true)}
+        className="md:hidden fixed top-4 left-4 z-40 p-2 bg-brand text-white rounded-lg shadow-lg hover:bg-brand/90 transition-colors"
+      >
+        <HiOutlineMenu className="w-6 h-6" />
+      </button>
+
+      {/* El Header (menú lateral) */}
       <Header isMenuOpen={isMenuOpen} onToggle={toggleMenu} /> 
 
-      <main className={`flex-1 overflow-y-auto pr-8 pb-8 pt-8 pl-28 transition-all duration-300`}>
+      {/* Contenido Principal */}
+      {/* CAMBIO CLAVE: 'pl-0' en móvil (aprovecha todo el ancho) y 'md:pl-20' en PC (deja espacio a la barra) */}
+      <main className={`flex-1 overflow-y-auto p-4 md:p-8 pt-16 md:pt-8 pl-0 md:pl-20 transition-all duration-300`}>
         <Outlet />
       </main>
 
-      {/* --- MODAL DE ALERTAS PROGRAMADAS --- */}
+      {/* Modal de Alertas */}
       <MandatoryNotificationModal 
         rules={scheduledRules} 
         onClose={handleCloseModal} 
