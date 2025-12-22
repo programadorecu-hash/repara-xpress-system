@@ -52,7 +52,8 @@ function CreatePinPage() {
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-primary">
+    <div className="flex items-center justify-center min-h-screen bg-primary px-4">
+      {/* Agregamos px-4 para que la caja no toque los bordes en celular */}
       <div className="p-8 bg-white rounded-lg shadow-lg w-full max-w-sm border">
         <h2 className="text-2xl font-bold text-center text-secondary mb-4">
           Crea tu PIN Secreto

@@ -75,20 +75,40 @@ function AppLayout() {
   return (
     <div className="flex h-dvh overflow-hidden text-secondary bg-gray-50">
       
-      {/* Botón Flotante para Celulares (Abre el menú) */}
-      <button 
-        onClick={() => setIsMenuOpen(true)}
-        className="md:hidden fixed top-4 left-4 z-40 p-2 bg-brand text-white rounded-lg shadow-lg hover:bg-brand/90 transition-colors"
-      >
-        <HiOutlineMenu className="w-6 h-6" />
-      </button>
+      {/* --- BARRA SUPERIOR MÓVIL (Solo visible en celulares) --- */}
+      {/* Esto crea una franja blanca arriba con el logo centrado y el botón de menú */}
+      <header className="md:hidden fixed top-0 left-0 right-0 h-16 bg-white/90 backdrop-blur-md border-b border-gray-200 z-30 flex items-center px-4 justify-between shadow-sm">
+        
+        {/* Botón Menú (Izquierda) */}
+        <button 
+          onClick={() => setIsMenuOpen(true)}
+          className="p-2 text-primary hover:bg-gray-100 rounded-lg transition-colors"
+        >
+          <HiOutlineMenu className="w-7 h-7" />
+        </button>
+
+        {/* Logo/Título (Centrado Absoluto) */}
+        <span className="absolute left-1/2 transform -translate-x-1/2 font-bold text-lg text-primary tracking-wide">
+          Repara Xpress
+        </span>
+
+        {/* Espacio vacío a la derecha (para equilibrar el botón de la izquierda) */}
+        <div className="w-10"></div>
+      </header>
 
       {/* El Header (menú lateral) */}
       <Header isMenuOpen={isMenuOpen} onToggle={toggleMenu} /> 
 
       {/* Contenido Principal */}
-      {/* CAMBIO CLAVE: 'pl-0' en móvil (aprovecha todo el ancho) y 'md:pl-20' en PC (deja espacio a la barra) */}
-      <main className={`flex-1 overflow-y-auto p-4 md:p-8 pt-16 md:pt-8 pl-0 md:pl-20 transition-all duration-300`}>
+      {/* CAMBIO: 
+          1. md:pl-28: Damos más espacio a la izquierda (antes 20, ahora 28) para que no esté pegado al menú cerrado.
+          2. onClick: Si el menú está abierto y tocas aquí, se cierra.
+      */}
+      <main 
+        onClick={() => isMenuOpen && setIsMenuOpen(false)}
+        // CAMBIO: 'pl-4' en móvil (margen normal) y 'md:pl-28' en PC (espacio extra para menú)
+        className={`flex-1 overflow-y-auto p-4 md:p-8 pt-20 md:pt-8 pl-4 md:pl-28 transition-all duration-300`}
+      >
         <Outlet />
       </main>
 

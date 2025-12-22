@@ -95,8 +95,8 @@ function Header({ isMenuOpen, onToggle }) {
           </div>
         )}
 
-        {/* Sección Media: Navegación (con Scroll activado) */}
-        <nav className="flex flex-col space-y-1 mt-8 flex-1 overflow-y-auto min-h-0 scrollbar-hide">
+        {/* Sección Media: Navegación (con Scroll activado y estilizado por CSS global) */}
+        <nav className="flex flex-col space-y-1 mt-8 flex-1 overflow-y-auto min-h-0">
           <NavItem to="/" label="Inicio" icon={<HiOutlineHome />} isExpanded={isMenuOpen} />
           <NavItem to="/pos" label="Vender" icon={<HiOutlineShoppingCart />} isExpanded={isMenuOpen} />
           <NavItem to="/historial-ventas" label="Historial Ventas" icon={<HiOutlineClock />} isExpanded={isMenuOpen} />

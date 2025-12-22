@@ -12,3 +12,27 @@ body {
   @apply bg-gradient-to-br from-primary to-gray-100;
 }
 /* --- FIN DE NUESTRO CÓDIGO --- */
+
+
+/* ... código anterior ... */
+
+/* --- PERSONALIZACIÓN DEL SCROLLBAR (Barra de desplazamiento) --- */
+/* Esto hace que la barra sea finita y redondeada en navegadores Chrome/Edge/Safari */
+
+::-webkit-scrollbar {
+  width: 6px; /* Ancho muy fino */
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent; /* El fondo de la carrilera es invisible */
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: rgba(156, 163, 175, 0.5); /* Color gris suave semi-transparente */
+  border-radius: 10px; /* Bordes redondeados */
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(107, 114, 128, 0.8); /* Un poco más oscuro al pasar el mouse */
+}

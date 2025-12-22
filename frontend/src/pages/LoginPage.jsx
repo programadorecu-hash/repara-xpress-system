@@ -55,7 +55,8 @@ function LoginPage() {
 
   return (
     // El JSX del formulario se mantiene igual que antes
-    <div className="flex items-center justify-center min-h-screen bg-primary">
+    <div className="flex items-center justify-center min-h-screen bg-primary px-4"> 
+      {/* Agregado 'px-4' arriba para que en celulares la caja no toque los bordes */}
       <div className="p-8 bg-white rounded-lg shadow-lg w-full max-w-md border">
         <h2 className="text-3xl font-bold text-center text-secondary mb-6">
           Iniciar Sesión
