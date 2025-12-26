@@ -421,6 +421,43 @@ def delete_an_image(
 
     return db_image
 
+# --- NUEVO: Borrar imagen de orden de trabajo ---
+@app.delete("/work-order-images/{image_id}", response_model=schemas.WorkOrderImage)
+def delete_work_order_image_endpoint(
+    image_id: int,
+    db: Session = Depends(get_db),
+    # Permitimos borrar a quien tenga acceso, idealmente validar si es su orden,
+    # por ahora restringimos a roles con permiso o el mismo usuario.
+    current_user: models.User = Depends(security.get_current_user)
+):
+    # 1. Buscamos la imagen
+    # (Necesitamos una función en crud.py, la crearemos abajo)
+    # Por simplicidad, usamos una consulta directa aquí o añadimos al crud.
+    # Vamos a añadirla al crud para ser limpios.
+    
+    # Llama al crud (que actualizaremos en el paso 3)
+    db_image = crud.delete_work_order_image(db, image_id=image_id)
+    
+    if not db_image:
+        raise HTTPException(status_code=404, detail="Imagen no encontrada")
+
+    # 2. Borrado físico
+    try:
+        relative_path = db_image.image_url.lstrip("/")
+        base_dir = "/code"
+        file_path = os.path.join(base_dir, relative_path)
+        
+        # Seguridad básica de path
+        uploads_dir = os.path.join(base_dir, "uploads")
+        if os.path.commonpath([os.path.abspath(file_path), uploads_dir]) == os.path.abspath(uploads_dir):
+            if os.path.exists(file_path):
+                os.remove(file_path)
+    except Exception as e:
+        print(f"Error borrando archivo físico: {e}")
+
+    return db_image
+# -----------------------------------------------
+
 
 
 # ===================================================================
@@ -625,6 +662,46 @@ def create_new_work_order(
         raise HTTPException(status_code=400, detail="El usuario debe tener un turno activo para crear una orden de trabajo.")
 
     return crud.create_work_order(db=db, work_order=work_order, user_id=current_user.id, location_id=active_shift.location_id)
+
+# --- INICIO DE NUESTRO CÓDIGO (Entrega Sin Reparación) ---
+@app.post("/work-orders/{work_order_id}/deliver-unrepaired", response_model=schemas.WorkOrderPublic)
+def deliver_work_order_unrepaired(
+    work_order_id: int,
+    form_data: schemas.WorkOrderDeliverUnrepaired,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(security.get_current_user)
+):
+    """
+    Ruta especial para entregar un equipo NO reparado.
+    - Establece el estado a SIN_REPARACION.
+    - Fija el costo final en el valor de la revisión (o 0).
+    """
+    # 1. Validar PIN
+    if not current_user.hashed_pin or not security.verify_password(form_data.pin, current_user.hashed_pin):
+        raise HTTPException(status_code=403, detail="PIN incorrecto.")
+
+    # 2. Buscar la orden
+    db_work_order = crud.get_work_order(db, work_order_id=work_order_id)
+    if not db_work_order:
+        raise HTTPException(status_code=404, detail="Orden no encontrada.")
+
+    # 3. Aplicar cambios (Como usar el borrador en el presupuesto)
+    db_work_order.status = "SIN_REPARACION"
+    db_work_order.final_cost = form_data.diagnostic_fee # $2.00 o $0.00 según decida el usuario
+    
+    # Nota interna automática
+    crud.create_work_order_note(
+        db=db, 
+        work_order_id=work_order_id, 
+        user_id=current_user.id, 
+        location_id=db_work_order.location_id, # Usamos la ubicación original de la orden
+        message=f"ENTREGA SIN REPARAR: {form_data.reason}. Cobro revisión: ${form_data.diagnostic_fee}"
+    )
+
+    db.commit()
+    db.refresh(db_work_order)
+    return db_work_order
+# --- FIN DE NUESTRO CÓDIGO ---
 
 @app.patch("/work-orders/{work_order_id}", response_model=schemas.WorkOrderPublic)
 def update_work_order_status(

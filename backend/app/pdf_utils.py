@@ -1,4 +1,3 @@
-
 from io import BytesIO
 from . import schemas
 from reportlab.pdfgen import canvas
@@ -16,9 +15,14 @@ def generate_work_order_pdf(work_order: schemas.WorkOrder):
     c = canvas.Canvas(buffer, pagesize=(width, height))
 
     styles = getSampleStyleSheet()
+    
+    # --- ESTILOS CORREGIDOS ---
     style_title = ParagraphStyle(name='centered_bold', parent=styles['Normal'], alignment=TA_CENTER, fontName='Helvetica-Bold', fontSize=9, leading=11)
     style_centered = ParagraphStyle(name='centered', parent=styles['Normal'], alignment=TA_CENTER, fontSize=7, leading=9)
     style_normal = ParagraphStyle(name='normal', parent=styles['Normal'], fontSize=8, leading=10)
+    # Agregamos el estilo negrita que faltaba para evitar el Error 500
+    style_bold = ParagraphStyle(name='bold', parent=styles['Normal'], fontName='Helvetica-Bold', fontSize=8, leading=10)
+    # --------------------------
     
     y = height - (5 * mm)
 
@@ -52,12 +56,13 @@ def generate_work_order_pdf(work_order: schemas.WorkOrder):
     c.drawString(30 * mm, y, f"Fecha: {work_order.created_at.strftime('%d/%m/%Y')}")
     y -= 4 * mm
     
-    # --- NUEVO CAMPO: TÉCNICO RESPONSABLE ---
-    draw_paragraph(f"<b>Atendido por:</b> {work_order.user.email}", style_normal)
-    # --- CORRECCIÓN DE ESPACIO: Se eliminó un decremento innecesario de 'y' ---
+    # --- TÉCNICO RESPONSABLE ---
+    if work_order.user:
+        draw_paragraph(f"<b>Atendido por:</b> {work_order.user.email}", style_normal)
+    
     draw_line()
 
-    draw_paragraph("<b>CLIENTE:</b>", style_normal)
+    draw_paragraph("<b>CLIENTE:</b>", style_bold)
     draw_paragraph(f"{work_order.customer_name}", style_normal)
     draw_paragraph(f"<b>C.I:</b> {work_order.customer_id_card}", style_normal)
     draw_paragraph(f"<b>Telf:</b> {work_order.customer_phone}", style_normal)
@@ -67,11 +72,20 @@ def generate_work_order_pdf(work_order: schemas.WorkOrder):
         draw_paragraph(f"<b>Dir:</b> {work_order.customer_address}", style_normal)
     y -= 2 * mm
     
-    draw_paragraph("<b>EQUIPO:</b>", style_normal)
+    draw_paragraph("<b>EQUIPO:</b>", style_bold)
     draw_paragraph(f"{work_order.device_type} {work_order.device_brand} {work_order.device_model}", style_normal)
+    if work_order.device_serial:
+        draw_paragraph(f"S/N: {work_order.device_serial}", style_normal)
     y -= 2 * mm
 
-    draw_paragraph("<b>PROBLEMA REPORTADO:</b>", style_normal)
+    # --- NUEVO: Estado Físico en el PDF ---
+    if work_order.physical_condition:
+        draw_paragraph("<b>ESTADO DEL EQUIPO (Recepción):</b>", style_bold)
+        draw_paragraph(work_order.physical_condition, style_normal)
+        y -= 3 * mm
+    # --------------------------------------
+    
+    draw_paragraph("<b>PROBLEMA REPORTADO:</b>", style_bold)
     draw_paragraph(work_order.reported_issue, style_normal)
     y -= 3 * mm
 
@@ -80,7 +94,6 @@ def generate_work_order_pdf(work_order: schemas.WorkOrder):
     y -= 3 * mm
     draw_line()
 
-    # (El resto del código es igual)
     draw_paragraph("<b>Matriz:</b> S49 Julio Andrade OE2-173", style_centered)
     draw_paragraph("Telf: 0969097844", style_centered)
     y -= 2 * mm
@@ -90,7 +103,7 @@ def generate_work_order_pdf(work_order: schemas.WorkOrder):
     draw_paragraph("Repara Conocoto: 0999909128", style_centered)
     y -= 2 * mm
     draw_paragraph("Quito - Ecuador", style_centered)
-    y -= 8 * mm
+    y -= 15 * mm # Espacio para firma
 
     c.line(8 * mm, y, width - (8 * mm), y)
     y -= 4 * mm
@@ -167,34 +180,31 @@ def generate_sale_receipt_pdf(sale: schemas.Sale):
     c.setFont("Helvetica-Bold", 8)
     c.drawString(5 * mm, y, f"Venta N°: {sale.id}")
     
-    # --- CORRECCIÓN SOLAPAMIENTO: Bajamos una línea (y) para que la fecha no choque ---
     y -= 4 * mm 
-    # ---------------------------------------------------------------------------------
 
-    # --- INICIO DE NUESTROS CAMBIOS (Arreglo de Zona Horaria y Formato) ---
     c.setFont("Helvetica", 8)
     
-    # 1. Obtenemos la zona horaria (igual que en main.py)
+    # 1. Obtenemos la zona horaria
     try:
         app_timezone_str = os.getenv("TZ", "America/Guayaquil")
         ecuador_tz = pytz.timezone(app_timezone_str)
     except pytz.UnknownTimeZoneError:
         ecuador_tz = pytz.timezone("America/Guayaquil")
 
-    # 2. Convertimos la hora de la BD (UTC) a la hora local de Ecuador
+    # 2. Convertimos la hora
     local_sale_time = sale.created_at.astimezone(ecuador_tz)
     
-    # 3. Formateamos la hora local a formato 12-horas (AM/PM)
+    # 3. Formateamos
     sale_date = local_sale_time.strftime("%d/%m/%Y %I:%M %p") 
     
-    # 4. Dibujamos la fecha a la IZQUIERDA (debajo del N° Venta)
     c.drawString(5 * mm, y, f"Fecha: {sale_date}")
-    # --- FIN DE NUESTROS CAMBIOS ---
     
-    y -= 4 * mm # Espacio extra antes de la siguiente sección
+    y -= 4 * mm
 
-    draw_paragraph(f"<b>Sucursal:</b> {sale.location.name}", style_normal)
-    draw_paragraph(f"<b>Atendido por:</b> {sale.user.email}", style_normal)
+    if sale.location:
+        draw_paragraph(f"<b>Sucursal:</b> {sale.location.name}", style_normal)
+    if sale.user:
+        draw_paragraph(f"<b>Atendido por:</b> {sale.user.email}", style_normal)
     draw_line()
 
     draw_paragraph("<b>CLIENTE:</b>", style_normal)
@@ -237,16 +247,12 @@ def generate_sale_receipt_pdf(sale: schemas.Sale):
         style_normal,
     )
     if sale.payment_method_details:
-        # --- CORRECCIÓN: Compatibilidad con Pagos Mixtos (Lista) y Antiguos (Dict) ---
         if isinstance(sale.payment_method_details, list):
-            # NUEVO: Si es una lista de varios pagos (Lo que usa tu POS ahora)
             for p in sale.payment_method_details:
-                # Extraemos los datos con seguridad
                 method = p.get("method", "PAGO")
                 amount = p.get("amount", 0)
                 ref = p.get("reference", "")
                 
-                # Formato: "- EFECTIVO: $10.00" o "- TRANSFERENCIA: $5.00 (Ref: 123)"
                 text = f"- {method}: ${float(amount):.2f}"
                 if ref:
                     text += f" (Ref: {ref})"
@@ -254,12 +260,10 @@ def generate_sale_receipt_pdf(sale: schemas.Sale):
                 draw_paragraph(text, style_normal, margin_left=6 * mm)
         
         elif isinstance(sale.payment_method_details, dict):
-            # ANTIGUO: Por si hay ventas viejas guardadas como diccionario
             details_str = ", ".join(
                 f"{key}: {value}" for key, value in sale.payment_method_details.items()
             )
             draw_paragraph(details_str, style_normal, margin_left=6 * mm)
-        # -----------------------------------------------------------------------------
 
     if sale.work_order_id:
         draw_paragraph(
@@ -270,28 +274,27 @@ def generate_sale_receipt_pdf(sale: schemas.Sale):
     y -= 4 * mm
     draw_paragraph("Gracias por su compra", style_centered)
     draw_paragraph("Quito - Ecuador", style_centered)
-    # --- INICIO DE NUESTROS CAMBIOS (Añadir firmas y notas) ---
-    y -= 10 * mm  # Un espacio antes de las firmas
+    y -= 10 * mm 
 
     # Firma Cliente
-    c.line(8 * mm, y, width - (8 * mm), y)  # Línea de firma
+    c.line(8 * mm, y, width - (8 * mm), y)
     y -= 4 * mm
     draw_paragraph("Firma Cliente", style_centered)
     draw_paragraph(f"C.C: {sale.customer_ci}", style_centered)
 
-    y -= 10 * mm  # Espacio entre firmas
+    y -= 10 * mm 
 
     # Firma Vendedor
-    c.line(8 * mm, y, width - (8 * mm), y)  # Línea de firma
+    c.line(8 * mm, y, width - (8 * mm), y) 
     y -= 4 * mm
     draw_paragraph("Vendedor", style_centered)
-    draw_paragraph(f"{sale.user.email}", style_centered)
+    if sale.user:
+        draw_paragraph(f"{sale.user.email}", style_centered)
 
-    y -= 10 * mm  # Espacio para notas
+    y -= 10 * mm 
     draw_paragraph("Notas:", style_normal, margin_left=5 * mm)
-    y -= 15 * mm  # Un recuadro vacío para notas
+    y -= 15 * mm 
     c.rect(5 * mm, y, width - (10 * mm), 15 * mm)
-    # --- FIN DE NUESTROS CAMBIOS ---
 
     c.showPage()
     c.save()

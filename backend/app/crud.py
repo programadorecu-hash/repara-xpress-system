@@ -234,6 +234,16 @@ def add_work_order_image(db: Session, work_order_id: int, image_url: str, tag: s
     db.refresh(db_image)
     return db_image
 
+def get_work_order_image(db: Session, image_id: int):
+    return db.query(models.WorkOrderImage).filter(models.WorkOrderImage.id == image_id).first()
+
+def delete_work_order_image(db: Session, image_id: int):
+    db_image = get_work_order_image(db, image_id)
+    if db_image:
+        db.delete(db_image)
+        db.commit()
+    return db_image
+
 # ===================================================================
 # --- UBICACIONES ---
 # ===================================================================
@@ -898,6 +908,51 @@ def create_sale(db: Session, sale: schemas.SaleCreate, user_id: int, location_id
             db.add(new_customer)
         # --- FIN LÓGICA CLIENTE INTELIGENTE ---
 
+        # --- LÓGICA DE RECIBO LEGAL (CORRECCIÓN TOTALES) ---
+        # Si estamos cobrando el saldo final de una reparación, re-calculamos la venta
+        # para que refleje el TOTAL ($25) y muestre el abono ($5) como pago previo.
+        if sale.work_order_id:
+            db_work_order = get_work_order(db, work_order_id=sale.work_order_id)
+            # Solo aplicamos si existe abono previo
+            if db_work_order and (db_work_order.deposit_amount or 0) > 0:
+                # Calculamos cuánto falta por pagar (Saldo = Total - Abono)
+                real_total = db_work_order.final_cost if db_work_order.final_cost is not None else db_work_order.estimated_cost
+                pending_balance = real_total - db_work_order.deposit_amount
+                
+                # Calculamos cuánto está pagando el cliente AHORA
+                amount_paying_now = sum(p.amount for p in sale.payments)
+
+                # TRUCO: Solo activamos esta lógica si el cliente está pagando el SALDO COMPLETO (o casi)
+                # Si es solo el depósito inicial ($5), esta condición falla y no hace nada (correcto).
+                if abs(amount_paying_now - pending_balance) < 0.02:
+                    
+                    # 1. Ajustamos el ítem de venta para que cueste el TOTAL ($25)
+                    if sale.items:
+                        sale.items[0].unit_price = real_total
+                        # sale.items[0].description += " (Valor Total)"
+
+                    # 2. Reconstruimos los pagos: [Anticipo: $5] + [Efectivo: $20]
+                    # Asumimos que el método de hoy es el que envió el frontend (ej: EFECTIVO)
+                    current_method = sale.payments[0].method if sale.payments else "EFECTIVO"
+                    
+                    new_payments = []
+                    # Agregamos el Anticipo
+                    new_payments.append(schemas.PaymentDetail(
+                        method="ANTICIPO",
+                        amount=db_work_order.deposit_amount,
+                        reference="Abono previo"
+                    ))
+                    # Agregamos el Pago de Hoy
+                    new_payments.append(schemas.PaymentDetail(
+                        method=current_method,
+                        amount=amount_paying_now,
+                        reference="Cancelación de saldo"
+                    ))
+                    
+                    sale.payments = new_payments
+                    sale.payment_method = "MIXTO" # Forzamos mixto para que el PDF detalle ambos
+        # ---------------------------------------------------
+
         # 1. Calcular totales de productos
         subtotal_decimal = Decimal("0.00")
         sale_items_to_create = []
@@ -1004,8 +1059,16 @@ def create_sale(db: Session, sale: schemas.SaleCreate, user_id: int, location_id
                 #    Usamos un margen de 0.02 para evitar errores de decimales.
                 #    Si (Venta >= Saldo Pendiente), entonces completó el pago.
                 if subtotal_amount >= (pending_balance - 0.02):
-                    db_work_order.status = "ENTREGADO"
-                    db_work_order.final_cost = db_work_order.estimated_cost
+                    # --- CORRECCIÓN DE REGLA DE NEGOCIO ---
+                    # Solo marcamos como ENTREGADO si el equipo ya estaba LISTO.
+                    # Si el equipo apenas está RECIBIDO o REPARANDO, y el cliente paga por adelantado,
+                    # NO debemos cambiar el estado a ENTREGADO todavía.
+                    if db_work_order.status == "LISTO":
+                        db_work_order.status = "ENTREGADO"
+                        db_work_order.final_cost = db_work_order.estimated_cost
+                    # Si no estaba LISTO, simplemente se registra el pago y el saldo baja a 0,
+                    # pero el estado se mantiene (ej: REPARANDO).
+                    # --------------------------------------
                 
                 # Si la venta es menor al saldo (ej: Abono de $10 para una deuda de $30),
                 # NO hacemos nada con el estado. La orden sigue abierta.

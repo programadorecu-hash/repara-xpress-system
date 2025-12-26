@@ -137,6 +137,7 @@ class WorkOrder(Base):
     
     # Problema y Costos (sin cambios)
     reported_issue = Column(String, nullable=False)
+    physical_condition = Column(String, nullable=True)
     estimated_cost = Column(Float, nullable=False)
     deposit_amount = Column(Float, default=0, nullable=False)
     final_cost = Column(Float, nullable=True)

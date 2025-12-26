@@ -54,3 +54,23 @@ export async function addWorkOrderNote(workOrderId, message) {
   return data; // Nota creada con user y location cargados
 }
 // ===== FIN API: Notas =====
+
+
+// ===== API: Entregar Sin Reparar =====
+export async function deliverWorkOrderUnrepaired(workOrderId, { diagnostic_fee, reason, pin }) {
+  // Llama a la ventanilla especial que creamos en el backend
+  const { data } = await apiClient.post(`/work-orders/${workOrderId}/deliver-unrepaired`, {
+    diagnostic_fee,
+    reason,
+    pin
+  });
+  return data;
+}
+// ===== FIN API =====
+
+
+// Borrar foto de orden
+export async function deleteWorkOrderImage(imageId) {
+  const { data } = await apiClient.delete(`/work-order-images/${imageId}`);
+  return data;
+}

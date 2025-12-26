@@ -6,6 +6,16 @@ import WorkOrderForm from "../components/WorkOrderForm.jsx";
 
 import WorkOrderNotes from "../components/WorkOrderNotes.jsx"; // Panel de notas internas
 
+// --- Diccionario de Estados Bonitos ---
+const STATUS_LABELS = {
+  RECIBIDO: "Recibido",
+  EN_REVISION: "En Revisión",
+  REPARANDO: "Reparando",
+  LISTO: "Listo",
+  ENTREGADO: "Entregado",
+  SIN_REPARACION: "Sin Reparación"
+};
+
 function WorkOrderPage() {
   const [workOrders, setWorkOrders] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -13,11 +23,8 @@ function WorkOrderPage() {
   const { user } = useContext(AuthContext);
 
   // --- 2. NUEVOS ESTADOS PARA MANEJAR EL FORMULARIO ---
-  // 'isFormOpen': Un interruptor para mostrar u ocultar el formulario.
   const [isFormOpen, setIsFormOpen] = useState(false);
-  // 'selectedOrderId': Guarda el ID de la orden que queremos editar. Si es null, creamos una nueva.
   const [selectedOrderId, setSelectedOrderId] = useState(null);
-  // Controla qué orden tiene su panel de "Notas" abierto (id) o null si ninguna
   const [notesOpenFor, setNotesOpenFor] = useState(null);
 
   // Función para cargar o recargar la lista de órdenes.
@@ -44,7 +51,6 @@ function WorkOrderPage() {
   };
 
   const groupOrdersByLocation = (orders) => {
-    // ... (esta función no cambia)
     return orders.reduce((acc, order) => {
       const locationName = order.location.name;
       if (!acc[locationName]) {
@@ -79,22 +85,31 @@ function WorkOrderPage() {
   };
 
   const handleSave = (savedOrder) => {
-    // Si 'savedOrder' tiene datos (lo que sucede al crear una nueva orden)
-    // y actualmente no tenemos ningún ID seleccionado, actualizamos el ID.
     if (savedOrder && !selectedOrderId) {
       setSelectedOrderId(savedOrder.id);
     }
-    // Siempre refrescamos la lista principal.
     fetchWorkOrders();
+  };
+
+  // --- 4. FUNCIÓN PARA EL CAMBIO RÁPIDO DE ESTADO ---
+  const handleStatusChange = async (orderId, newStatus) => {
+    try {
+      // Llamada directa a la API para actualizar solo el estado
+      await api.patch(`/work-orders/${orderId}`, { status: newStatus });
+      // Recargamos la lista silenciosamente para reflejar cambios
+      fetchWorkOrders();
+    } catch (error) {
+      alert("Error al cambiar estado: " + (error.response?.data?.detail || error.message));
+    }
   };
 
   if (loading && workOrders.length === 0)
     return (
-      <p className="text-center text-gray-500">
+      <p className="text-center text-gray-500 animate-pulse mt-10">
         Cargando órdenes de trabajo...
       </p>
     );
-  if (error) return <p className="text-center text-red-500">{error}</p>;
+  if (error) return <p className="text-center text-red-500 mt-10">{error}</p>;
 
   return (
     <>
@@ -104,7 +119,7 @@ function WorkOrderPage() {
           {/* El botón ahora abre el formulario de creación */}
           <button
             onClick={handleOpenCreateForm}
-            className="bg-brand text-white font-bold py-2 px-4 rounded-lg"
+            className="bg-brand text-white font-bold py-2 px-4 rounded-lg shadow hover:bg-indigo-900 transition-colors"
           >
             + Nueva Orden
           </button>
@@ -115,7 +130,7 @@ function WorkOrderPage() {
             {groupedOrders &&
               Object.keys(groupedOrders).map((locationName) => (
                 <div key={locationName}>
-                  <h2 className="text-xl font-semibold mb-3 border-b pb-2">
+                  <h2 className="text-xl font-semibold mb-3 border-b pb-2 text-gray-700">
                     {locationName}
                   </h2>
                   <WorkOrderTable
@@ -124,6 +139,7 @@ function WorkOrderPage() {
                     onEdit={handleOpenEditForm}
                     notesOpenFor={notesOpenFor}
                     setNotesOpenFor={setNotesOpenFor}
+                    onStatusChange={handleStatusChange} // Pasamos la función nueva
                   />
                 </div>
               ))}
@@ -135,12 +151,12 @@ function WorkOrderPage() {
             onEdit={handleOpenEditForm}
             notesOpenFor={notesOpenFor}
             setNotesOpenFor={setNotesOpenFor}
+            onStatusChange={handleStatusChange} // Pasamos la función nueva
           />
         )}
       </div>
 
-      {/* --- 4. RENDERIZADO DEL FORMULARIO MODAL --- */}
-      {/* El formulario solo se mostrará si isFormOpen es true */}
+      {/* --- RENDERIZADO DEL FORMULARIO MODAL --- */}
       {isFormOpen && (
         <WorkOrderForm
           orderId={selectedOrderId}
@@ -152,13 +168,14 @@ function WorkOrderPage() {
   );
 }
 
-// Actualizamos la tabla para que pueda llamar a la función de editar
+// Actualizamos la tabla para incluir el selector de estado
 const WorkOrderTable = ({
   orders,
   formatDate,
   onEdit,
   notesOpenFor,
   setNotesOpenFor,
+  onStatusChange // Recibimos la función
 }) => (
   <div className="overflow-x-auto">
     {orders.length === 0 ? (
@@ -166,69 +183,67 @@ const WorkOrderTable = ({
         No hay órdenes de trabajo para mostrar.
       </p>
     ) : (
-      <table className="min-w-full bg-white">
-        <thead className="bg-gray-100">
+      <table className="min-w-full bg-white text-sm">
+        <thead className="bg-gray-100 text-gray-600 font-medium">
           <tr>
-            <th className="py-3 px-4 text-left">N° Orden</th>
+            <th className="py-3 px-4 text-left">N°</th>
             <th className="py-3 px-4 text-left">Cliente</th>
-            <th className="py-3 px-4 text-left">Dispositivo</th>
+            <th className="py-3 px-4 text-left">Equipo</th>
             <th className="py-3 px-4 text-left">Fecha</th>
             <th className="py-3 px-4 text-left">Estado</th>
             <th className="py-3 px-4 text-center">Acciones</th>
           </tr>
         </thead>
-        <tbody>
+        <tbody className="divide-y divide-gray-100">
           {orders.map((order) => (
             // Agrupamos las dos filas (la normal y la expandida de notas) en un único Fragment
             <React.Fragment key={order.id}>
-              <tr className="border-b hover:bg-gray-50">
+              <tr className="hover:bg-gray-50 transition-colors">
                 {/* N° Orden */}
-                <td className="py-3 px-4 font-mono font-bold">
+                <td className="py-3 px-4 font-mono font-bold text-accent">
                   {order.work_order_number}
                 </td>
 
                 {/* Cliente + contacto */}
                 <td className="py-3 px-4">
-                  <div className="font-medium text-sm">
+                  <div className="font-bold text-gray-800">
                     {order.customer_name}
                   </div>
                   <div className="text-xs text-gray-500">
                     {order.customer_phone}
                   </div>
-                  {order.customer_email && (
-                    <div className="text-xs text-gray-500">
-                      {order.customer_email}
-                    </div>
-                  )}
-                  {order.customer_address && (
-                    <div className="text-xs text-gray-400">
-                      {order.customer_address}
-                    </div>
-                  )}
                 </td>
 
                 {/* Dispositivo */}
-                <td className="py-3 px-4">{`${order.device_brand} ${order.device_model}`}</td>
+                <td className="py-3 px-4 text-gray-700">{`${order.device_brand} ${order.device_model}`}</td>
 
                 {/* Fecha */}
-                <td className="py-3 px-4">{formatDate(order.created_at)}</td>
+                <td className="py-3 px-4 text-gray-500">{formatDate(order.created_at)}</td>
 
-                {/* Estado */}
+                {/* --- CAMBIO: Selector de Estado Rápido --- */}
                 <td className="py-3 px-4">
-                  <span
-                    className={`px-2 py-1 text-xs font-semibold rounded-full ${
-                      order.status === "RECIBIDO"
-                        ? "bg-blue-200 text-blue-800"
-                        : order.status === "LISTO"
-                        ? "bg-green-200 text-green-800"
-                        : order.status === "ENTREGADO"
-                        ? "bg-gray-200 text-gray-800"
-                        : "bg-yellow-200 text-yellow-800"
-                    }`}
-                  >
-                    {order.status.replace("_", " ")}
-                  </span>
+                   <select
+                      value={order.status}
+                      onClick={(e) => e.stopPropagation()} // Para que no active otros clicks si los hubiera
+                      onChange={(e) => onStatusChange(order.id, e.target.value)}
+                      className={`
+                        text-xs font-bold py-1 px-2 rounded-full cursor-pointer border-0 ring-1 ring-inset focus:ring-2 focus:ring-inset focus:ring-accent outline-none
+                        ${order.status === 'LISTO' ? 'bg-green-100 text-green-700 ring-green-600/20' : ''}
+                        ${order.status === 'RECIBIDO' ? 'bg-blue-100 text-blue-700 ring-blue-700/10' : ''}
+                        ${order.status === 'REPARANDO' ? 'bg-yellow-100 text-yellow-800 ring-yellow-600/20' : ''}
+                        ${order.status === 'EN_REVISION' ? 'bg-purple-100 text-purple-700 ring-purple-600/20' : ''}
+                        ${order.status === 'SIN_REPARACION' ? 'bg-red-50 text-red-700 ring-red-600/10' : ''}
+                        ${order.status === 'ENTREGADO' ? 'bg-gray-100 text-gray-600 ring-gray-500/10' : ''}
+                      `}
+                    >
+                      {Object.keys(STATUS_LABELS).map((key) => (
+                        <option key={key} value={key}>
+                          {STATUS_LABELS[key]}
+                        </option>
+                      ))}
+                    </select>
                 </td>
+                {/* ------------------------------------------ */}
 
                 {/* Acciones */}
                 <td className="py-3 px-4 text-center space-x-3">
@@ -239,15 +254,15 @@ const WorkOrderTable = ({
                         notesOpenFor === order.id ? null : order.id
                       )
                     }
-                    className="text-brand-deep hover:underline text-brand"
+                    className="text-brand-deep hover:underline text-brand text-xs font-medium"
                   >
-                    {notesOpenFor === order.id ? "Ocultar notas" : "Notas"}
+                    {notesOpenFor === order.id ? "Ocultar" : "Notas"}
                   </button>
 
                   {/* Ver/Editar (tu flujo existente) */}
                   <button
                     onClick={() => onEdit(order.id)}
-                    className="text-blue-500 hover:underline text-brand-deep"
+                    className="text-blue-500 hover:underline text-brand-deep text-xs font-medium"
                   >
                     Ver/Editar
                   </button>
@@ -256,7 +271,7 @@ const WorkOrderTable = ({
 
               {/* Fila expandible de NOTAS (ocupa todo el ancho: colSpan debe igualar el # de columnas del thead) */}
               {notesOpenFor === order.id && (
-                <tr className="bg-gray-50">
+                <tr className="bg-gray-50 border-b border-gray-200">
                   <td colSpan={6} className="py-3 px-4">
                     <WorkOrderNotes workOrderId={order.id} />
                   </td>

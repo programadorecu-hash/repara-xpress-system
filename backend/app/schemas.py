@@ -73,6 +73,7 @@ class WorkOrderBase(BaseModel):
     device_model: str
     device_serial: Optional[str] = None
     reported_issue: str
+    physical_condition: Optional[str] = None
     estimated_cost: float
     deposit_amount: float = 0
     
@@ -266,6 +267,25 @@ class WorkOrderUpdate(BaseModel):
     customer_phone: str | None = None
     customer_address: str | None = None
     customer_email: str | None = None
+    
+    # --- HABILITAMOS LA EDICIÓN DE ESTOS CAMPOS ---
+    estimated_cost: float | None = None
+    reported_issue: str | None = None
+    physical_condition: str | None = None # El nuevo campo
+    
+    # Datos de seguridad del equipo
+    device_password: str | None = None
+    device_unlock_pattern: str | None = None
+    device_account: str | None = None
+    device_account_password: str | None = None
+    # ----------------------------------------------
+
+# --- INICIO CAMBIO: Formulario para Entregar Sin Reparar ---
+class WorkOrderDeliverUnrepaired(BaseModel):
+    diagnostic_fee: float = 2.00 # Por defecto sugerimos $2
+    reason: str | None = "Cliente retiró equipo sin reparar"
+    pin: str # Firma de seguridad
+# --- FIN CAMBIO ---
 class SupplierCreate(SupplierBase):
     pass
 class PurchaseInvoiceItemCreate(PurchaseInvoiceItemBase):
@@ -391,25 +411,36 @@ class WorkOrder(WorkOrderBase):
 
         # ===== Esquema público: no expone datos sensibles de la orden =====
 class WorkOrderPublic(BaseModel):
-    # --- Campos visibles (seguros) ---
+    # --- Campos visibles ---
     id: int
     created_at: datetime
     status: str
     final_cost: float | None = None
 
-    # Datos del cliente (sin contraseñas de dispositivo)
+    # Datos del cliente
     customer_name: str
     customer_id_card: str
     customer_phone: str
     customer_address: Optional[str] = None
     customer_email: Optional[str] = None
 
-    # Datos del equipo (sin contraseñas ni patrones)
+    # Datos del equipo
     device_type: str
     device_brand: str
     device_model: str
     device_serial: Optional[str] = None
     reported_issue: str
+    
+    # --- NUEVOS CAMPOS VISIBLES PARA EL TÉCNICO ---
+    physical_condition: Optional[str] = None 
+    device_password: Optional[str] = None
+    device_unlock_pattern: Optional[str] = None
+    device_account: Optional[str] = None
+    device_account_password: Optional[str] = None
+    device_initial_check: Optional[Dict[str, Any]] = None 
+    customer_declined_check: Optional[bool] = False
+    # ----------------------------------------------
+
     estimated_cost: float
     deposit_amount: float = 0
 
