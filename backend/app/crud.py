@@ -1645,3 +1645,51 @@ def auto_close_all_open_shifts(db: Session):
     db.commit()
     return count
 # --- FIN LÓGICA CIERRE AUTOMÁTICO ---
+
+# ===================================================================
+# --- CONFIGURACIÓN DE EMPRESA (IDENTIDAD) ---
+# ===================================================================
+def get_company_settings(db: Session):
+    """
+    Obtiene la configuración de la empresa.
+    Si NO existe (primera vez), crea una por defecto.
+    """
+    settings = db.query(models.CompanySettings).first()
+    if not settings:
+        # Creamos la identidad por defecto si está vacía
+        settings = models.CompanySettings(
+            name="Repara Xpress (Default)",
+            ruc="9999999999001",
+            address="Dirección Principal",
+            phone="0999999999",
+            email="info@miempresa.com"
+        )
+        db.add(settings)
+        db.commit()
+        db.refresh(settings)
+    return settings
+
+def update_company_settings(db: Session, settings: schemas.CompanySettingsCreate):
+    """
+    Actualiza los datos de la empresa.
+    """
+    db_settings = get_company_settings(db) # Obtenemos la existente (o la default)
+    
+    # Actualizamos campos
+    update_data = settings.model_dump(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(db_settings, key, value)
+
+    db.commit()
+    db.refresh(db_settings)
+    return db_settings
+
+def update_company_logo(db: Session, logo_url: str):
+    """
+    Actualiza solo el logo.
+    """
+    db_settings = get_company_settings(db)
+    db_settings.logo_url = logo_url
+    db.commit()
+    db.refresh(db_settings)
+    return db_settings

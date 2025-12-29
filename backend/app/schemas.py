@@ -34,6 +34,11 @@ class ProductImage(ProductImageBase):
 class LocationBase(BaseModel):
     name: str
     description: str | None = None
+    address: str | None = None
+    # --- NUEVOS CAMPOS ---
+    phone: str | None = None
+    email: str | None = None
+    # ---------------------
     parent_id: int | None = None
 
 class StockBase(BaseModel):
@@ -617,6 +622,27 @@ class CreditNote(BaseModel):
     amount: float
     reason: str
     created_at: datetime
+    class Config:
+        from_attributes = True
+# --- FIN DE NUESTRO CÓDIGO ---
+
+# --- INICIO DE NUESTRO CÓDIGO (Schemas de Empresa) ---
+class CompanySettingsBase(BaseModel):
+    name: str
+    ruc: str
+    email: str | None = None
+    phone: str | None = None
+    address: str | None = None
+    footer_message: str | None = None
+
+class CompanySettingsCreate(CompanySettingsBase):
+    pass
+
+class CompanySettings(CompanySettingsBase):
+    id: int
+    logo_url: str | None = None
+    updated_at: datetime | None = None
+
     class Config:
         from_attributes = True
 # --- FIN DE NUESTRO CÓDIGO ---

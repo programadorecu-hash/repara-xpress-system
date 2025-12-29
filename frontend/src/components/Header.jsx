@@ -3,6 +3,9 @@
 import React, { useContext } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { AuthContext } from "../context/AuthContext.jsx";
+// Importamos la función para leer datos
+import { getCompanySettings } from "../services/api";
+import { useEffect, useState } from "react";
 
 // Importamos los íconos
 import { 
@@ -40,6 +43,20 @@ function NavItem({ to, icon, label, isExpanded }) {
 function Header({ isMenuOpen, onToggle }) {
   const { token, user, activeShift, logout } = useContext(AuthContext);
   const navigate = useNavigate();
+  
+  // Estado para guardar el nombre de la empresa
+  const [companyName, setCompanyName] = useState("Repara Xpress");
+
+  // Efecto para cargar el nombre real
+  useEffect(() => {
+    if (token) {
+        getCompanySettings()
+            .then(data => {
+                if (data && data.name) setCompanyName(data.name);
+            })
+            .catch(err => console.error("Error cargando nombre empresa", err));
+    }
+  }, [token]);
 
   const canManageInventory = user?.role === "admin" || user?.role === "inventory_manager";
   const canManageCash = user?.role === "admin";
@@ -75,8 +92,8 @@ function Header({ isMenuOpen, onToggle }) {
         {/* Sección Superior: Logo */}
         <div className={`flex ${isMenuOpen ? 'justify-between' : 'justify-center'} items-center px-2 flex-shrink-0`}>
           {isMenuOpen && (
-            <div className="text-white font-bold text-xl">
-              Repara Xpress
+            <div className="text-white font-bold text-xl truncate px-2">
+              {companyName}
             </div>
           )}
           
@@ -136,6 +153,15 @@ function Header({ isMenuOpen, onToggle }) {
               to="/configuracion/notificaciones" 
               label="Config. Alertas" 
               icon={<HiOutlineBell />} 
+              isExpanded={isMenuOpen} 
+            />
+          )}
+          {/* Nuevo enlace para Configuración de Empresa (Solo Admins) */}
+          {user?.role === "admin" && (
+            <NavItem 
+              to="/configuracion/empresa" 
+              label="Datos Empresa" 
+              icon={<HiOutlineOfficeBuilding />} 
               isExpanded={isMenuOpen} 
             />
           )}

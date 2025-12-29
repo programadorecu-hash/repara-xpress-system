@@ -1,16 +1,16 @@
 // frontend/src/pages/LocationsPage.jsx
-// Esta es la nueva página del "Arquitecto" para crear Sucursales
-
 import React, { useState, useEffect } from 'react';
 import api from '../services/api';
 import DataTable from '../components/DataTable.jsx';
 import ModalForm from '../components/ModalForm.jsx';
 
-// El "plano" vacío para una nueva sucursal
+// El "plano" actualizado para una nueva sucursal
 const emptyForm = {
   name: '',
   description: '',
   address: '',
+  phone: '', // Nuevo
+  email: '', // Nuevo
 };
 
 function LocationsPage() {
@@ -22,9 +22,8 @@ function LocationsPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [formState, setFormState] = useState(emptyForm);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [editingId, setEditingId] = useState(null); // Para saber si estamos creando o editando
+  const [editingId, setEditingId] = useState(null);
 
-  // Cargar la lista de sucursales cuando la página se abre
   useEffect(() => {
     fetchLocations();
   }, []);
@@ -33,8 +32,6 @@ function LocationsPage() {
     try {
       setIsLoading(true);
       setError('');
-      // Llamamos al "camarero" para que nos traiga la lista de sucursales
-      // (Gracias al cambio en crud.py, esto solo traerá las "Oficinas Principales")
       const response = await api.get('/locations/');
       setLocations(response.data);
     } catch (err) {
@@ -44,22 +41,21 @@ function LocationsPage() {
     }
   };
 
-  // Abrir el formulario (modal)
   const handleOpenModal = (location = null) => {
     if (location) {
-      // Si estamos editando, llenamos el formulario con los datos
       setFormState({
         name: location.name,
         description: location.description || '',
         address: location.address || '',
+        phone: location.phone || '', // Cargar teléfono
+        email: location.email || '', // Cargar email
       });
       setEditingId(location.id);
     } else {
-      // Si estamos creando, usamos el formulario vacío
       setFormState(emptyForm);
       setEditingId(null);
     }
-    setError(''); // Limpiamos errores viejos
+    setError('');
     setIsModalOpen(true);
   };
 
@@ -67,16 +63,17 @@ function LocationsPage() {
     setIsModalOpen(false);
   };
 
-  // Actualizar el estado del formulario mientras el admin escribe
   const handleFormChange = (event) => {
     const { name, value } = event.target;
+    // Truco: Para el email no queremos mayúsculas forzadas
+    const finalValue = name === 'email' ? value : value.toUpperCase();
+    
     setFormState((prev) => ({
       ...prev,
-      [name]: value.toUpperCase(),
+      [name]: finalValue,
     }));
   };
 
-  // Enviar el formulario al backend
   const handleSubmit = async () => {
     if (!formState.name) {
       setError('El nombre de la sucursal es obligatorio.');
@@ -88,15 +85,12 @@ function LocationsPage() {
 
     try {
       if (editingId) {
-        // Si teníamos un ID, actualizamos (PUT)
         await api.put(`/locations/${editingId}`, formState);
       } else {
-        // Si no, creamos (POST)
-        // Aquí es donde el backend hará la "Magia 2x1"
         await api.post('/locations/', formState);
       }
-      fetchLocations(); // Recargamos la lista
-      handleCloseModal(); // Cerramos el formulario
+      fetchLocations();
+      handleCloseModal();
     } catch (err) {
       setError(err.response?.data?.detail || 'No se pudo guardar la sucursal.');
     } finally {
@@ -104,10 +98,11 @@ function LocationsPage() {
     }
   };
 
-  // Definir las columnas para la tabla de sucursales
+  // Columnas actualizadas para mostrar contacto
   const columns = [
     { key: 'name', label: 'Nombre Sucursal' },
     { key: 'address', label: 'Dirección' },
+    { key: 'phone', label: 'Teléfono' }, // Nueva columna
     { key: 'description', label: 'Descripción' },
   ];
 
@@ -117,12 +112,12 @@ function LocationsPage() {
         <div>
           <h1 className="text-2xl font-bold text-secondary">Administrar Sucursales</h1>
           <p className="text-sm text-gray-500">
-            Crea o edita las oficinas de tu negocio.
+            Define la información de contacto para cada local.
           </p>
         </div>
         <button
           onClick={() => handleOpenModal()}
-          className="bg-accent text-white font-semibold py-2 px-4 rounded-lg"
+          className="bg-accent text-white font-semibold py-2 px-4 rounded-lg hover:bg-teal-600 transition"
         >
           + Nueva Sucursal
         </button>
@@ -148,17 +143,16 @@ function LocationsPage() {
         />
       )}
 
-      {/* Este es el formulario que aparece/desaparece */}
       <ModalForm
         title={editingId ? 'Editar Sucursal' : 'Crear Nueva Sucursal'}
         isOpen={isModalOpen}
         onClose={handleCloseModal}
         onSubmit={handleSubmit}
         isSubmitting={isSubmitting}
-        footer="Al crear una sucursal, se creará automáticamente una bodega asociada."
+        footer="La información de contacto (dirección, teléfono) aparecerá en los recibos emitidos desde esta sucursal."
       >
-        <div className="grid grid-cols-1 gap-4">
-          <div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="md:col-span-2">
             <label className="block text-sm font-semibold text-gray-700">Nombre *</label>
             <input
               type="text"
@@ -166,11 +160,12 @@ function LocationsPage() {
               value={formState.name}
               onChange={handleFormChange}
               className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent"
-              placeholder="Ej: Sucursal Matriz - Nueva Aurora"
+              placeholder="Ej: SUCURSAL NORTE"
               required
             />
           </div>
-          <div>
+          
+          <div className="md:col-span-2">
             <label className="block text-sm font-semibold text-gray-700">Dirección</label>
             <input
               type="text"
@@ -178,10 +173,36 @@ function LocationsPage() {
               value={formState.address}
               onChange={handleFormChange}
               className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent"
-              placeholder="Ej: Gral. Julio Andrade, Quito 170701"
+              placeholder="Ej: Av. Amazonas y Naciones Unidas"
+            />
+            <p className="text-xs text-gray-500 mt-1">Si se deja vacío, se usará la dirección de la Matriz.</p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-gray-700">Teléfono</label>
+            <input
+              type="text"
+              name="phone"
+              value={formState.phone}
+              onChange={handleFormChange}
+              className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent"
+              placeholder="Ej: 0991234567"
             />
           </div>
+
           <div>
+            <label className="block text-sm font-semibold text-gray-700">Email</label>
+            <input
+              type="email"
+              name="email"
+              value={formState.email}
+              onChange={handleFormChange}
+              className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent"
+              placeholder="sucursal@ejemplo.com"
+            />
+          </div>
+
+          <div className="md:col-span-2">
             <label className="block text-sm font-semibold text-gray-700">Descripción</label>
             <textarea
               name="description"
@@ -189,7 +210,7 @@ function LocationsPage() {
               value={formState.description}
               onChange={handleFormChange}
               className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent"
-              placeholder="Ej: Sucursal principal en el sur de Quito"
+              placeholder="Notas internas sobre esta ubicación"
             />
           </div>
         </div>

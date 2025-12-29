@@ -906,19 +906,20 @@ def print_work_order(
     if db_work_order is None:
         raise HTTPException(status_code=404, detail="Orden de trabajo no encontrada")
 
-    # --- ¡LA MAGIA SUCEDE AQUÍ! ---
-    # 1. Convertimos el objeto de la base de datos a un esquema "inteligente" PRIMERO.
+    # 1. Recuperamos la configuración de la empresa
+    company_settings = crud.get_company_settings(db)
+
+    # 2. Convertimos a Schema
     schema_work_order = schemas.WorkOrder.model_validate(db_work_order)
+    schema_settings = schemas.CompanySettings.model_validate(company_settings)
 
-    # 2. Ahora usamos 'schema_work_order' para TODO lo que sigue.
-    pdf_buffer = pdf_utils.generate_work_order_pdf(schema_work_order)
+    # 3. Generamos PDF pasándole AMBOS datos
+    pdf_buffer = pdf_utils.generate_work_order_pdf(schema_work_order, schema_settings)
 
-    # 3. Creamos las cabeceras USANDO el objeto correcto.
     headers = {
         'Content-Disposition': f'inline; filename="orden_{schema_work_order.work_order_number}.pdf"'
     }
 
-    # 4. Enviamos el PDF como una respuesta.
     return StreamingResponse(pdf_buffer, media_type="application/pdf", headers=headers)
 
 # ===================================================================
@@ -1102,8 +1103,16 @@ def get_sale_receipt(
     if db_sale is None:
         raise HTTPException(status_code=404, detail="Venta no encontrada")
 
+    # 1. Recuperamos la configuración de la empresa
+    company_settings = crud.get_company_settings(db)
+
+    # 2. Convertimos a Schema
     sale_schema = schemas.Sale.model_validate(db_sale)
-    pdf_buffer = pdf_utils.generate_sale_receipt_pdf(sale_schema)
+    settings_schema = schemas.CompanySettings.model_validate(company_settings)
+
+    # 3. Generamos PDF pasando los settings
+    pdf_buffer = pdf_utils.generate_sale_receipt_pdf(sale_schema, settings_schema)
+    
     headers = {
         "Content-Disposition": f'inline; filename="venta_{sale_schema.id}.pdf"'
     }
@@ -1332,6 +1341,50 @@ def refund_sale(
     except ValueError as e:
         raise HTTPException(status_code=403, detail=str(e))
 # --- FIN DE NUESTRO CÓDIGO ---
+
+# ===================================================================
+# --- ENDPOINTS PARA IDENTIDAD DE EMPRESA ---
+# ===================================================================
+@app.get("/company/settings", response_model=schemas.CompanySettings)
+def read_company_settings(db: Session = Depends(get_db)):
+    """Devuelve la identidad de la empresa (Nombre, RUC, Logo, etc.)"""
+    return crud.get_company_settings(db)
+
+@app.put("/company/settings", response_model=schemas.CompanySettings)
+def update_company_settings(
+    settings: schemas.CompanySettingsCreate, 
+    db: Session = Depends(get_db),
+    # Solo administradores pueden cambiar el nombre de la empresa
+    _role: None = Depends(security.require_role(["admin"]))
+):
+    return crud.update_company_settings(db, settings)
+
+@app.post("/company/logo", response_model=schemas.CompanySettings)
+def upload_company_logo(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    _role: None = Depends(security.require_role(["admin"]))
+):
+    # 1. Validaciones básicas de imagen
+    allowed_types = ["image/jpeg", "image/png", "image/webp"]
+    if file.content_type not in allowed_types:
+        raise HTTPException(status_code=400, detail="Solo JPG, PNG o WEBP")
+    
+    # 2. Guardar archivo
+    base_upload_dir = "/code/uploads/company"
+    os.makedirs(base_upload_dir, exist_ok=True)
+    
+    file_ext = os.path.splitext(file.filename)[1].lower()
+    filename = f"logo_empresa{file_ext}" # Siempre se llamará logo_empresa para reemplazar el viejo
+    file_path = os.path.join(base_upload_dir, filename)
+    
+    contents = file.file.read()
+    with open(file_path, "wb") as buffer:
+        buffer.write(contents)
+        
+    # 3. Actualizar BD
+    logo_url = f"/uploads/company/{filename}"
+    return crud.update_company_logo(db, logo_url)
 
 
 # ===================================================================

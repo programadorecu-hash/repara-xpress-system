@@ -33,6 +33,8 @@ class Location(Base):
     name = Column(String, index=True, nullable=False)
     description = Column(String, nullable=True)
     address = Column(String, nullable=True)
+    phone = Column(String, nullable=True) 
+    email = Column(String, nullable=True)
     parent_id = Column(Integer, ForeignKey("locations.id"), nullable=True)
     stock_entries = relationship("Stock", back_populates="location")
     movements = relationship("InventoryMovement", back_populates="location")
@@ -372,4 +374,26 @@ class CreditNote(Base):
     customer = relationship("Customer")
     user = relationship("User")
     sale = relationship("Sale")
+# --- FIN DE NUESTRO CÓDIGO ---
+
+# --- INICIO DE NUESTRO CÓDIGO (Identidad de la Empresa) ---
+class CompanySettings(Base):
+    __tablename__ = "company_settings"
+    id = Column(Integer, primary_key=True, index=True)
+    
+    # Datos generales
+    name = Column(String, default="Mi Empresa")
+    ruc = Column(String, default="9999999999001")
+    email = Column(String, nullable=True)
+    phone = Column(String, nullable=True)
+    address = Column(String, nullable=True)
+    
+    # Logo (guardaremos la URL de la imagen)
+    logo_url = Column(String, nullable=True)
+    
+    # Mensaje pie de página para recibos
+    footer_message = Column(String, default="Gracias por su compra")
+
+    # Configuración actualizada el:
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 # --- FIN DE NUESTRO CÓDIGO ---

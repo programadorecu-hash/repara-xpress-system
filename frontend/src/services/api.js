@@ -74,3 +74,24 @@ export async function deleteWorkOrderImage(imageId) {
   const { data } = await apiClient.delete(`/work-order-images/${imageId}`);
   return data;
 }
+
+// ===== API: Configuración de Empresa =====
+export async function getCompanySettings() {
+  const { data } = await apiClient.get('/company/settings');
+  return data;
+}
+
+export async function updateCompanySettings(settings) {
+  const { data } = await apiClient.put('/company/settings', settings);
+  return data;
+}
+
+// Subir logo de empresa (similar a subir foto de producto)
+export async function uploadCompanyLogo(file) {
+  const formData = new FormData();
+  formData.append('file', file);
+  // No necesitamos poner headers manuales, el interceptor lo hace
+  const { data } = await apiClient.post('/company/logo', formData);
+  return data;
+}
+// ===== FIN API =====

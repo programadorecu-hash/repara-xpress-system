@@ -9,20 +9,20 @@ from reportlab.lib.enums import TA_CENTER
 import pytz
 import os
 
-def generate_work_order_pdf(work_order: schemas.WorkOrder):
+# --- NOTA: Ahora las funciones reciben 'company_settings' ---
+
+def generate_work_order_pdf(work_order: schemas.WorkOrder, company_settings: schemas.CompanySettings):
     buffer = BytesIO()
     width, height = 58 * mm, 297 * mm 
     c = canvas.Canvas(buffer, pagesize=(width, height))
 
     styles = getSampleStyleSheet()
     
-    # --- ESTILOS CORREGIDOS ---
+    # --- ESTILOS ---
     style_title = ParagraphStyle(name='centered_bold', parent=styles['Normal'], alignment=TA_CENTER, fontName='Helvetica-Bold', fontSize=9, leading=11)
     style_centered = ParagraphStyle(name='centered', parent=styles['Normal'], alignment=TA_CENTER, fontSize=7, leading=9)
     style_normal = ParagraphStyle(name='normal', parent=styles['Normal'], fontSize=8, leading=10)
-    # Agregamos el estilo negrita que faltaba para evitar el Error 500
     style_bold = ParagraphStyle(name='bold', parent=styles['Normal'], fontName='Helvetica-Bold', fontSize=8, leading=10)
-    # --------------------------
     
     y = height - (5 * mm)
 
@@ -41,14 +41,41 @@ def generate_work_order_pdf(work_order: schemas.WorkOrder):
         c.line(4 * mm, y, width - (4 * mm), y)
         y -= 2.5 * mm
 
-    # --- INICIO DEL RECIBO ---
-    draw_paragraph("Repara Xpress", style_title)
-    draw_paragraph("Cocha Caguas Johanna Nathaly", style_centered)
-    draw_paragraph("RUC: 1724293830001", style_centered)
-    y -= 1 * mm
-    draw_paragraph("Venta al por mayor de teléfonos y equipos de computación - partes y piezas", style_centered)
+    # --- CABECERA DINÁMICA INTELIGENTE (ORDEN DE TRABAJO) ---
+    # Lógica de prioridad: Sucursal > Empresa
+    
+    # 1. Dirección
+    display_address = company_settings.address
+    if work_order.location and work_order.location.address:
+        display_address = work_order.location.address # Gana la sucursal
+
+    # 2. Teléfono
+    display_phone = company_settings.phone
+    if work_order.location and work_order.location.phone:
+        display_phone = work_order.location.phone # Gana la sucursal
+
+    # 3. Email
+    display_email = company_settings.email
+    if work_order.location and work_order.location.email:
+        display_email = work_order.location.email # Gana la sucursal
+
+    # --- DIBUJAR ---
+    draw_paragraph(company_settings.name, style_title)
+    
+    if display_address:
+        draw_paragraph(display_address, style_centered)
+    
+    draw_paragraph(f"RUC: {company_settings.ruc}", style_centered)
+    
+    if display_phone:
+        draw_paragraph(f"Telf: {display_phone}", style_centered)
+        
+    if display_email:
+        draw_paragraph(display_email, style_centered)
+
     y -= 3 * mm
     draw_line()
+    # ---------------------------------------
 
     c.setFont("Helvetica-Bold", 8)
     c.drawString(5 * mm, y, f"Orden N°: {work_order.work_order_number}")
@@ -78,12 +105,10 @@ def generate_work_order_pdf(work_order: schemas.WorkOrder):
         draw_paragraph(f"S/N: {work_order.device_serial}", style_normal)
     y -= 2 * mm
 
-    # --- NUEVO: Estado Físico en el PDF ---
     if work_order.physical_condition:
         draw_paragraph("<b>ESTADO DEL EQUIPO (Recepción):</b>", style_bold)
         draw_paragraph(work_order.physical_condition, style_normal)
         y -= 3 * mm
-    # --------------------------------------
     
     draw_paragraph("<b>PROBLEMA REPORTADO:</b>", style_bold)
     draw_paragraph(work_order.reported_issue, style_normal)
@@ -94,15 +119,10 @@ def generate_work_order_pdf(work_order: schemas.WorkOrder):
     y -= 3 * mm
     draw_line()
 
-    draw_paragraph("<b>Matriz:</b> S49 Julio Andrade OE2-173", style_centered)
-    draw_paragraph("Telf: 0969097844", style_centered)
-    y -= 2 * mm
-    draw_paragraph("<b>Sucursales:</b>", style_centered)
-    draw_paragraph("Repara Conde: 0981497171", style_centered)
-    draw_paragraph("Repara La Jota: 0981572019", style_centered)
-    draw_paragraph("Repara Conocoto: 0999909128", style_centered)
-    y -= 2 * mm
-    draw_paragraph("Quito - Ecuador", style_centered)
+    # Pie de página dinámico (mensaje configurado)
+    if company_settings.footer_message:
+        draw_paragraph(company_settings.footer_message, style_centered)
+
     y -= 15 * mm # Espacio para firma
 
     c.line(8 * mm, y, width - (8 * mm), y)
@@ -121,7 +141,7 @@ def generate_work_order_pdf(work_order: schemas.WorkOrder):
     return buffer
 
 
-def generate_sale_receipt_pdf(sale: schemas.Sale):
+def generate_sale_receipt_pdf(sale: schemas.Sale, company_settings: schemas.CompanySettings):
     buffer = BytesIO()
     width, height = 58 * mm, 297 * mm
     c = canvas.Canvas(buffer, pagesize=(width, height))
@@ -166,16 +186,40 @@ def generate_sale_receipt_pdf(sale: schemas.Sale):
         c.line(4 * mm, y, width - (4 * mm), y)
         y -= 2.5 * mm
 
-    draw_paragraph("Repara Xpress", style_title)
-    draw_paragraph("Cocha Caguas Johanna Nathaly", style_centered)
-    draw_paragraph("RUC: 1724293830001", style_centered)
-    y -= 1 * mm
-    draw_paragraph(
-        "Venta al por mayor de teléfonos y equipos de computación - partes y piezas",
-        style_centered,
-    )
+    # --- CABECERA DINÁMICA INTELIGENTE (VENTA) ---
+    
+    # 1. Dirección
+    display_address = company_settings.address
+    if sale.location and sale.location.address:
+        display_address = sale.location.address
+
+    # 2. Teléfono
+    display_phone = company_settings.phone
+    if sale.location and sale.location.phone:
+        display_phone = sale.location.phone
+
+    # 3. Email
+    display_email = company_settings.email
+    if sale.location and sale.location.email:
+        display_email = sale.location.email
+
+    # --- DIBUJAR ---
+    draw_paragraph(company_settings.name, style_title)
+    
+    if display_address:
+        draw_paragraph(display_address, style_centered)
+        
+    draw_paragraph(f"RUC: {company_settings.ruc}", style_centered)
+    
+    if display_phone:
+        draw_paragraph(f"Telf: {display_phone}", style_centered)
+    
+    if display_email:
+        draw_paragraph(display_email, style_centered)
+
     y -= 3 * mm
     draw_line()
+    # -----------------------------------------------
 
     c.setFont("Helvetica-Bold", 8)
     c.drawString(5 * mm, y, f"Venta N°: {sale.id}")
@@ -272,8 +316,10 @@ def generate_sale_receipt_pdf(sale: schemas.Sale):
         )
 
     y -= 4 * mm
-    draw_paragraph("Gracias por su compra", style_centered)
-    draw_paragraph("Quito - Ecuador", style_centered)
+    # Pie de página dinámico (mensaje configurado)
+    if company_settings.footer_message:
+        draw_paragraph(company_settings.footer_message, style_centered)
+    
     y -= 10 * mm 
 
     # Firma Cliente
