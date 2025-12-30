@@ -1025,13 +1025,14 @@ def create_sale(db: Session, sale: schemas.SaleCreate, user_id: int, location_id
                 )
                 create_inventory_movement(db=db, movement=movement, user_id=user_id)
 
-        # 6. Procesar Pagos (Mover dinero a caja si es Efectivo)
+        # 6. Procesar Pagos (Caja y Notas de Crédito)
         db_caja_ventas = db.query(models.CashAccount).filter(
             models.CashAccount.location_id == location_id,
             models.CashAccount.account_type == "CAJA_VENTAS"
         ).first()
 
         for payment in sale.payments:
+            # --- CASO 1: EFECTIVO (Entra dinero a caja) ---
             if payment.method == "EFECTIVO":
                 if db_caja_ventas:
                     db_transaction = models.CashTransaction(
@@ -1041,9 +1042,36 @@ def create_sale(db: Session, sale: schemas.SaleCreate, user_id: int, location_id
                         account_id=db_caja_ventas.id
                     )
                     db.add(db_transaction)
-                else:
-                    # Opcional: Crear caja ventas si no existe o lanzar error
-                    pass
+            
+            # --- CASO 2: NOTA DE CRÉDITO (Se quema el vale) ---
+            elif payment.method == "CREDIT_NOTE":
+                # La referencia DEBE ser el código de la nota (ej: NC-1234)
+                note_code = payment.reference
+                if not note_code:
+                    raise ValueError("Se requiere el código de la Nota de Crédito.")
+                
+                # Buscamos la nota y bloqueamos la fila para evitar doble uso simultáneo
+                credit_note = db.query(models.CreditNote).filter(
+                    models.CreditNote.code == note_code,
+                    models.CreditNote.is_active == True
+                ).with_for_update().first()
+
+                if not credit_note:
+                    raise ValueError(f"La Nota de Crédito '{note_code}' no existe o ya fue utilizada.")
+                
+                # Verificamos fondos
+                # Permitimos usar una nota de $50 para pagar $20? Sí.
+                # ¿Qué pasa con el vuelto? Por simplicidad en V1, asumimos uso total o exacto.
+                # Si la nota es de $50 y la venta es de $50, perfecto.
+                # Si la nota es menor, el cliente paga la diferencia.
+                # Si la nota es mayor... el sistema actual quemará la nota entera. 
+                # (Idealmente se emitiría una nueva nota por el cambio, pero por ahora simplifiquemos).
+                if credit_note.amount < (payment.amount - 0.02): # Pequeña tolerancia
+                     raise ValueError(f"La Nota de Crédito tiene ${credit_note.amount}, pero intentas cobrar ${payment.amount}.")
+
+                # QUEMAMOS LA NOTA (Ya no sirve)
+                credit_note.is_active = False
+                credit_note.reason += f" (Usada en Venta #{db_sale.id})"
 
         # 7. Actualizar Orden de Trabajo (si aplica)
         if sale.work_order_id:
@@ -1565,7 +1593,7 @@ def delete_customer(db: Session, customer_id: int):
 import uuid
 
 def process_refund(db: Session, refund: schemas.RefundCreate, user: models.User, location_id: int):
-    # 1. Validar PIN
+    # 1. Validar PIN del usuario que está ejecutando la acción
     if not user.hashed_pin or not security.verify_password(refund.pin, user.hashed_pin):
         raise ValueError("PIN incorrecto.")
 
@@ -1574,34 +1602,48 @@ def process_refund(db: Session, refund: schemas.RefundCreate, user: models.User,
     if not sale:
         raise ValueError("Venta no encontrada.")
 
-    # 3. REGLA DE ORO: Validar Permisos para Efectivo
+    # 3. Validar que el monto no exceda el total de la venta
+    # (Protección extra para no devolver más de lo que se cobró)
+    if refund.amount > sale.total_amount:
+        raise ValueError(f"El monto a reembolsar (${refund.amount}) no puede ser mayor al total de la venta (${sale.total_amount}).")
+
+    # 4. REGLA DE ORO: Validar Permisos para Efectivo
     if refund.type == "CASH":
+        # Verificamos si el rol del usuario (del PIN ingresado) es Admin o Gerente
+        # OJO: Aquí validamos al usuario LOGUEADO (user), pero el PIN ya confirmó que es él.
+        # Si quisieras que un empleado llame al jefe y el jefe ponga SU pin en la sesión del empleado,
+        # la lógica sería distinta. Por ahora, asumimos que el Admin debe estar logueado o
+        # que el PIN corresponde al usuario activo.
+        
+        # AJUSTE: Si el usuario activo NO es admin, rechazamos CASH.
         if user.role not in ["admin", "inventory_manager"]:
-            raise ValueError("No tienes autorización para devolver efectivo. Solo puedes emitir Nota de Crédito.")
+            raise ValueError("⛔ PROHIBIDO: Solo un Administrador puede autorizar devoluciones de dinero. Por favor, emita una Nota de Crédito.")
         
         # Procesar salida de dinero (Gasto)
-        # Buscamos la Caja de Ventas para sacar la plata de ahí
         cash_account = db.query(models.CashAccount).filter(
             models.CashAccount.location_id == location_id,
             models.CashAccount.account_type == "CAJA_VENTAS"
         ).first()
         
         if not cash_account:
-            raise ValueError("No hay Caja de Ventas configurada en esta sucursal.")
+            raise ValueError("No hay Caja de Ventas configurada en esta sucursal para sacar el dinero.")
 
         # Creamos el egreso
         transaction = models.CashTransaction(
             amount = refund.amount * -1, # Negativo porque sale dinero
-            description = f"DEVOLUCIÓN VENTA #{sale.id}: {refund.reason}",
+            description = f"DEVOLUCIÓN EFECTIVO VENTA #{sale.id}: {refund.reason} (Aut: {user.email})",
             user_id = user.id,
             account_id = cash_account.id
         )
         db.add(transaction)
+        db.commit()
         return {"status": "success", "message": "Dinero devuelto de caja exitosamente."}
 
     elif refund.type == "CREDIT_NOTE":
-        # Generar Código Único (ej: NC-ABCD)
-        code = f"NC-{str(uuid.uuid4())[:8].upper()}"
+        # Los empleados SÍ pueden emitir notas de crédito
+        
+        # Generar Código Único (ej: NC-7F3A2B)
+        code = f"NC-{str(uuid.uuid4())[:6].upper()}"
         
         # Buscar ID de cliente si existe en BD
         customer = get_customer_by_id_card(db, sale.customer_ci)
@@ -1613,11 +1655,13 @@ def process_refund(db: Session, refund: schemas.RefundCreate, user: models.User,
             reason=f"Devolución Venta #{sale.id}: {refund.reason}",
             user_id=user.id,
             customer_id=customer_id,
-            sale_id=sale.id
+            sale_id=sale.id,
+            is_active=True # Lista para usarse
         )
         db.add(credit_note)
         db.commit()
         db.refresh(credit_note)
+        # Devolvemos el objeto completo para mostrar el código en pantalla
         return credit_note
 
     else:
@@ -1693,3 +1737,15 @@ def update_company_logo(db: Session, logo_url: str):
     db.commit()
     db.refresh(db_settings)
     return db_settings
+
+
+# --- Funciones para Notas de Crédito ---
+def get_credit_note(db: Session, credit_note_id: int):
+    return db.query(models.CreditNote).filter(models.CreditNote.id == credit_note_id).first()
+
+def get_credit_note_by_code(db: Session, code: str):
+    # Busca una nota que coincida con el código y que esté ACTIVA (no usada)
+    return db.query(models.CreditNote).filter(
+        models.CreditNote.code == code,
+        models.CreditNote.is_active == True
+    ).first()

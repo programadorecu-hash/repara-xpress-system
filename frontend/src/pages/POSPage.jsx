@@ -229,13 +229,12 @@ function POSPage() {
       // (Podríamos preguntar al usuario si quiere sobrescribir si ya hay datos)
       const isFirstWorkOrder = !cart.some((item) => item.isWorkOrder);
       if (isFirstWorkOrder) {
-        // Opcional: podrías quitar esta condición si siempre quieres sobrescribir
         setCustomerCI(itemToAdd.customer_id_card || "");
         setCustomerName(itemToAdd.customer_name || "");
         setCustomerPhone(itemToAdd.customer_phone || "");
         setCustomerAddress(itemToAdd.customer_address || "");
-        // No tenemos email en la orden de trabajo, así que no lo llenamos
-        // setCustomerEmail(''); // Opcional: Limpiar email si se añade orden
+        // AHORA SÍ CAPTURAMOS EL EMAIL
+        setCustomerEmail(itemToAdd.customer_email || ""); 
       }
       // --- FIN AUTO-LLENAR ---
 

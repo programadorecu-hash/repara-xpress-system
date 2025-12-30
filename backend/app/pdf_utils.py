@@ -346,3 +346,74 @@ def generate_sale_receipt_pdf(sale: schemas.Sale, company_settings: schemas.Comp
     c.save()
     buffer.seek(0)
     return buffer
+
+# --- INICIO: Generador de Nota de Crédito ---
+def generate_credit_note_pdf(credit_note: schemas.CreditNote, company_settings: schemas.CompanySettings):
+    buffer = BytesIO()
+    width, height = 58 * mm, 297 * mm 
+    c = canvas.Canvas(buffer, pagesize=(width, height))
+
+    styles = getSampleStyleSheet()
+    style_title = ParagraphStyle(name='centered_bold', parent=styles['Normal'], alignment=TA_CENTER, fontName='Helvetica-Bold', fontSize=10, leading=12)
+    style_centered = ParagraphStyle(name='centered', parent=styles['Normal'], alignment=TA_CENTER, fontSize=8, leading=10)
+    style_normal = ParagraphStyle(name='normal', parent=styles['Normal'], fontSize=8, leading=10)
+    style_code = ParagraphStyle(name='code', parent=styles['Normal'], alignment=TA_CENTER, fontName='Courier-Bold', fontSize=14, leading=16)
+
+    y = height - (5 * mm)
+
+    def draw_paragraph(text, style, margin_left=4*mm):
+        nonlocal y
+        para = Paragraph(text, style)
+        para.wrapOn(c, width - (margin_left * 2), height)
+        p_height = para.height
+        para.drawOn(c, margin_left, y - p_height)
+        y -= p_height + (0.5 * mm)
+
+    def draw_line():
+        nonlocal y
+        y -= 2 * mm
+        c.setLineWidth(0.5)
+        c.line(4 * mm, y, width - (4 * mm), y)
+        y -= 2.5 * mm
+
+    # --- CABECERA EMPRESA ---
+    draw_paragraph(company_settings.name, style_title)
+    draw_paragraph(f"RUC: {company_settings.ruc}", style_centered)
+    if company_settings.phone:
+        draw_paragraph(f"Telf: {company_settings.phone}", style_centered)
+    y -= 3 * mm
+    draw_line()
+
+    # --- TÍTULO ---
+    draw_paragraph("NOTA DE CRÉDITO", style_title)
+    draw_paragraph("(Saldo a Favor)", style_centered)
+    y -= 3 * mm
+
+    # --- CÓDIGO (EL DINERO) ---
+    c.rect(4 * mm, y - 10*mm, width - 8*mm, 12*mm) # Caja alrededor del código
+    y -= 2 * mm # Margen interno top
+    draw_paragraph(credit_note.code, style_code)
+    y -= 4 * mm # Margen interno bottom
+    
+    y -= 4 * mm
+
+    # --- DETALLES ---
+    fecha_str = credit_note.created_at.strftime('%d/%m/%Y %H:%M') if credit_note.created_at else "N/A"
+
+    draw_paragraph(f"Fecha Emisión: {fecha_str}", style_normal)
+    draw_paragraph(f"Valor: ${credit_note.amount:.2f}", style_title) # Valor en grande/negrita
+    
+    draw_line()
+    
+    draw_paragraph("<b>Motivo:</b>", style_normal)
+    draw_paragraph(credit_note.reason, style_normal)
+    
+    y -= 5 * mm
+    draw_paragraph("Este documento representa un saldo a favor. Preséntelo en caja para su próxima compra.", style_centered)
+    draw_paragraph("Válido en todas nuestras sucursales.", style_centered)
+
+    c.showPage()
+    c.save()
+    buffer.seek(0)
+    return buffer
+# --- FIN: Generador de Nota de Crédito ---

@@ -386,10 +386,10 @@ function WorkOrderForm({ orderId, onClose, onSave }) {
   });
 
   return (
-    // ARREGLO UX: Cierre al hacer click fuera (onClick en el backdrop)
+    // ARREGLO UX: NO cerrar al hacer click fuera para evitar pérdida de datos
     <div 
       className="fixed inset-0 bg-black bg-opacity-60 z-50 flex items-center justify-center p-4"
-      onClick={onClose} 
+      // Quitamos onClick={onClose} aquí
     >
       <div
         className="bg-white p-6 rounded-lg shadow-xl w-full max-w-4xl text-gray-800 overflow-y-auto max-h-[95vh]"
@@ -510,15 +510,14 @@ function WorkOrderForm({ orderId, onClose, onSave }) {
 
           {/* PROBLEMA Y COSTOS */}
           <fieldset className="border p-4 rounded-lg">
-            {/* --- NUEVO: ESTADO FÍSICO DEL EQUIPO --- */}
-          <fieldset className="border p-4 rounded-lg bg-yellow-50 border-yellow-200 mt-4">
-            <legend className="text-lg font-semibold px-2 text-yellow-800">Estado del Equipo (Recepción)</legend>
+            <fieldset className="border p-4 rounded-lg bg-gray-50 border-gray-200 mt-4">
+            <legend className="text-lg font-semibold px-2 text-gray-700">Estado del Equipo (Recepción)</legend>
             <textarea 
               name="physical_condition" 
               value={order.physical_condition || ""} 
               onChange={handleChange} 
               placeholder="Detalle aquí: Pantalla rayada, golpe en esquina, sin tapa, etc..." 
-              className="w-full p-2 border rounded focus:ring-2 focus:ring-yellow-500 outline-none h-20 text-sm" 
+              className="w-full p-2 border rounded focus:ring-2 focus:ring-gray-400 outline-none h-20 text-sm" 
             />
             <p className="text-xs text-gray-500 mt-1">
               * Esta información aparecerá en el recibo impreso.

@@ -663,7 +663,7 @@ def create_new_work_order(
 
     return crud.create_work_order(db=db, work_order=work_order, user_id=current_user.id, location_id=active_shift.location_id)
 
-# --- INICIO DE NUESTRO CÓDIGO (Entrega Sin Reparación) ---
+# --- INICIO DE NUESTRO CÓDIGO (Entrega Sin Reparación con Cobro Real) ---
 @app.post("/work-orders/{work_order_id}/deliver-unrepaired", response_model=schemas.WorkOrderPublic)
 def deliver_work_order_unrepaired(
     work_order_id: int,
@@ -674,7 +674,8 @@ def deliver_work_order_unrepaired(
     """
     Ruta especial para entregar un equipo NO reparado.
     - Establece el estado a SIN_REPARACION.
-    - Fija el costo final en el valor de la revisión (o 0).
+    - Fija el costo final en el valor de la revisión.
+    - SI HAY COSTO, INGRESA EL DINERO A CAJA.
     """
     # 1. Validar PIN
     if not current_user.hashed_pin or not security.verify_password(form_data.pin, current_user.hashed_pin):
@@ -685,16 +686,37 @@ def deliver_work_order_unrepaired(
     if not db_work_order:
         raise HTTPException(status_code=404, detail="Orden no encontrada.")
 
-    # 3. Aplicar cambios (Como usar el borrador en el presupuesto)
+    # 3. Aplicar cambios
     db_work_order.status = "SIN_REPARACION"
-    db_work_order.final_cost = form_data.diagnostic_fee # $2.00 o $0.00 según decida el usuario
+    db_work_order.final_cost = form_data.diagnostic_fee 
     
+    # 4. COBRAR A CAJA (Si hay valor)
+    if form_data.diagnostic_fee > 0:
+        # Buscamos la caja de ventas de la sucursal donde está la orden
+        cash_account = db.query(models.CashAccount).filter(
+            models.CashAccount.location_id == db_work_order.location_id,
+            models.CashAccount.account_type == "CAJA_VENTAS"
+        ).first()
+
+        if cash_account:
+            # Creamos el ingreso
+            transaction = models.CashTransaction(
+                amount=form_data.diagnostic_fee,
+                description=f"Ingreso Revisión (Sin Reparar) Orden #{db_work_order.id}",
+                user_id=current_user.id,
+                account_id=cash_account.id
+            )
+            db.add(transaction)
+        else:
+            # Si no hay caja, avisamos pero no rompemos el proceso (opcional: lanzar error)
+            print(f"Advertencia: No se pudo cobrar ${form_data.diagnostic_fee} porque no hay Caja de Ventas en loc {db_work_order.location_id}")
+
     # Nota interna automática
     crud.create_work_order_note(
         db=db, 
         work_order_id=work_order_id, 
         user_id=current_user.id, 
-        location_id=db_work_order.location_id, # Usamos la ubicación original de la orden
+        location_id=db_work_order.location_id, 
         message=f"ENTREGA SIN REPARAR: {form_data.reason}. Cobro revisión: ${form_data.diagnostic_fee}"
     )
 
@@ -1385,6 +1407,44 @@ def upload_company_logo(
     # 3. Actualizar BD
     logo_url = f"/uploads/company/{filename}"
     return crud.update_company_logo(db, logo_url)
+
+
+# ===================================================================
+# --- ENDPOINTS PARA NOTAS DE CRÉDITO (IMPRESIÓN Y VERIFICACIÓN) ---
+# ===================================================================
+
+@app.get("/credit-notes/verify/{code}", response_model=schemas.CreditNote)
+def verify_credit_note_endpoint(
+    code: str,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(security.get_current_user)
+):
+    """Verifica si una nota de crédito es válida y devuelve su valor."""
+    note = crud.get_credit_note_by_code(db, code=code)
+    if not note:
+        raise HTTPException(status_code=404, detail="Nota de crédito inválida, no encontrada o ya utilizada.")
+    return note
+
+@app.get("/credit-notes/{credit_note_id}/print", response_class=StreamingResponse)
+def print_credit_note(
+    credit_note_id: int, 
+    db: Session = Depends(get_db),
+    # Cualquier usuario autenticado puede reimprimir
+    current_user: models.User = Depends(security.get_current_user)
+):
+    db_credit_note = crud.get_credit_note(db, credit_note_id=credit_note_id)
+    if not db_credit_note:
+        raise HTTPException(status_code=404, detail="Nota de crédito no encontrada")
+
+    company_settings = crud.get_company_settings(db)
+    
+    # Generamos PDF
+    pdf_buffer = pdf_utils.generate_credit_note_pdf(db_credit_note, company_settings)
+
+    headers = {
+        'Content-Disposition': f'inline; filename="NC_{db_credit_note.code}.pdf"'
+    }
+    return StreamingResponse(pdf_buffer, media_type="application/pdf", headers=headers)
 
 
 # ===================================================================

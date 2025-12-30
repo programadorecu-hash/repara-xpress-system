@@ -609,12 +609,21 @@ class FirstAdminCreate(BaseModel):
     # --- FIN DE NUESTRO CÓDIGO ---
 
     # --- INICIO DE NUESTRO CÓDIGO (Schemas Reembolsos) ---
+# --- INICIO DE NUESTRO CÓDIGO (Schemas Reembolsos Mejorado) ---
 class RefundCreate(BaseModel):
     sale_id: int
     amount: float
     reason: str
-    type: str # "CASH" (Efectivo) o "CREDIT_NOTE" (Nota de Crédito)
-    pin: str # PIN del usuario que autoriza
+    type: str # "CASH" o "CREDIT_NOTE"
+    pin: str 
+
+    @field_validator('type')
+    @classmethod
+    def validate_type(cls, v: str) -> str:
+        if v not in ('CASH', 'CREDIT_NOTE'):
+            raise ValueError('El tipo debe ser CASH o CREDIT_NOTE')
+        return v
+# --- FIN DE NUESTRO CÓDIGO ---
 
 class CreditNote(BaseModel):
     id: int

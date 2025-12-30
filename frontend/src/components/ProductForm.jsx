@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import api from "../services/api";
+// Importamos íconos modernos para la interfaz de fotos
+import { HiOutlineCamera, HiOutlinePhotograph, HiOutlineCloudUpload, HiOutlineTrash } from "react-icons/hi";
 
 function ProductForm({ productToEdit, onSave, onClose }) {
   // Estado para almacenar los datos del producto que se está creando o editando.
@@ -33,6 +35,8 @@ function ProductForm({ productToEdit, onSave, onClose }) {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const streamRef = useRef(null);
+  // Referencia para activar el input de archivo oculto
+  const fileInputRef = useRef(null);
 
   // Se ejecuta cuando el componente se carga o cuando 'productToEdit' cambia.
   useEffect(() => {
@@ -444,102 +448,134 @@ function ProductForm({ productToEdit, onSave, onClose }) {
               ))}
             </div>
 
-            <div className="p-4 bg-gray-50 rounded-lg">
-              <label className="font-semibold block mb-2">
+            <div className="p-5 bg-gray-50 rounded-xl border border-gray-200">
+              <label className="font-bold text-gray-700 block mb-4 text-center">
                 Añadir Nueva Imagen
               </label>
-              <div className="flex items-center space-x-2">
-                <input
-                  type="file"
-                  accept="image/*"
-                  // NOTA: 'capture="environment"' a veces da problemas en PC
-                  // Lo quitamos para que "Seleccionar archivo" sea la acción principal
-                  onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
-                  className="w-full p-2 border rounded-lg bg-white"
-                />
 
-                {/* Botón para abrir cámara */}
-                <div className="mt-3">
+              {/* Input Oculto (La tubería invisible) */}
+              <input
+                type="file"
+                accept="image/*"
+                ref={fileInputRef} // Conectamos el control remoto
+                onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
+                className="hidden" // ¡Invisible!
+              />
+
+              {!selectedFile ? (
+                // OPCIÓN A: NO HAY ARCHIVO SELECCIONADO -> MOSTRAR BOTONES GRANDES
+                <div className="grid grid-cols-2 gap-4">
+                  {/* Botón 1: Cámara */}
                   <button
                     type="button"
                     onClick={openCamera}
-                    className="py-2 px-4 bg-secondary text-white font-bold rounded-lg hover:opacity-90"
-                    title="Tomar foto con la cámara"
+                    className="flex flex-col items-center justify-center p-6 bg-white border-2 border-dashed border-gray-300 rounded-xl hover:border-accent hover:bg-teal-50 transition-all group"
                   >
-                    Cámara
+                    <div className="bg-teal-100 p-3 rounded-full mb-2 group-hover:bg-teal-200 transition-colors">
+                        <HiOutlineCamera className="w-8 h-8 text-accent" />
+                    </div>
+                    <span className="font-bold text-gray-600 group-hover:text-accent">Tomar Foto</span>
+                  </button>
+
+                  {/* Botón 2: Galería / Archivos */}
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current.click()} // Clic al input oculto
+                    className="flex flex-col items-center justify-center p-6 bg-white border-2 border-dashed border-gray-300 rounded-xl hover:border-blue-500 hover:bg-blue-50 transition-all group"
+                  >
+                    <div className="bg-blue-100 p-3 rounded-full mb-2 group-hover:bg-blue-200 transition-colors">
+                        <HiOutlinePhotograph className="w-8 h-8 text-blue-600" />
+                    </div>
+                    <span className="font-bold text-gray-600 group-hover:text-blue-600">Subir Archivo</span>
                   </button>
                 </div>
+              ) : (
+                // OPCIÓN B: ARCHIVO SELECCIONADO -> MOSTRAR PREVISUALIZACIÓN Y CONFIRMAR
+                <div className="bg-white p-4 rounded-xl border border-blue-200 shadow-sm flex items-center justify-between animate-fade-in">
+                  <div className="flex items-center gap-3 overflow-hidden">
+                    <div className="bg-blue-100 p-2 rounded-lg">
+                        <HiOutlinePhotograph className="w-6 h-6 text-blue-600" />
+                    </div>
+                    <div className="min-w-0">
+                        <p className="text-sm font-bold text-gray-800 truncate max-w-[150px]">{selectedFile.name}</p>
+                        <p className="text-xs text-green-600 font-semibold">Listo para subir</p>
+                    </div>
+                  </div>
+                  
+                  <div className="flex gap-2">
+                    <button
+                        type="button"
+                        onClick={() => setSelectedFile(null)}
+                        className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition"
+                        title="Cancelar"
+                    >
+                        <HiOutlineTrash className="w-5 h-5" />
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => handleImageUpload()}
+                        disabled={isUploading}
+                        className="flex items-center gap-2 py-2 px-4 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 shadow-md transition-all active:scale-95 disabled:bg-gray-400"
+                    >
+                        {isUploading ? "..." : <><HiOutlineCloudUpload className="w-5 h-5"/> Subir</>}
+                    </button>
+                  </div>
+                </div>
+              )}
 
-                {/* Modal de cámara */}
-                {isCameraOpen && (
+              {/* MODAL DE CÁMARA (Solo visible si se activa) */}
+              {isCameraOpen && (
                   <div
-                    className="fixed inset-0 bg-black bg-opacity-60 z-50 flex items-center justify-center p-4"
+                    className="fixed inset-0 bg-black bg-opacity-80 z-50 flex items-center justify-center p-4"
                     onClick={closeCamera}
                   >
                     <div
-                      className="bg-white rounded-lg shadow-xl w-full max-w-lg p-4"
+                      className="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-4 overflow-hidden"
                       onClick={(e) => e.stopPropagation()}
                     >
-                      <h4 className="text-lg font-semibold text-secondary mb-2">
-                        Tomar foto del producto
+                      <h4 className="text-lg font-bold text-gray-800 mb-3 text-center">
+                        Capturar Foto
                       </h4>
 
-                      {cameraError ? (
-                        <p className="text-red-600 text-sm mb-3">
+                      {cameraError && (
+                        <div className="bg-red-100 text-red-700 p-3 rounded-lg mb-3 text-sm text-center">
                           {cameraError}
-                        </p>
-                      ) : null}
+                        </div>
+                      )}
 
-                      <div className="bg-black rounded-md overflow-hidden">
+                      <div className="bg-black rounded-xl overflow-hidden shadow-inner aspect-[4/3] relative">
                         <video
                           ref={videoRef}
                           autoPlay
                           playsInline
                           muted
-                          className="w-full h-64 object-contain bg-black"
+                          className="w-full h-full object-cover"
                         />
                       </div>
 
-                      {/* Canvas oculto para capturar el frame */}
+                      {/* Canvas oculto */}
                       <canvas ref={canvasRef} className="hidden" />
 
-                      <div className="flex justify-end gap-2 mt-4">
+                      <div className="grid grid-cols-2 gap-4 mt-6">
                         <button
                           type="button"
                           onClick={closeCamera}
-                          className="py-2 px-4 bg-gray-200 rounded-lg hover:bg-gray-300"
+                          className="py-3 px-4 bg-gray-100 text-gray-700 font-bold rounded-xl hover:bg-gray-200 transition"
                         >
                           Cancelar
                         </button>
                         <button
                           type="button"
                           onClick={takePhotoAndUpload}
-                          className="py-2 px-4 bg-accent text-white font-bold rounded-lg hover:bg-teal-600"
+                          className="py-3 px-4 bg-accent text-white font-bold rounded-xl hover:bg-teal-600 shadow-lg flex justify-center items-center gap-2"
                         >
-                          Tomar foto
+                          <HiOutlineCamera className="w-5 h-5" />
+                          Capturar
                         </button>
                       </div>
                     </div>
                   </div>
                 )}
-
-                <input
-                  type="file"
-                  accept="image/*"
-                  capture="environment"
-                  className="hidden"
-                />
-
-                <button
-                  type="button"
-                  // Corregimos aquí: la función se llama SIN argumentos
-                  onClick={() => handleImageUpload()}
-                  disabled={isUploading || !selectedFile}
-                  className="py-2 px-4 bg-detail text-white font-bold rounded-lg hover:bg-indigo-600 disabled:bg-gray-400 whitespace-nowrap"
-                >
-                  {isUploading ? "Subiendo..." : "Subir Imagen"}
-                </button>
-              </div>
             </div>
           </div>
         )}
