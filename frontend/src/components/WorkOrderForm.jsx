@@ -242,16 +242,28 @@ function WorkOrderForm({ orderId, onClose, onSave }) {
   const handleUnrepairedSubmit = async () => {
     try {
       setLoading(true);
+      // 1. Enviamos el cobro y cerramos la orden en el servidor
       await deliverWorkOrderUnrepaired(orderId, {
         diagnostic_fee: unrepairedData.fee,
         reason: unrepairedData.reason,
         pin: unrepairedData.pin
       });
-      alert("Orden cerrada como SIN REPARACIÓN correctamente.");
-      onSave(); 
-      onClose(); 
+      
+      // 2. Intentamos imprimir el COMPROBANTE DE RETIRO automáticamente
+      try {
+        const response = await api.get(`/work-orders/${orderId}/print-withdrawal`, { responseType: "blob" });
+        const fileURL = window.URL.createObjectURL(response.data);
+        window.open(fileURL, "_blank"); // Abre el PDF en una pestaña nueva
+      } catch (printErr) {
+        console.error("No se pudo imprimir automáticamente:", printErr);
+      }
+
+      alert("¡Listo! Orden cerrada y venta registrada.");
+      onSave(); // Refresca la lista de órdenes atrás
+      onClose(); // Cierra el formulario
     } catch (e) {
-      alert(e.response?.data?.detail || "Error al procesar.");
+      alert(e.response?.data?.detail || "Error al procesar. Revisa tu PIN.");
+    } finally {
       setLoading(false);
     }
   };

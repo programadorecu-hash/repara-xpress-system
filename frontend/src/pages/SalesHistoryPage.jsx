@@ -85,6 +85,31 @@ function SalesHistoryPage() {
     }
   };
 
+  // --- NUEVA FUNCIÓN IMPRIMIR ---
+  const handlePrintReport = async () => {
+    try {
+      // Construimos los parámetros IGUAL que para la búsqueda
+      const params = {};
+      if (startDate) params.start_date = startDate;
+      if (endDate) params.end_date = endDate;
+      if (searchTerm) params.search = searchTerm;
+      if (selectedLocationId) params.location_id = selectedLocationId;
+
+      // Llamamos al nuevo endpoint de PDF (blob)
+      const response = await api.get("/sales/print-report", { 
+        params, 
+        responseType: "blob" 
+      });
+      
+      const fileURL = window.URL.createObjectURL(response.data);
+      window.open(fileURL, "_blank");
+    } catch (err) {
+      console.error(err);
+      alert("Error al generar el reporte.");
+    }
+  };
+  // ------------------------------
+
   const handleSearchSubmit = (e) => {
     e.preventDefault();
     fetchSales();
@@ -238,6 +263,17 @@ function SalesHistoryPage() {
         <button type="submit" className="py-2 px-6 bg-brand text-white font-bold rounded hover:bg-brand/90">
           <HiOutlineRefresh className="inline mr-1" /> Filtrar
         </button>
+        
+        {/* --- NUEVO BOTÓN IMPRIMIR --- */}
+        <button 
+          type="button" 
+          onClick={handlePrintReport}
+          className="py-2 px-6 bg-gray-600 text-white font-bold rounded hover:bg-gray-700 ml-2"
+          title="Descargar PDF con estos filtros"
+        >
+          <HiOutlinePrinter className="inline mr-1" /> Reporte
+        </button>
+        {/* ---------------------------- */}
       </form>
 
       {/* Resumen */}

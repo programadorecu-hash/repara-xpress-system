@@ -178,6 +178,10 @@ class SaleBase(BaseModel):
     customer_email: str | None = None
     # --- FIN NUEVOS CAMPOS ---
 
+    # --- NUEVO CAMPO GARANTÍA ---
+    warranty_terms: str | None = None
+    # ----------------------------
+
     items: List["SaleItemCreate"]
 
     @field_validator("iva_percentage")

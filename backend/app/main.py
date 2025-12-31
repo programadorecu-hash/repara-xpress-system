@@ -663,7 +663,7 @@ def create_new_work_order(
 
     return crud.create_work_order(db=db, work_order=work_order, user_id=current_user.id, location_id=active_shift.location_id)
 
-# --- INICIO DE NUESTRO CÓDIGO (Entrega Sin Reparación con Cobro Real) ---
+# --- INICIO DE NUESTRO CÓDIGO (Entrega Sin Reparación con VENTA REAL y RECIBO) ---
 @app.post("/work-orders/{work_order_id}/deliver-unrepaired", response_model=schemas.WorkOrderPublic)
 def deliver_work_order_unrepaired(
     work_order_id: int,
@@ -671,58 +671,66 @@ def deliver_work_order_unrepaired(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(security.get_current_user)
 ):
-    """
-    Ruta especial para entregar un equipo NO reparado.
-    - Establece el estado a SIN_REPARACION.
-    - Fija el costo final en el valor de la revisión.
-    - SI HAY COSTO, INGRESA EL DINERO A CAJA.
-    """
-    # 1. Validar PIN
+    # 1. Validar PIN del técnico
     if not current_user.hashed_pin or not security.verify_password(form_data.pin, current_user.hashed_pin):
         raise HTTPException(status_code=403, detail="PIN incorrecto.")
 
-    # 2. Buscar la orden
+    # 2. Necesitamos saber en qué sucursal está el técnico (turno activo)
+    active_shift = crud.get_active_shift_for_user(db, user_id=current_user.id)
+    if not active_shift:
+        raise HTTPException(status_code=400, detail="Debes tener un turno activo para procesar la entrega.")
+
+    try:
+        # 3. Llamamos a la función mágica que creamos en crud.py
+        # Esta función marca la orden como SIN_REPARACION y crea la VENTA al mismo tiempo.
+        db_work_order, _new_sale = crud.deliver_unrepaired_with_sale(
+            db=db,
+            work_order_id=work_order_id,
+            diagnostic_fee=form_data.diagnostic_fee,
+            reason=form_data.reason,
+            user_id=current_user.id,
+            location_id=active_shift.location_id,
+            pin=form_data.pin
+        )
+
+        # 4. Creamos la nota interna para la bitácora
+        crud.create_work_order_note(
+            db=db, 
+            work_order_id=work_order_id, 
+            user_id=current_user.id, 
+            location_id=active_shift.location_id, 
+            message=f"RETIRADO SIN REPARACIÓN: {form_data.reason}. Cobro revisión: ${form_data.diagnostic_fee}"
+        )
+
+        return db_work_order
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.get("/work-orders/{work_order_id}/print-withdrawal", response_class=StreamingResponse)
+def print_withdrawal_receipt(
+    work_order_id: int, 
+    db: Session = Depends(get_db),
+    _ok: None = Depends(security.require_internal_roles())
+):
+    """
+    Ruta para descargar el PDF de 'Comprobante de Retiro'.
+    Sirve para proteger a la empresa demostrando que el cliente se llevó su equipo.
+    """
     db_work_order = crud.get_work_order(db, work_order_id=work_order_id)
-    if not db_work_order:
-        raise HTTPException(status_code=404, detail="Orden no encontrada.")
+    if db_work_order is None:
+        raise HTTPException(status_code=404, detail="Orden de trabajo no encontrada")
 
-    # 3. Aplicar cambios
-    db_work_order.status = "SIN_REPARACION"
-    db_work_order.final_cost = form_data.diagnostic_fee 
-    
-    # 4. COBRAR A CAJA (Si hay valor)
-    if form_data.diagnostic_fee > 0:
-        # Buscamos la caja de ventas de la sucursal donde está la orden
-        cash_account = db.query(models.CashAccount).filter(
-            models.CashAccount.location_id == db_work_order.location_id,
-            models.CashAccount.account_type == "CAJA_VENTAS"
-        ).first()
+    # Obtenemos los datos de la empresa (Nombre, RUC, etc.)
+    company_settings = crud.get_company_settings(db)
 
-        if cash_account:
-            # Creamos el ingreso
-            transaction = models.CashTransaction(
-                amount=form_data.diagnostic_fee,
-                description=f"Ingreso Revisión (Sin Reparar) Orden #{db_work_order.id}",
-                user_id=current_user.id,
-                account_id=cash_account.id
-            )
-            db.add(transaction)
-        else:
-            # Si no hay caja, avisamos pero no rompemos el proceso (opcional: lanzar error)
-            print(f"Advertencia: No se pudo cobrar ${form_data.diagnostic_fee} porque no hay Caja de Ventas en loc {db_work_order.location_id}")
+    # Generamos el PDF usando el nuevo formato que creamos
+    pdf_buffer = pdf_utils.generate_withdrawal_receipt_pdf(db_work_order, company_settings)
 
-    # Nota interna automática
-    crud.create_work_order_note(
-        db=db, 
-        work_order_id=work_order_id, 
-        user_id=current_user.id, 
-        location_id=db_work_order.location_id, 
-        message=f"ENTREGA SIN REPARAR: {form_data.reason}. Cobro revisión: ${form_data.diagnostic_fee}"
-    )
+    headers = {
+        'Content-Disposition': f'inline; filename="retiro_orden_{work_order_id}.pdf"'
+    }
 
-    db.commit()
-    db.refresh(db_work_order)
-    return db_work_order
+    return StreamingResponse(pdf_buffer, media_type="application/pdf", headers=headers)
 # --- FIN DE NUESTRO CÓDIGO ---
 
 @app.patch("/work-orders/{work_order_id}", response_model=schemas.WorkOrderPublic)
@@ -1114,6 +1122,55 @@ def read_sales_history(
     return sales_history
 # --- FIN DE NUESTRO CÓDIGO ---
 
+# --- INICIO: Nuevo Endpoint Imprimir Historial ---
+@app.get("/sales/print-report", response_class=StreamingResponse)
+def print_sales_history_report(
+    start_date: date | None = None,
+    end_date: date | None = None,
+    search: str | None = None,
+    location_id: int | None = None,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(security.get_current_user)
+):
+    """
+    Genera un PDF con el listado de ventas filtrado.
+    Reutiliza la lógica de búsqueda de get_sales.
+    """
+    # 1. Obtenemos los datos usando los MISMOS filtros que la vista
+    # Ponemos un límite alto (ej: 1000) para el reporte impreso
+    sales_data = crud.get_sales(
+        db, 
+        user=current_user, 
+        skip=0, 
+        limit=1000, 
+        start_date=start_date, 
+        end_date=end_date, 
+        search=search, 
+        location_id=location_id
+    )
+
+    # 2. Datos de empresa
+    settings = crud.get_company_settings(db)
+
+    # 3. Generar PDF
+    filters = {
+        "start_date": str(start_date) if start_date else None,
+        "end_date": str(end_date) if end_date else None,
+        "search": search,
+        "location_id": location_id
+    }
+    
+    pdf_buffer = pdf_utils.generate_sales_history_pdf(
+        sales_data=sales_data,
+        company_settings=schemas.CompanySettings.model_validate(settings),
+        filters=filters
+    )
+
+    filename = f"reporte_ventas_{date.today()}.pdf"
+    headers = {'Content-Disposition': f'inline; filename="{filename}"'}
+    return StreamingResponse(pdf_buffer, media_type="application/pdf", headers=headers)
+# --- FIN DE NUESTRO CÓDIGO ---
+
 
 @app.get("/sales/{sale_id}/receipt", response_class=StreamingResponse)
 def get_sale_receipt(
@@ -1445,6 +1502,57 @@ def print_credit_note(
         'Content-Disposition': f'inline; filename="NC_{db_credit_note.code}.pdf"'
     }
     return StreamingResponse(pdf_buffer, media_type="application/pdf", headers=headers)
+
+
+# --- INICIO: Endpoints de Cierre de Caja (Reporte y Listado) ---
+
+@app.get("/cash-accounts/{account_id}/closure-report", response_class=StreamingResponse)
+def get_cash_closure_report(
+    account_id: int,
+    closure_id: int | None = None, # Opcional: si viene, reimprime ese cierre
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(security.get_current_user)
+):
+    account = crud.get_cash_account(db, account_id=account_id)
+    if not account:
+        raise HTTPException(status_code=404, detail="Cuenta no encontrada")
+
+    try:
+        # Llamamos a la lógica blindada
+        data = crud.get_cash_closure_report_data(db, account_id=account_id, closure_id=closure_id)
+        
+        settings = crud.get_company_settings(db)
+        location = crud.get_location(db, location_id=account.location_id)
+        location_name = location.name if location else "Desconocida"
+
+        pdf_buffer = pdf_utils.generate_cash_closure_pdf(
+            closure_data=data,
+            company_settings=schemas.CompanySettings.model_validate(settings),
+            user_email=current_user.email,
+            location_name=location_name
+        )
+
+        filename = f"cierre_{closure_id if closure_id else 'actual'}.pdf"
+        headers = {'Content-Disposition': f'inline; filename="{filename}"'}
+        return StreamingResponse(pdf_buffer, media_type="application/pdf", headers=headers)
+    
+    except Exception as e:
+        print(f"Error generando reporte: {e}") # Log para debug
+        raise HTTPException(status_code=500, detail="Error generando el PDF del cierre.")
+
+@app.get("/cash-accounts/{account_id}/closures", response_model=List[schemas.CashTransaction])
+def get_past_closures(
+    account_id: int,
+    limit: int = 20,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(security.get_current_user)
+):
+    """Devuelve la lista de cierres de caja anteriores."""
+    return db.query(models.CashTransaction).filter(
+        models.CashTransaction.account_id == account_id,
+        models.CashTransaction.description.like("CIERRE DE CAJA%")
+    ).order_by(models.CashTransaction.timestamp.desc()).limit(limit).all()
+# --- FIN BLOQUE ---
 
 
 # ===================================================================

@@ -393,6 +393,11 @@ function POSPage() {
       payments: saleDataFromModal.payments, 
       // --------------------------------------------------------------------
       pin: saleDataFromModal.pin,
+      
+      // --- NUEVO: CAPTURAR GARANTÍA DEL MODAL ---
+      warranty_terms: saleDataFromModal.warranty_terms, 
+      // ------------------------------------------
+
       items: itemsPayload,
       iva_percentage:
         typeof saleDataFromModal.iva_percentage === "number"

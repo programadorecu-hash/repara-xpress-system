@@ -28,6 +28,7 @@ function PaymentModal({
   ]);
   
   const [pin, setPin] = useState("");
+  const [warrantyTerms, setWarrantyTerms] = useState("");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -129,6 +130,7 @@ function PaymentModal({
       payment_method: "MIXTO", 
       payment_method_details: null,
       pin: pin,
+      warranty_terms: warrantyTerms.trim() || null, // Enviamos null si está vacío
       payments: finalPayments.map(p => ({
           method: p.method,
           amount: parseFloat(p.amount) || 0,
@@ -283,6 +285,21 @@ function PaymentModal({
 
         {/* FOOTER */}
         <div className="bg-gray-50 p-6 border-t border-gray-200">
+          
+          {/* --- NUEVO: AQUÍ VA EL CUADRO DE GARANTÍA --- */}
+          <div className="mb-4">
+            <label className="block text-xs font-bold text-gray-500 mb-1 uppercase">
+              Políticas de Garantía / Notas (Opcional)
+            </label>
+            <textarea
+              value={warrantyTerms}
+              onChange={(e) => setWarrantyTerms(e.target.value)}
+              placeholder="Ej: 3 meses de garantía en batería. Pantalla sale probada sin garantía."
+              className="w-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none h-20 resize-none"
+            />
+          </div>
+          {/* ------------------------------------------- */}
+
           <form onSubmit={handleConfirm} className="flex flex-col md:flex-row gap-4">
             <div className="w-full md:w-1/3">
               <input

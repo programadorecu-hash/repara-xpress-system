@@ -227,6 +227,10 @@ class Sale(Base):
     customer_email = Column(String, nullable=True) # Email es opcional
     # --- FIN NUEVAS COLUMNAS ---
 
+    # --- NUEVO CAMPO: GARANTÍA ---
+    warranty_terms = Column(String, nullable=True) # Texto libre para políticas de garantía
+    # -----------------------------
+
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     location_id = Column(Integer, ForeignKey("locations.id"), nullable=False)
     work_order_id = Column(Integer, ForeignKey("work_orders.id"), nullable=True)

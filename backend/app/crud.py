@@ -1004,6 +1004,10 @@ def create_sale(db: Session, sale: schemas.SaleCreate, user_id: int, location_id
             customer_address=sale.customer_address,
             customer_email=sale.customer_email,
 
+            # --- NUEVO: GUARDAR GARANTÍA ---
+            warranty_terms=sale.warranty_terms,
+            # -------------------------------
+
             user_id=user_id,
             location_id=location_id,
             work_order_id=sale.work_order_id,
@@ -1202,7 +1206,11 @@ def get_sales(
 # --- GESTIÓN DE CAJA ---
 # ===================================================================
 def create_cash_account(db: Session, account: schemas.CashAccountCreate):
-    db_account = models.CashAccount(**account.model_dump())
+    # Convertimos el nombre a MAYÚSCULAS antes de guardar
+    account_data = account.model_dump()
+    account_data['name'] = account_data['name'].upper()
+    
+    db_account = models.CashAccount(**account_data)
     db.add(db_account)
     db.commit()
     db.refresh(db_account)
@@ -1279,7 +1287,10 @@ def get_dashboard_summary(db: Session, location_id: int, target_date: date):
         total_expenses = db.query(func.sum(models.CashTransaction.amount)).filter(
             models.CashTransaction.account_id.in_(account_ids),
             models.CashTransaction.amount < 0,
-            # ARREGLO: Aplicamos la misma conversión de zona horaria para los gastos
+            # --- NUEVO FILTRO: Excluir Cierres de Caja ---
+            # Usamos NOT ILIKE para que ignore mayúsculas/minúsculas
+            models.CashTransaction.description.notilike("CIERRE DE CAJA%"), 
+            # ---------------------------------------------
             func.date(func.timezone(app_timezone, models.CashTransaction.timestamp)) == target_date
         ).scalar() or 0.0
     total_expenses = abs(total_expenses)
@@ -1749,3 +1760,141 @@ def get_credit_note_by_code(db: Session, code: str):
         models.CreditNote.code == code,
         models.CreditNote.is_active == True
     ).first()
+
+
+
+# --- INICIO DE NUESTRO CÓDIGO (Lógica para Entregar Sin Reparación con Cobro) ---
+def deliver_unrepaired_with_sale(db: Session, work_order_id: int, diagnostic_fee: float, reason: str, user_id: int, location_id: int, pin: str):
+    """
+    Esta función hace dos cosas de un solo golpe:
+    1. Marca la orden como SIN_REPARACION.
+    2. Crea una VENTA real para que el dinero aparezca en los reportes diarios.
+    """
+    # 1. Buscamos la orden de trabajo
+    db_work_order = get_work_order(db, work_order_id=work_order_id)
+    if not db_work_order:
+        raise ValueError("Orden de trabajo no encontrada.")
+
+    # 2. Actualizamos la orden
+    db_work_order.status = "SIN_REPARACION"
+    db_work_order.final_cost = diagnostic_fee # Guardamos cuánto se cobró al final
+    
+    # 3. Creamos la VENTA automática para la Caja
+    # Preparamos el "ítem" de la venta (el servicio de revisión)
+    revision_item = schemas.SaleItemCreate(
+        product_id=None, # No es un producto físico del inventario
+        description=f"REVISIÓN TÉCNICA - ORDEN #{db_work_order.id} ({db_work_order.device_model})",
+        quantity=1,
+        unit_price=diagnostic_fee
+    )
+
+    # Preparamos el pago (asumimos Efectivo por defecto para revisiones, o el método que prefieras)
+    payment_detail = schemas.PaymentDetail(
+        method="EFECTIVO",
+        amount=diagnostic_fee,
+        reference=reason # Ejemplo: "Cliente retiró sin reparar"
+    )
+
+    # Construimos la venta completa
+    sale_create = schemas.SaleCreate(
+        payment_method="EFECTIVO",
+        payments=[payment_detail],
+        iva_percentage=0, # Normalmente las revisiones mínimas no llevan IVA, puedes cambiarlo
+        customer_ci=db_work_order.customer_id_card,
+        customer_name=db_work_order.customer_name,
+        customer_phone=db_work_order.customer_phone,
+        customer_address=db_work_order.customer_address,
+        customer_email=db_work_order.customer_email,
+        items=[revision_item],
+        pin=pin, # Usamos el PIN del técnico para autorizar
+        work_order_id=db_work_order.id
+    )
+
+    # Llamamos a la función que ya tienes para crear ventas
+    # Esto asegura que el dinero entre a la CashAccount (Caja de Ventas)
+    new_sale = create_sale(db, sale_create, user_id, location_id)
+
+    return db_work_order, new_sale
+# --- FIN DE NUESTRO CÓDIGO ---
+
+# --- INICIO DE NUESTRO CÓDIGO (Lógica de Arqueo de Caja DETALLADA v3) ---
+def get_cash_closure_report_data(db: Session, account_id: int, closure_id: int | None = None):
+    """
+    Calcula totales y busca DETALLES DE PRODUCTOS para el reporte.
+    """
+    from datetime import datetime
+    
+    # 1. Definir el rango de tiempo (Igual que antes)
+    if closure_id:
+        target_closure = db.query(models.CashTransaction).filter(models.CashTransaction.id == closure_id).first()
+        if not target_closure: raise ValueError("Cierre no encontrado")
+        end_time = target_closure.timestamp
+        previous_closure = db.query(models.CashTransaction).filter(
+            models.CashTransaction.account_id == account_id,
+            models.CashTransaction.description.like("CIERRE DE CAJA%"),
+            models.CashTransaction.timestamp < end_time
+        ).order_by(models.CashTransaction.timestamp.desc()).first()
+        start_time = previous_closure.timestamp if previous_closure else datetime.min
+    else:
+        last_closure = db.query(models.CashTransaction).filter(
+            models.CashTransaction.account_id == account_id,
+            models.CashTransaction.description.like("CIERRE DE CAJA%")
+        ).order_by(models.CashTransaction.timestamp.desc()).first()
+        start_time = last_closure.timestamp if last_closure else datetime.min
+        end_time = func.now()
+
+    # 2. Obtenemos movimientos de CAJA
+    transactions = db.query(models.CashTransaction).filter(
+        models.CashTransaction.account_id == account_id,
+        models.CashTransaction.timestamp > start_time,
+        models.CashTransaction.timestamp < end_time
+    ).order_by(models.CashTransaction.timestamp.asc()).all()
+
+    summary = {
+        "start_time": start_time if start_time != datetime.min else None,
+        "end_time": end_time if isinstance(end_time, datetime) else datetime.now(),
+        "total_cash_sales": 0.0, "total_incomes": 0.0, "total_expenses": 0.0, "final_balance": 0.0,
+        "closure_amount": abs(target_closure.amount) if closure_id and target_closure else 0.0,
+        "sales_list": [], "expenses_list": [], "incomes_list": []
+    }
+
+    for t in transactions:
+        if "CIERRE DE CAJA" in t.description.upper(): continue
+
+        item = { "time": t.timestamp, "description": t.description, "amount": abs(t.amount), "details": "" }
+
+        if t.amount > 0:
+            if "Venta #" in t.description or "Ingreso Venta" in t.description:
+                summary["total_cash_sales"] += t.amount
+                
+                # --- AQUÍ ESTÁ LA MAGIA: BUSCAR DETALLES DE LA VENTA ---
+                # Intentamos extraer el ID de la venta del string "Ingreso Venta #15..."
+                try:
+                    import re
+                    match = re.search(r'Venta #(\d+)', t.description)
+                    if match:
+                        sale_id = int(match.group(1))
+                        sale = db.query(models.Sale).options(joinedload(models.Sale.items)).filter(models.Sale.id == sale_id).first()
+                        if sale:
+                            # Armamos el detalle: "Cliente: Juan | Items: 1x Cargador..."
+                            client_info = sale.customer_name if sale.customer_name else "Consumidor Final"
+                            products_info = ", ".join([f"{i.quantity}x {i.description}" for i in sale.items])
+                            item["description"] = f"Venta #{sale.id} - {client_info}" # Reemplazamos la descripción genérica
+                            item["details"] = products_info # Guardamos los productos aparte
+                except Exception as e:
+                    print(f"No se pudo detallar venta {t.description}: {e}")
+                # -------------------------------------------------------
+                
+                summary["sales_list"].append(item)
+            else:
+                summary["total_incomes"] += t.amount
+                summary["incomes_list"].append(item)
+        else:
+            summary["total_expenses"] += abs(t.amount)
+            summary["expenses_list"].append(item)
+
+    summary["final_balance"] = summary["total_cash_sales"] + summary["total_incomes"] - summary["total_expenses"]
+    if not closure_id: summary["closure_amount"] = summary["final_balance"]
+
+    return summary
+# --- FIN DE NUESTRO CÓDIGO ---
