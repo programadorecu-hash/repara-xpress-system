@@ -1554,6 +1554,110 @@ def get_past_closures(
     ).order_by(models.CashTransaction.timestamp.desc()).limit(limit).all()
 # --- FIN BLOQUE ---
 
+# ===================================================================
+# --- ENDPOINTS PARA GASTOS Y UTILIDAD NETA ---
+# ===================================================================
+
+# 1. Categorías de Gastos
+@app.get("/expense-categories/", response_model=List[schemas.ExpenseCategory])
+def read_expense_categories(
+    db: Session = Depends(get_db), 
+    current_user: models.User = Depends(security.get_current_user)
+):
+    """Lista los tipos de gastos disponibles (Luz, Agua, etc)."""
+    return crud.get_expense_categories(db)
+
+@app.post("/expense-categories/", response_model=schemas.ExpenseCategory, status_code=status.HTTP_201_CREATED)
+def create_expense_category_endpoint(
+    category: schemas.ExpenseCategoryCreate, 
+    db: Session = Depends(get_db),
+    _role: None = Depends(security.require_role(["admin", "inventory_manager"]))
+):
+    """Crea un nuevo tipo de gasto."""
+    return crud.create_expense_category(db, category)
+
+@app.delete("/expense-categories/{category_id}")
+def delete_expense_category_endpoint(
+    category_id: int, 
+    db: Session = Depends(get_db),
+    _role: None = Depends(security.require_role(["admin"]))
+):
+    """Elimina una categoría de gasto."""
+    result = crud.delete_expense_category(db, category_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="Categoría no encontrada")
+    return result
+
+# 2. Registro de Gastos
+@app.post("/expenses/", response_model=schemas.Expense, status_code=status.HTTP_201_CREATED)
+def create_expense_endpoint(
+    expense: schemas.ExpenseCreate, 
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(security.get_current_user)
+):
+    """
+    Registra un nuevo gasto. Requiere PIN.
+    """
+    try:
+        return crud.create_expense(db, expense, current_user)
+    except ValueError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail="Error al registrar gasto.")
+
+@app.get("/expenses/", response_model=List[schemas.Expense])
+def read_expenses_history(
+    start_date: date | None = None,
+    end_date: date | None = None,
+    location_id: int | None = None,
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(get_db),
+    _role: None = Depends(security.require_role(["admin", "inventory_manager"]))
+):
+    """
+    Reporte de gastos con filtros.
+    """
+    return crud.get_expenses(
+        db, 
+        skip=skip, 
+        limit=limit, 
+        start_date=start_date, 
+        end_date=end_date, 
+        location_id=location_id
+    )
+
+@app.delete("/expenses/{expense_id}")
+def delete_expense_endpoint(
+    expense_id: int, 
+    db: Session = Depends(get_db),
+    _role: None = Depends(security.require_role(["admin"]))
+):
+    """Elimina un gasto registrado por error."""
+    result = crud.delete_expense(db, expense_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="Gasto no encontrado")
+    return result
+
+# --- FIN DE NUESTRO CÓDIGO (Gastos) ---
+
+@app.get("/reports/financial", response_model=schemas.FinancialReport)
+def get_financial_report_endpoint(
+    start_date: date,
+    end_date: date,
+    location_id: int | None = None,
+    db: Session = Depends(get_db),
+    _role: None = Depends(security.require_role(["admin", "inventory_manager"]))
+):
+    """
+    Genera el Reporte de Utilidad Neta (Pérdidas y Ganancias).
+    """
+    return crud.generate_financial_report(
+        db, 
+        start_date=start_date, 
+        end_date=end_date, 
+        location_id=location_id
+    )
 
 # ===================================================================
 # --- TAREA PROGRAMADA: CIERRE AUTOMÁTICO DE TURNOS (23:55) ---

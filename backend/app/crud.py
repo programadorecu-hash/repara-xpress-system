@@ -848,19 +848,72 @@ def get_purchase_invoices(db: Session, skip: int = 0, limit: int = 100):
 
 def create_purchase_invoice(db: Session, invoice: schemas.PurchaseInvoiceCreate, user_id: int, location_id: int):
     try:
+        # --- CORRECCIÓN: BUSCAR LA BODEGA ---
+        # Las compras deben entrar a la Bodega, no al piso de venta (Sucursal)
+        bodega = get_primary_bodega_for_location(db, location_id=location_id)
+        # Si existe bodega, usamos su ID. Si no (raro), usamos la sucursal misma.
+        target_location_id = bodega.id if bodega else location_id
+        # ------------------------------------
+
         total_cost = 0
         invoice_items_to_create = []
+        
         for item in invoice.items:
             line_total = item.quantity * item.cost_per_unit
             total_cost += line_total
-            invoice_items_to_create.append(models.PurchaseInvoiceItem(product_id=item.product_id, quantity=item.quantity, cost_per_unit=item.cost_per_unit))
+            
+            # --- COSTO PROMEDIO PONDERADO (REFORZADO) ---
+            product = get_product(db, item.product_id)
+            if product:
+                # Sumamos stock total de la empresa para el cálculo
+                total_current_stock = db.query(func.sum(models.Stock.quantity)).filter(
+                    models.Stock.product_id == item.product_id
+                ).scalar() or 0
+
+                if total_current_stock <= 0:
+                    # Si no hay stock, el costo es simplemente el de esta compra
+                    product.average_cost = item.cost_per_unit
+                else:
+                    # Fórmula: ((Stock * Costo) + (Nuevo * Precio)) / (Stock + Nuevo)
+                    current_value = total_current_stock * product.average_cost
+                    new_value = item.quantity * item.cost_per_unit
+                    total_quantity = total_current_stock + item.quantity
+                    
+                    # Actualizamos el costo promedio del producto
+                    product.average_cost = (current_value + new_value) / total_quantity
+                
+                db.add(product) 
+            # --------------------------------------------
+
+            invoice_items_to_create.append(
+                models.PurchaseInvoiceItem(
+                    product_id=item.product_id, 
+                    quantity=item.quantity, 
+                    cost_per_unit=item.cost_per_unit
+                )
+            )
         
-        db_invoice = models.PurchaseInvoice(invoice_number=invoice.invoice_number, invoice_date=invoice.invoice_date, total_cost=total_cost, supplier_id=invoice.supplier_id, user_id=user_id, items=invoice_items_to_create)
+        db_invoice = models.PurchaseInvoice(
+            invoice_number=invoice.invoice_number, 
+            invoice_date=invoice.invoice_date, 
+            total_cost=total_cost, 
+            supplier_id=invoice.supplier_id, 
+            user_id=user_id, 
+            items=invoice_items_to_create
+        )
         db.add(db_invoice)
         db.flush()
 
         for item in invoice.items:
-            movement = schemas.InventoryMovementCreate(product_id=item.product_id, location_id=location_id, quantity_change=item.quantity, movement_type="ENTRADA_COMPRA", reference_id=f"COMPRA-{db_invoice.id}", pin=invoice.pin)
+            movement = schemas.InventoryMovementCreate(
+                product_id=item.product_id, 
+                # USAMOS LA BODEGA AQUÍ
+                location_id=target_location_id, 
+                quantity_change=item.quantity, 
+                movement_type="ENTRADA_COMPRA", 
+                reference_id=f"COMPRA-{db_invoice.id}", 
+                pin=invoice.pin
+            )
             create_inventory_movement(db=db, movement=movement, user_id=user_id)
         
         db.commit()
@@ -873,7 +926,7 @@ def create_purchase_invoice(db: Session, invoice: schemas.PurchaseInvoiceCreate,
 # ===================================================================
 # --- VENTAS ---
 # ===================================================================
-# --- INICIO DE NUESTRO CÓDIGO (Venta con Pagos Mixtos) ---
+# --- INICIO DE NUESTRO CÓDIGO (Venta con Pagos Mixtos y Costo Histórico) ---
 def create_sale(db: Session, sale: schemas.SaleCreate, user_id: int, location_id: int):
     try:
         bodega = get_primary_bodega_for_location(db, location_id=location_id)
@@ -884,65 +937,60 @@ def create_sale(db: Session, sale: schemas.SaleCreate, user_id: int, location_id
             raise ValueError("La venta debe incluir al menos un ítem.")
         
         # --- INICIO LÓGICA CLIENTE INTELIGENTE ---
-        # 1. Buscamos si el cliente ya existe por su cédula
         existing_customer = get_customer_by_id_card(db, id_card=sale.customer_ci)
         
         if existing_customer:
-            # 2. Si existe, ACTUALIZAMOS sus datos (por si cambió de teléfono o dirección)
             existing_customer.name = sale.customer_name
             existing_customer.phone = sale.customer_phone
             existing_customer.email = sale.customer_email
             existing_customer.address = sale.customer_address
         else:
-            # 3. Si NO existe, lo CREAMOS automáticamente
             new_customer = models.Customer(
                 id_card=sale.customer_ci,
                 name=sale.customer_name,
                 phone=sale.customer_phone,
                 email=sale.customer_email,
                 address=sale.customer_address,
-                # Guardamos la sucursal donde se hizo la primera compra
                 location_id=location_id, 
                 notes="Cliente registrado automáticamente desde Venta"
             )
             db.add(new_customer)
         # --- FIN LÓGICA CLIENTE INTELIGENTE ---
 
-        # --- LÓGICA DE RECIBO LEGAL (CORRECCIÓN TOTALES) ---
-        # Si estamos cobrando el saldo final de una reparación, re-calculamos la venta
-        # para que refleje el TOTAL ($25) y muestre el abono ($5) como pago previo.
+        # --- SOLUCIÓN AL PROBLEMA DEL DOBLE INGRESO ---
+        # Si esta venta es el cierre de una orden, debemos ANULAR la venta del anticipo 
+        # para que la nueva venta la reemplace completamente.
         if sale.work_order_id:
             db_work_order = get_work_order(db, work_order_id=sale.work_order_id)
-            # Solo aplicamos si existe abono previo
+            
+            # Verificamos si la orden ya tiene una venta asociada (el anticipo)
+            if db_work_order and db_work_order.sale:
+                # ¡AQUÍ ESTÁ LA SOLUCIÓN! 
+                # Eliminamos la venta anterior (el anticipo) de la base de datos
+                # para que no cuente doble en el reporte financiero.
+                # El dinero del anticipo se vuelve a registrar en esta nueva venta como "ANTICIPO".
+                db.delete(db_work_order.sale)
+                db.flush() # Aplicamos la eliminación antes de crear la nueva
+
             if db_work_order and (db_work_order.deposit_amount or 0) > 0:
-                # Calculamos cuánto falta por pagar (Saldo = Total - Abono)
                 real_total = db_work_order.final_cost if db_work_order.final_cost is not None else db_work_order.estimated_cost
                 pending_balance = real_total - db_work_order.deposit_amount
                 
-                # Calculamos cuánto está pagando el cliente AHORA
                 amount_paying_now = sum(p.amount for p in sale.payments)
 
-                # TRUCO: Solo activamos esta lógica si el cliente está pagando el SALDO COMPLETO (o casi)
-                # Si es solo el depósito inicial ($5), esta condición falla y no hace nada (correcto).
                 if abs(amount_paying_now - pending_balance) < 0.02:
                     
-                    # 1. Ajustamos el ítem de venta para que cueste el TOTAL ($25)
                     if sale.items:
                         sale.items[0].unit_price = real_total
-                        # sale.items[0].description += " (Valor Total)"
 
-                    # 2. Reconstruimos los pagos: [Anticipo: $5] + [Efectivo: $20]
-                    # Asumimos que el método de hoy es el que envió el frontend (ej: EFECTIVO)
                     current_method = sale.payments[0].method if sale.payments else "EFECTIVO"
                     
                     new_payments = []
-                    # Agregamos el Anticipo
                     new_payments.append(schemas.PaymentDetail(
                         method="ANTICIPO",
                         amount=db_work_order.deposit_amount,
                         reference="Abono previo"
                     ))
-                    # Agregamos el Pago de Hoy
                     new_payments.append(schemas.PaymentDetail(
                         method=current_method,
                         amount=amount_paying_now,
@@ -950,20 +998,31 @@ def create_sale(db: Session, sale: schemas.SaleCreate, user_id: int, location_id
                     ))
                     
                     sale.payments = new_payments
-                    sale.payment_method = "MIXTO" # Forzamos mixto para que el PDF detalle ambos
+                    sale.payment_method = "MIXTO" 
         # ---------------------------------------------------
 
-        # 1. Calcular totales de productos
+        # 1. Calcular totales y PREPARAR ITEMS CON COSTO
         subtotal_decimal = Decimal("0.00")
         sale_items_to_create = []
         for item in sale.items:
             line_total_decimal = Decimal(item.quantity) * Decimal(str(item.unit_price))
             subtotal_decimal += line_total_decimal
             line_total = line_total_decimal.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+            
+            # --- CAPTURAR EL COSTO DEL MOMENTO ---
+            current_product_cost = 0.0
+            if item.product_id:
+                product = get_product(db, item.product_id)
+                if product:
+                    # Usamos el costo promedio que tiene el producto AHORA MISMO
+                    current_product_cost = product.average_cost
+            # -------------------------------------
+
             sale_items_to_create.append(
                 models.SaleItem(
                     **item.model_dump(),
-                    line_total=float(line_total)
+                    line_total=float(line_total),
+                    recorded_cost=current_product_cost # Guardamos el costo para el reporte
                 )
             )
 
@@ -978,7 +1037,6 @@ def create_sale(db: Session, sale: schemas.SaleCreate, user_id: int, location_id
 
         # 2. Validar que los pagos cubran el total
         total_paid = sum(p.amount for p in sale.payments)
-        # Usamos una pequeña tolerancia por decimales
         if abs(total_paid - total_amount) > 0.02:
              raise ValueError(f"El total pagado (${total_paid}) no coincide con el total de la venta (${total_amount}).")
 
@@ -996,7 +1054,7 @@ def create_sale(db: Session, sale: schemas.SaleCreate, user_id: int, location_id
             total_amount=total_amount,
             iva_percentage=sale.iva_percentage,
             payment_method=main_method,
-            payment_method_details=payment_details_json, # Guardamos la lista aquí
+            payment_method_details=payment_details_json,
             
             customer_ci=sale.customer_ci,
             customer_name=sale.customer_name,
@@ -1004,9 +1062,7 @@ def create_sale(db: Session, sale: schemas.SaleCreate, user_id: int, location_id
             customer_address=sale.customer_address,
             customer_email=sale.customer_email,
 
-            # --- NUEVO: GUARDAR GARANTÍA ---
             warranty_terms=sale.warranty_terms,
-            # -------------------------------
 
             user_id=user_id,
             location_id=location_id,
@@ -1036,7 +1092,6 @@ def create_sale(db: Session, sale: schemas.SaleCreate, user_id: int, location_id
         ).first()
 
         for payment in sale.payments:
-            # --- CASO 1: EFECTIVO (Entra dinero a caja) ---
             if payment.method == "EFECTIVO":
                 if db_caja_ventas:
                     db_transaction = models.CashTransaction(
@@ -1047,14 +1102,11 @@ def create_sale(db: Session, sale: schemas.SaleCreate, user_id: int, location_id
                     )
                     db.add(db_transaction)
             
-            # --- CASO 2: NOTA DE CRÉDITO (Se quema el vale) ---
             elif payment.method == "CREDIT_NOTE":
-                # La referencia DEBE ser el código de la nota (ej: NC-1234)
                 note_code = payment.reference
                 if not note_code:
                     raise ValueError("Se requiere el código de la Nota de Crédito.")
                 
-                # Buscamos la nota y bloqueamos la fila para evitar doble uso simultáneo
                 credit_note = db.query(models.CreditNote).filter(
                     models.CreditNote.code == note_code,
                     models.CreditNote.is_active == True
@@ -1063,17 +1115,9 @@ def create_sale(db: Session, sale: schemas.SaleCreate, user_id: int, location_id
                 if not credit_note:
                     raise ValueError(f"La Nota de Crédito '{note_code}' no existe o ya fue utilizada.")
                 
-                # Verificamos fondos
-                # Permitimos usar una nota de $50 para pagar $20? Sí.
-                # ¿Qué pasa con el vuelto? Por simplicidad en V1, asumimos uso total o exacto.
-                # Si la nota es de $50 y la venta es de $50, perfecto.
-                # Si la nota es menor, el cliente paga la diferencia.
-                # Si la nota es mayor... el sistema actual quemará la nota entera. 
-                # (Idealmente se emitiría una nueva nota por el cambio, pero por ahora simplifiquemos).
-                if credit_note.amount < (payment.amount - 0.02): # Pequeña tolerancia
+                if credit_note.amount < (payment.amount - 0.02):
                      raise ValueError(f"La Nota de Crédito tiene ${credit_note.amount}, pero intentas cobrar ${payment.amount}.")
 
-                # QUEMAMOS LA NOTA (Ya no sirve)
                 credit_note.is_active = False
                 credit_note.reason += f" (Usada en Venta #{db_sale.id})"
 
@@ -1081,29 +1125,12 @@ def create_sale(db: Session, sale: schemas.SaleCreate, user_id: int, location_id
         if sale.work_order_id:
             db_work_order = get_work_order(db, work_order_id=sale.work_order_id)
             if db_work_order:
-                # --- CORRECCIÓN: NO marcar entregado si es solo un adelanto parcial ---
-                
-                # 1. Calculamos cuánto faltaba por pagar (Saldo Teórico)
-                #    (Costo Total - Lo que ya tenía anotado como abono)
                 pending_balance = db_work_order.estimated_cost - db_work_order.deposit_amount
                 
-                # 2. Verificamos si ESTA venta cubre ese saldo restante.
-                #    Usamos un margen de 0.02 para evitar errores de decimales.
-                #    Si (Venta >= Saldo Pendiente), entonces completó el pago.
                 if subtotal_amount >= (pending_balance - 0.02):
-                    # --- CORRECCIÓN DE REGLA DE NEGOCIO ---
-                    # Solo marcamos como ENTREGADO si el equipo ya estaba LISTO.
-                    # Si el equipo apenas está RECIBIDO o REPARANDO, y el cliente paga por adelantado,
-                    # NO debemos cambiar el estado a ENTREGADO todavía.
                     if db_work_order.status == "LISTO":
                         db_work_order.status = "ENTREGADO"
                         db_work_order.final_cost = db_work_order.estimated_cost
-                    # Si no estaba LISTO, simplemente se registra el pago y el saldo baja a 0,
-                    # pero el estado se mantiene (ej: REPARANDO).
-                    # --------------------------------------
-                
-                # Si la venta es menor al saldo (ej: Abono de $10 para una deuda de $30),
-                # NO hacemos nada con el estado. La orden sigue abierta.
 
         db.commit()
         db.refresh(db_sale)
@@ -1897,4 +1924,197 @@ def get_cash_closure_report_data(db: Session, account_id: int, closure_id: int |
     if not closure_id: summary["closure_amount"] = summary["final_balance"]
 
     return summary
+# --- FIN DE NUESTRO CÓDIGO ---
+
+# ===================================================================
+# --- MÓDULO DE GASTOS (Utilidad Neta) ---
+# ===================================================================
+
+# 1. GESTIÓN DE CATEGORÍAS (Las etiquetas del archivador)
+def get_expense_categories(db: Session):
+    """Devuelve la lista de tipos de gastos (Luz, Agua, Nómina, etc.)"""
+    return db.query(models.ExpenseCategory).order_by(models.ExpenseCategory.name).all()
+
+def create_expense_category(db: Session, category: schemas.ExpenseCategoryCreate):
+    """Crea una nueva etiqueta para clasificar gastos."""
+    db_category = models.ExpenseCategory(**category.model_dump())
+    db.add(db_category)
+    db.commit()
+    db.refresh(db_category)
+    return db_category
+
+def delete_expense_category(db: Session, category_id: int):
+    """Borra una categoría si fue un error."""
+    db_category = db.query(models.ExpenseCategory).filter(models.ExpenseCategory.id == category_id).first()
+    if db_category:
+        db.delete(db_category)
+        db.commit()
+    return db_category
+
+# 2. REGISTRO DE GASTOS (Vinculado a Cajas)
+def create_expense(db: Session, expense: schemas.ExpenseCreate, user: models.User):
+    """
+    Registra un gasto y MUEVE EL DINERO DE LA CAJA.
+    """
+    # 1. Seguridad
+    if not user.hashed_pin or not security.verify_password(expense.pin, user.hashed_pin):
+        raise ValueError("PIN incorrecto. No tiene permiso para registrar gastos.")
+
+    # 2. Crear el Gasto (Papel)
+    expense_data = expense.model_dump(exclude={"pin"})
+    db_expense = models.Expense(
+        **expense_data,
+        user_id=user.id 
+    )
+    db.add(db_expense)
+    db.flush() # Para obtener el ID
+
+    # 3. MOVER EL DINERO (Crear CashTransaction)
+    # Si se seleccionó una caja (ahora es obligatorio en el schema, pero validamos igual)
+    if expense.account_id:
+        # Buscamos la cuenta para asegurar que existe y pertenece a la sucursal
+        account = get_cash_account(db, expense.account_id)
+        if not account:
+            raise ValueError("La cuenta de caja seleccionada no existe.")
+        
+        # Creamos el egreso físico del dinero
+        transaction = models.CashTransaction(
+            amount=expense.amount * -1, # Negativo = Salida
+            description=f"GASTO #{db_expense.id}: {expense.description}",
+            user_id=user.id,
+            account_id=expense.account_id
+        )
+        db.add(transaction)
+
+    db.commit()
+    db.refresh(db_expense)
+    return db_expense
+
+def get_expenses(
+    db: Session, 
+    skip: int = 0, 
+    limit: int = 100,
+    start_date: date | None = None,
+    end_date: date | None = None,
+    location_id: int | None = None
+):
+    """
+    Busca los gastos en el archivador.
+    Permite filtrar por fechas y por sucursal para los reportes.
+    """
+    # Preparamos la consulta trayendo los nombres de Categoría, Usuario y Local
+    query = db.query(models.Expense).options(
+        joinedload(models.Expense.category),
+        joinedload(models.Expense.user),
+        joinedload(models.Expense.location)
+    )
+
+    # Filtro por Sucursal
+    if location_id:
+        query = query.filter(models.Expense.location_id == location_id)
+
+    # Filtro por Fecha Inicio
+    if start_date:
+        query = query.filter(func.date(models.Expense.expense_date) >= start_date)
+
+    # Filtro por Fecha Fin
+    if end_date:
+        query = query.filter(func.date(models.Expense.expense_date) <= end_date)
+
+    # Ordenar: Lo más reciente primero
+    return query.order_by(models.Expense.expense_date.desc()).offset(skip).limit(limit).all()
+
+def delete_expense(db: Session, expense_id: int):
+    """Elimina un gasto registrado por error."""
+    db_expense = db.query(models.Expense).filter(models.Expense.id == expense_id).first()
+    if db_expense:
+        db.delete(db_expense)
+        db.commit()
+    return db_expense
+# --- FIN DE NUESTRO CÓDIGO ---
+
+# --- INICIO DE NUESTRO CÓDIGO (Lógica Financiera: El Reporte de Utilidad) ---
+def generate_financial_report(
+    db: Session, 
+    start_date: date, 
+    end_date: date, 
+    location_id: int | None = None
+):
+    """
+    Calcula la Utilidad Neta en un rango de fechas.
+    Fórmula: (Ventas - Costo de Productos) - Gastos Operativos = Utilidad Neta
+    """
+    # Filtros base para fechas
+    # Usamos func.date para comparar solo la parte de la fecha, ignorando la hora
+    date_filter_sales = and_(
+        func.date(models.Sale.created_at) >= start_date,
+        func.date(models.Sale.created_at) <= end_date
+    )
+    
+    date_filter_expenses = and_(
+        func.date(models.Expense.expense_date) >= start_date,
+        func.date(models.Expense.expense_date) <= end_date
+    )
+
+    # Filtro opcional por sucursal
+    loc_filter_sales = (models.Sale.location_id == location_id) if location_id else True
+    loc_filter_expenses = (models.Expense.location_id == location_id) if location_id else True
+
+    # 1. CALCULAR INGRESOS (REVENUE)
+    # Usamos subtotal_amount porque la utilidad se calcula antes de impuestos (el IVA no es tuyo, es del estado)
+    revenue = db.query(func.sum(models.Sale.subtotal_amount)).filter(
+        date_filter_sales,
+        loc_filter_sales
+    ).scalar() or 0.0
+
+    # 2. CALCULAR COSTO DE VENTAS (COGS - Cost of Goods Sold)
+    # Sumamos (Cantidad * Costo Registrado) de cada ítem vendido en ese periodo
+    cogs = db.query(
+        func.sum(models.SaleItem.quantity * models.SaleItem.recorded_cost)
+    ).join(models.Sale).filter(
+        date_filter_sales,
+        loc_filter_sales
+    ).scalar() or 0.0
+
+    # 3. CALCULAR UTILIDAD BRUTA
+    gross_profit = revenue - cogs
+    gross_margin_percent = (gross_profit / revenue * 100) if revenue > 0 else 0.0
+
+    # 4. GASTOS OPERATIVOS (Suma de todo: Luz, Agua, Pasajes, etc.)
+    # Aquí sumamos TODO, incluyendo los gastos de órdenes (pasajes, repuestos externos)
+    total_expenses = db.query(func.sum(models.Expense.amount)).filter(
+        date_filter_expenses,
+        loc_filter_expenses
+    ).scalar() or 0.0
+
+    # Desglose por categoría (para el gráfico o tabla)
+    breakdown_query = db.query(
+        models.ExpenseCategory.name,
+        func.sum(models.Expense.amount)
+    ).join(models.ExpenseCategory).filter(
+        date_filter_expenses,
+        loc_filter_expenses
+    ).group_by(models.ExpenseCategory.name).all()
+
+    expenses_breakdown = [
+        schemas.ExpenseBreakdown(category_name=cat_name, total_amount=amount)
+        for cat_name, amount in breakdown_query
+    ]
+
+    # 5. CALCULAR UTILIDAD NETA FINAL
+    net_utility = gross_profit - total_expenses
+    net_margin_percent = (net_utility / revenue * 100) if revenue > 0 else 0.0
+
+    return schemas.FinancialReport(
+        start_date=start_date,
+        end_date=end_date,
+        total_revenue=round(revenue, 2),
+        total_cogs=round(cogs, 2),
+        gross_profit=round(gross_profit, 2),
+        gross_margin_percent=round(gross_margin_percent, 2),
+        total_expenses=round(total_expenses, 2),
+        expenses_breakdown=expenses_breakdown,
+        net_utility=round(net_utility, 2),
+        net_margin_percent=round(net_margin_percent, 2)
+    )
 # --- FIN DE NUESTRO CÓDIGO ---

@@ -247,6 +247,19 @@ const WorkOrderTable = ({
 
                 {/* Acciones */}
                 <td className="py-3 px-4 text-center space-x-3">
+                  {/* Botón Nuevo: Gasto Asociado */}
+                  <button
+                    onClick={() => {
+                        // Aquí abriremos un modal de gastos especial.
+                        // Por ahora, para no complicar más la respuesta, usamos un alert
+                        // Pero el backend YA ESTÁ LISTO para recibir 'work_order_id' en el gasto.
+                        alert("Funcionalidad pendiente de UI: Gasto en Orden #" + order.work_order_number);
+                    }}
+                    className="text-orange-500 hover:underline text-xs font-medium"
+                  >
+                    +Gasto
+                  </button>
+
                   {/* Abrir/cerrar panel de notas para ESTA orden */}
                   <button
                     onClick={() =>

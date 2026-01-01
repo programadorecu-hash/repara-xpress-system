@@ -16,6 +16,8 @@ class ProductBase(BaseModel):
     price_1: float
     price_2: float
     price_3: float
+    # Hacemos explícito que este campo es parte del formulario base
+    average_cost: float = 0.0 
     is_active: bool = True
     category_id: int | None = None
     
@@ -500,6 +502,9 @@ class PurchaseInvoiceRead(BaseModel):
 class SaleItem(SaleItemBase):
     id: int
     line_total: float
+    # --- NUEVO ---
+    recorded_cost: float = 0.0 # Mostramos el costo histórico en los reportes
+    # -------------
     product: Product | None = None
     class Config:
         from_attributes = True
@@ -658,6 +663,77 @@ class CompanySettings(CompanySettingsBase):
 
     class Config:
         from_attributes = True
+# --- FIN DE NUESTRO CÓDIGO ---
+
+# --- INICIO DE NUESTRO CÓDIGO (Schemas de Gastos) ---
+
+# 1. Categorías de Gastos (Ej: Luz, Agua)
+class ExpenseCategoryBase(BaseModel):
+    name: str
+    description: str | None = None
+
+class ExpenseCategoryCreate(ExpenseCategoryBase):
+    pass
+
+class ExpenseCategory(ExpenseCategoryBase):
+    id: int
+    class Config:
+        from_attributes = True
+
+# 2. Gastos (El registro del pago)
+class ExpenseBase(BaseModel):
+    amount: float
+    description: str
+    expense_date: datetime # Fecha contable del gasto
+    category_id: int
+    location_id: int
+    # --- NUEVO ---
+    account_id: int | None = None # Caja de origen
+    work_order_id: int | None = None # Orden asociada
+    # -------------
+
+class ExpenseCreate(ExpenseBase):
+    pin: str # Pedimos PIN para seguridad al registrar gastos
+
+class Expense(ExpenseBase):
+    id: int
+    created_at: datetime
+    user: UserSimple
+    category: ExpenseCategory
+    location: LocationSimple
+    # account: CashAccountSimple | None = None # Opcional si quieres devolver info de la caja
+    class Config:
+        from_attributes = True
+
+# ===================================================================
+# --- SCHEMAS PARA REPORTES FINANCIEROS (UTILIDAD NETA) ---
+# ===================================================================
+
+class ExpenseBreakdown(BaseModel):
+    category_name: str
+    total_amount: float
+
+class FinancialReport(BaseModel):
+    start_date: date
+    end_date: date
+    
+    # 1. Ingresos
+    total_revenue: float      # Total de ventas (Subtotal sin impuestos)
+    
+    # 2. Costos Directos
+    total_cogs: float         # Costo de los productos vendidos (Recorded Cost)
+    
+    # 3. Utilidad Bruta
+    gross_profit: float       # Ingresos - Costos
+    gross_margin_percent: float # Margen bruto %
+    
+    # 4. Gastos Operativos
+    total_expenses: float     # Suma de facturas de luz, agua, etc.
+    expenses_breakdown: List[ExpenseBreakdown] # Detalle por categoría
+    
+    # 5. Resultado Final
+    net_utility: float        # Utilidad Bruta - Gastos
+    net_margin_percent: float # Margen neto %
 # --- FIN DE NUESTRO CÓDIGO ---
 
 # ===================================================================

@@ -5,17 +5,18 @@ import { HiOutlineCamera, HiOutlinePhotograph, HiOutlineCloudUpload, HiOutlineTr
 
 function ProductForm({ productToEdit, onSave, onClose }) {
   // Estado para almacenar los datos del producto que se está creando o editando.
-  const [product, setProduct] = useState({
+ const [product, setProduct] = useState({
     sku: "",
     name: "",
     description: "",
     price_1: 0,
     price_2: 0,
     price_3: 0,
+    average_cost: 0, // <-- Añadimos el estado para el costo
     category_id: null,
     is_active: true,
     images: [],
-  });
+  }); 
 
   // Estados para la gestión de categorías.
   const [categories, setCategories] = useState([]);
@@ -57,8 +58,8 @@ function ProductForm({ productToEdit, onSave, onClose }) {
     let val;
     if (type === "checkbox") {
       val = checked;
-    } else if (name.startsWith("price") || name === "category_id") {
-      val = value ? parseFloat(value) : null;
+    } else if (name.startsWith("price") || name === "average_cost" || name === "category_id") {
+      val = value ? parseFloat(value) : 0;
     } else {
       // Si es texto (SKU, Nombre, Descripción), lo forzamos a mayúsculas
       val = value ? value.toUpperCase() : "";
@@ -300,6 +301,7 @@ function ProductForm({ productToEdit, onSave, onClose }) {
               className="w-full p-2 border rounded "
             />
           </div>
+          {/* Fila de Precios de Venta */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <label className="font-semibold">Precio 1 (Distribuidor)</label>
@@ -335,6 +337,27 @@ function ProductForm({ productToEdit, onSave, onClose }) {
               />
             </div>
           </div>
+
+          {/* NUEVO: Campo de Costo Promedio (Solo visible para Admins/Gerentes en teoría, pero útil aquí) */}
+          <div className="bg-orange-50 p-3 rounded-lg border border-orange-200">
+            <label className="font-bold text-orange-800 text-sm">Costo Promedio (Costo Real de Compra)</label>
+            <p className="text-xs text-orange-600 mb-1">
+               Úsalo para establecer el costo inicial del inventario si no tienes facturas de compra.
+            </p>
+            <div className="relative">
+                <span className="absolute left-3 top-2 text-gray-500">$</span>
+                <input
+                    type="number"
+                    step="0.01"
+                    name="average_cost"
+                    value={product.average_cost}
+                    onChange={handleChange}
+                    className="w-full p-2 pl-6 border rounded border-orange-300 focus:ring-2 focus:ring-orange-500 outline-none"
+                    placeholder="0.00"
+                />
+            </div>
+          </div>
+
           <div>
             <label className="font-semibold">Categoría</label>
             <div className="flex items-center space-x-2">

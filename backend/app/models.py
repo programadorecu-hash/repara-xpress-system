@@ -26,6 +26,8 @@ class User(Base):
     lost_sale_logs = relationship("LostSaleLog", back_populates="user")
     cash_transactions = relationship("CashTransaction", back_populates="user")
     purchase_invoices = relationship("PurchaseInvoice", back_populates="user")
+    # --- NUEVO: Relación con Gastos ---
+    expenses = relationship("Expense", back_populates="user")
 
 class Location(Base):
     __tablename__ = "locations"
@@ -43,6 +45,8 @@ class Location(Base):
     sales = relationship("Sale", back_populates="location")
     lost_sale_logs = relationship("LostSaleLog", back_populates="location")
     cash_accounts = relationship("CashAccount", back_populates="location")
+    # --- NUEVO: Relación con Gastos ---
+    expenses = relationship("Expense", back_populates="location")
 
 class Product(Base):
     __tablename__ = "products"
@@ -53,11 +57,15 @@ class Product(Base):
     price_1 = Column(Float)
     price_2 = Column(Float)
     price_3 = Column(Float)
+    
+    # --- NUEVO: Costo Promedio (Precio de Compra) ---
+    average_cost = Column(Float, default=0.0, nullable=False) 
+    # ------------------------------------------------
+
     is_active = Column(Boolean, default=True)
     # --- ESTA LINEA ES PARA UNA SOLA FOTO, LA DEJO AQUÍ POR SI LAS MOSCAS image_url = Column(String, nullable=True)
     category_id = Column(Integer, ForeignKey("categories.id"), nullable=True)
 
-    category_id = Column(Integer, ForeignKey("categories.id"), nullable=True)
     category = relationship("Category", back_populates="products")
     stock_entries = relationship("Stock", back_populates="product")
     movements = relationship("InventoryMovement", back_populates="product")
@@ -167,6 +175,7 @@ class WorkOrder(Base):
     
     # NUEVA RELACIÓN: Una orden de trabajo ahora puede tener muchas imágenes.
     images = relationship("WorkOrderImage", back_populates="work_order")
+    expenses = relationship("Expense", back_populates="work_order")
 
         # Notas internas (bitácora)
     notes = relationship(
@@ -247,6 +256,11 @@ class SaleItem(Base):
     quantity = Column(Integer, nullable=False)
     unit_price = Column(Float, nullable=False)
     line_total = Column(Float, nullable=False)
+    
+    # --- NUEVO: Costo Histórico (Cuánto costaba este ítem al momento de la venta) ---
+    recorded_cost = Column(Float, default=0.0, nullable=False)
+    # -------------------------------------------------------------------------------
+
     sale_id = Column(Integer, ForeignKey("sales.id"), nullable=False)
     product_id = Column(Integer, ForeignKey("products.id"), nullable=True)
     sale = relationship("Sale", back_populates="items")
@@ -295,6 +309,7 @@ class CashAccount(Base):
     location_id = Column(Integer, ForeignKey("locations.id"), nullable=False)
     location = relationship("Location", back_populates="cash_accounts")
     transactions = relationship("CashTransaction", back_populates="account")
+    expenses = relationship("Expense", back_populates="account")
 
     # 2. Añadimos este "anexo" al final de la clase.
     # Esta es la NUEVA REGLA: La combinación del nombre y la sucursal (location_id) debe ser única.
@@ -401,3 +416,52 @@ class CompanySettings(Base):
     # Configuración actualizada el:
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 # --- FIN DE NUESTRO CÓDIGO ---
+
+# --- INICIO DE NUESTRO CÓDIGO (Módulo de Gastos) ---
+
+class ExpenseCategory(Base):
+    """
+    Define los tipos de gastos (ej: Servicios Básicos, Nómina, Arriendo).
+    Es como las pestañas separadoras de un archivador.
+    """
+    __tablename__ = "expense_categories"
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, unique=True, index=True, nullable=False) # Ej: "Luz", "Agua"
+    description = Column(String, nullable=True)
+    
+    # Relación: Una categoría tiene muchos gastos registrados
+    expenses = relationship("Expense", back_populates="category")
+
+class Expense(Base):
+    """
+    Registra cada gasto individual.
+    Ej: Pago de Luz de Enero ($25.00) en el Local Centro.
+    """
+    __tablename__ = "expenses"
+    id = Column(Integer, primary_key=True, index=True)
+    
+    # Detalles del dinero
+    amount = Column(Float, nullable=False) # Cuánto costó
+    description = Column(String, nullable=False) # Ej: "Factura Luz Enero 2026"
+    expense_date = Column(DateTime(timezone=True), nullable=False) # Fecha del gasto (para el reporte)
+    
+    # Auditoría (Cuándo se registró en el sistema)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    # Relaciones (Enlaces)
+    category_id = Column(Integer, ForeignKey("expense_categories.id"), nullable=False)
+    location_id = Column(Integer, ForeignKey("locations.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+
+    # --- NUEVO: VINCULAR A UNA CUENTA DE CAJA Y ORDEN ---
+    account_id = Column(Integer, ForeignKey("cash_accounts.id"), nullable=True) # De qué caja salió el dinero
+    work_order_id = Column(Integer, ForeignKey("work_orders.id"), nullable=True) # Si es un gasto de una reparación (pasaje/repuesto)
+    # ----------------------------------------------------
+
+    category = relationship("ExpenseCategory", back_populates="expenses")
+    location = relationship("Location", back_populates="expenses")
+    user = relationship("User", back_populates="expenses")
+    
+    # Relaciones inversas nuevas
+    account = relationship("CashAccount", back_populates="expenses")
+    work_order = relationship("WorkOrder", back_populates="expenses")

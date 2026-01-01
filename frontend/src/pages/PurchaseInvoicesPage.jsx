@@ -1,362 +1,496 @@
-import React, { useContext, useEffect, useMemo, useState } from 'react';
-import DataTable from '../components/DataTable.jsx';
-import ModalForm from '../components/ModalForm.jsx';
-import api from '../services/api';
-import { AuthContext } from '../context/AuthContext.jsx';
+import React, { useState, useEffect, useContext } from 'react';
+import axios from 'axios';
+import { AuthContext } from '../context/AuthContext';
+import { toast } from 'react-toastify';
+import { 
+    HiShoppingCart, HiPlus, HiTrash, HiSearch, HiUserAdd, HiCube 
+} from 'react-icons/hi';
+import ModalForm from '../components/ModalForm'; // Reutilizamos tu modal genérico
 
-const emptyInvoice = {
-  invoice_number: '',
-  invoice_date: new Date().toISOString().slice(0, 10),
-  supplier_id: '',
-  pin: '',
-};
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
-const emptyItem = {
-  product_id: '',
-  quantity: 1,
-  cost_per_unit: 0,
-};
-
-function PurchaseInvoicesPage() {
-  const { user, activeShift } = useContext(AuthContext);
-  const [invoices, setInvoices] = useState([]);
-  const [suppliers, setSuppliers] = useState([]);
-  const [products, setProducts] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [formState, setFormState] = useState(emptyInvoice);
-  const [items, setItems] = useState([emptyItem]);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [listError, setListError] = useState('');
-
-  const canManagePurchases = user?.role === 'admin' || user?.role === 'inventory_manager';
-  const locationId = activeShift?.location?.id;
-
-  const fetchDependencies = async () => {
-    try {
-      setLoading(true);
-      setError('');
-      const [supplierResponse, productResponse] = await Promise.all([
-        api.get('/suppliers/'),
-        api.get('/products/'),
-      ]);
-      setSuppliers(supplierResponse.data);
-      setProducts(productResponse.data);
-    } catch (err) {
-      setError('No se pudo preparar el formulario de compras.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchInvoices = async () => {
-    try {
-      const response = await api.get('/purchase-invoices/');
-      setInvoices(response.data);
-      setListError('');
-    } catch (err) {
-      setListError('No se pudieron cargar las facturas de compra.');
-      setInvoices([]);
-    }
-  };
-
-  useEffect(() => {
-    fetchDependencies();
-    fetchInvoices();
-  }, []);
-
-  const handleOpenModal = () => {
-    setFormState({
-      ...emptyInvoice,
-      invoice_date: new Date().toISOString().slice(0, 10),
-    });
-    setItems([emptyItem]);
-    setIsModalOpen(true);
-  };
-
-  const handleCloseModal = () => {
-    setIsModalOpen(false);
-  };
-
-  const handleInvoiceChange = (event) => {
-    const { name, value } = event.target;
-    // Número de factura en mayúsculas, el resto (PIN/IDs) igual
-    const val = name === 'invoice_number' ? value.toUpperCase() : value;
+const PurchaseInvoicesPage = () => {
+    const { token, user } = useContext(AuthContext);
     
-    setFormState((prev) => ({
-      ...prev,
-      [name]: val,
-    }));
-  };
+    // --- ESTADOS DE DATOS ---
+    const [suppliers, setSuppliers] = useState([]);
+    const [products, setProducts] = useState([]);
+    const [filteredProducts, setFilteredProducts] = useState([]); // Para el buscador
+    
+    // --- ESTADOS DEL FORMULARIO PRINCIPAL ---
+    const [invoiceNumber, setInvoiceNumber] = useState('');
+    const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().split('T')[0]);
+    const [selectedSupplier, setSelectedSupplier] = useState('');
+    const [pin, setPin] = useState('');
+    
+    // --- ESTADOS DEL CARRITO DE COMPRA ---
+    const [cart, setCart] = useState([]);
+    const [selectedProduct, setSelectedProduct] = useState(''); // ID del producto seleccionado
+    const [productSearchTerm, setProductSearchTerm] = useState(''); // Texto del buscador
+    const [quantity, setQuantity] = useState(1);
+    const [cost, setCost] = useState('');
 
-  const handleItemChange = (index, field, value) => {
-    setItems((prev) => {
-      const updated = [...prev];
-      updated[index] = {
-        ...updated[index],
-        [field]: value,
-      };
-      return updated;
-    });
-  };
+    // --- ESTADOS DE MODALES RÁPIDOS ---
+    const [isProductModalOpen, setIsProductModalOpen] = useState(false);
+    const [isSupplierModalOpen, setIsSupplierModalOpen] = useState(false);
+    
+    // Formulario Producto Rápido
+    const [newProdName, setNewProdName] = useState('');
+    const [newProdSku, setNewProdSku] = useState('');
+    const [newProdPrice, setNewProdPrice] = useState('');
+    const [newProdCat, setNewProdCat] = useState('');
+    const [categories, setCategories] = useState([]); // Para el select de categoría
 
-  const handleAddItem = () => {
-    setItems((prev) => [...prev, emptyItem]);
-  };
+    // Formulario Proveedor Rápido
+    const [newSuppName, setNewSuppName] = useState('');
+    const [newSuppPhone, setNewSuppPhone] = useState('');
 
-  const handleRemoveItem = (index) => {
-    setItems((prev) => prev.filter((_, idx) => idx !== index));
-  };
+    // --- CARGA INICIAL ---
+    useEffect(() => {
+        fetchSuppliers();
+        fetchProducts();
+        fetchCategories();
+    }, [token]);
 
-  const totalCost = useMemo(() => {
-    return items.reduce((acc, item) => {
-      const quantity = Number(item.quantity) || 0;
-      const cost = Number(item.cost_per_unit) || 0;
-      return acc + quantity * cost;
-    }, 0);
-  }, [items]);
+    // --- EFECTO DE BÚSQUEDA ---
+    useEffect(() => {
+        // Filtrar productos cuando cambia el texto de búsqueda
+        if (productSearchTerm === '') {
+            setFilteredProducts(products.slice(0, 50)); // Mostrar los primeros 50 por defecto
+        } else {
+            const lowerTerm = productSearchTerm.toLowerCase();
+            const filtered = products.filter(p => 
+                p.name.toLowerCase().includes(lowerTerm) || 
+                p.sku.toLowerCase().includes(lowerTerm)
+            );
+            setFilteredProducts(filtered.slice(0, 50)); // Limitar resultados para rendimiento
+        }
+    }, [productSearchTerm, products]);
 
-  const handleSubmit = async () => {
-    if (!locationId) {
-      setError('Necesitas iniciar un turno para registrar compras.');
-      return;
-    }
+    const fetchSuppliers = async () => {
+        try {
+            const res = await axios.get(`${API_URL}/suppliers/`, { headers: { Authorization: `Bearer ${token}` } });
+            setSuppliers(res.data);
+        } catch (error) { console.error(error); }
+    };
 
-    const validItems = items.filter((item) => item.product_id && Number(item.quantity) > 0);
-    if (validItems.length === 0) {
-      setError('Agrega al menos un producto válido a la factura.');
-      return;
-    }
+    const fetchProducts = async () => {
+        try {
+            // Traemos productos sin paginación estricta para el buscador local (o limitamos a 1000)
+            const res = await axios.get(`${API_URL}/products/?limit=2000`, { headers: { Authorization: `Bearer ${token}` } });
+            setProducts(res.data);
+            setFilteredProducts(res.data.slice(0, 50));
+        } catch (error) { console.error(error); }
+    };
 
-    setIsSubmitting(true);
-    setError('');
-    try {
-      const payload = {
-        invoice_number: formState.invoice_number,
-        invoice_date: formState.invoice_date,
-        supplier_id: Number(formState.supplier_id),
-        pin: formState.pin,
-        items: validItems.map((item) => ({
-          product_id: Number(item.product_id),
-          quantity: Number(item.quantity),
-          cost_per_unit: Number(item.cost_per_unit),
-        })),
-      };
+    const fetchCategories = async () => {
+        try {
+            const res = await axios.get(`${API_URL}/categories/`, { headers: { Authorization: `Bearer ${token}` } });
+            setCategories(res.data);
+        } catch (error) { console.error(error); }
+    };
 
-      const response = await api.post(`/purchase-invoices/?location_id=${locationId}`, payload);
-      setInvoices((prev) => [response.data, ...prev]);
-      handleCloseModal();
-      setFormState(emptyInvoice);
-      setItems([emptyItem]);
-    } catch (err) {
-      const detail = err.response?.data?.detail;
-      setError(detail || 'No se pudo registrar la factura.');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
+    // --- MANEJO DEL CARRITO ---
+    const handleAddItem = (e) => {
+        e.preventDefault();
+        if (!selectedProduct || quantity <= 0 || cost <= 0) {
+            toast.warning("Selecciona producto, cantidad y costo válido.");
+            return;
+        }
+        
+        const productObj = products.find(p => p.id === parseInt(selectedProduct));
+        if (!productObj) return;
 
-  const columns = [
-    { key: 'invoice_number', label: 'Número' },
-    {
-      key: 'invoice_date',
-      label: 'Fecha',
-      render: (row) => new Date(row.invoice_date).toLocaleDateString(),
-    },
-    {
-      key: 'supplier',
-      label: 'Proveedor',
-      render: (row) => row.supplier?.name || '—',
-    },
-    {
-      key: 'total_cost',
-      label: 'Total',
-      render: (row) => `$${Number(row.total_cost || 0).toFixed(2)}`,
-      headerClassName: 'text-right',
-      cellClassName: 'text-right font-semibold',
-    },
-    {
-      key: 'items_count',
-      label: 'Artículos',
-      render: (row) => row.items?.length || 0,
-      headerClassName: 'text-center',
-      cellClassName: 'text-center',
-    },
-  ];
+        const newItem = {
+            product_id: parseInt(selectedProduct),
+            product_name: productObj.name,
+            quantity: parseInt(quantity),
+            cost_per_unit: parseFloat(cost),
+            total: parseInt(quantity) * parseFloat(cost)
+        };
 
-  if (!canManagePurchases) {
+        setCart([...cart, newItem]);
+        // Resetear campos de item, pero mantener el cursor en el buscador si es posible
+        setProductSearchTerm('');
+        setSelectedProduct('');
+        setQuantity(1);
+        setCost('');
+    };
+
+    const handleRemoveItem = (index) => {
+        const newCart = [...cart];
+        newCart.splice(index, 1);
+        setCart(newCart);
+    };
+
+    // --- CREACIÓN RÁPIDA: PROVEEDOR ---
+    const handleQuickSupplier = async () => {
+        if (!newSuppName) return toast.warning("Nombre requerido");
+        try {
+            const res = await axios.post(`${API_URL}/suppliers/`, {
+                name: newSuppName.toUpperCase(),
+                phone: newSuppPhone,
+                email: null, contact_person: null
+            }, { headers: { Authorization: `Bearer ${token}` } });
+            
+            setSuppliers([...suppliers, res.data]);
+            setSelectedSupplier(res.data.id); // Seleccionar automáticamente
+            setIsSupplierModalOpen(false);
+            setNewSuppName(''); setNewSuppPhone('');
+            toast.success("Proveedor creado y seleccionado");
+        } catch (error) {
+            toast.error("Error al crear proveedor");
+        }
+    };
+
+    // --- CREACIÓN RÁPIDA: PRODUCTO ---
+    const handleQuickProduct = async () => {
+        if (!newProdName || !newProdSku || !newProdPrice) return toast.warning("Faltan datos");
+        try {
+            const payload = {
+                name: newProdName.toUpperCase(),
+                sku: newProdSku.toUpperCase(),
+                description: "Creado desde Compras",
+                price_1: parseFloat(newProdPrice),
+                price_2: parseFloat(newProdPrice),
+                price_3: parseFloat(newProdPrice),
+                category_id: newProdCat ? parseInt(newProdCat) : null,
+                average_cost: 0 // Se actualizará con esta compra
+            };
+            
+            const res = await axios.post(`${API_URL}/products/`, payload, { headers: { Authorization: `Bearer ${token}` } });
+            
+            const newProd = res.data;
+            setProducts([...products, newProd]);
+            setProductSearchTerm(newProd.name); // Para que aparezca en el filtro
+            setSelectedProduct(newProd.id); // Seleccionar automáticamente
+            setIsProductModalOpen(false);
+            
+            // Limpiar
+            setNewProdName(''); setNewProdSku(''); setNewProdPrice(''); setNewProdCat('');
+            toast.success("Producto creado. ¡Ahora ponle costo y cantidad!");
+        } catch (error) {
+            toast.error(error.response?.data?.detail || "Error al crear producto");
+        }
+    };
+
+    // --- GUARDAR FACTURA COMPLETA ---
+    const handleSubmitInvoice = async (e) => {
+        e.preventDefault();
+        if (cart.length === 0) return toast.warning("El carrito está vacío");
+        if (!selectedSupplier) return toast.warning("Selecciona un proveedor");
+        if (!pin) return toast.warning("Ingresa tu PIN");
+
+        try {
+            const payload = {
+                invoice_number: invoiceNumber,
+                invoice_date: invoiceDate,
+                supplier_id: parseInt(selectedSupplier),
+                items: cart.map(item => ({
+                    product_id: item.product_id,
+                    quantity: item.quantity,
+                    cost_per_unit: item.cost_per_unit
+                })),
+                pin: pin
+            };
+
+            await axios.post(`${API_URL}/purchase-invoices/`, payload, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+
+            toast.success("Factura de compra registrada correctamente");
+            // Reset total
+            setCart([]);
+            setInvoiceNumber('');
+            setPin('');
+            setProductSearchTerm('');
+            setSelectedProduct('');
+        } catch (error) {
+            toast.error(error.response?.data?.detail || "Error al registrar compra");
+        }
+    };
+
+    const grandTotal = cart.reduce((acc, item) => acc + item.total, 0);
+
     return (
-      <div className="bg-white p-6 rounded-xl shadow-md border">
-        <h1 className="text-2xl font-bold text-secondary mb-2">Facturas de compra</h1>
-        <p className="text-gray-500">No tienes permisos para gestionar compras.</p>
-      </div>
-    );
-  }
+        <div className="p-6 max-w-6xl mx-auto">
+            <h1 className="text-3xl font-bold text-gray-800 mb-6 flex items-center">
+                <HiShoppingCart className="mr-3 text-indigo-600" />
+                Ingreso de Mercadería (Compras)
+            </h1>
 
-  return (
-    <div className="bg-white p-6 rounded-xl shadow-md border space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-secondary">Facturas de compra</h1>
-          <p className="text-sm text-gray-500">Registra compras y actualiza automáticamente el inventario.</p>
-        </div>
-        <button
-          onClick={handleOpenModal}
-          className="bg-accent text-white font-semibold py-2 px-4 rounded-lg"
-        >
-          + Registrar compra
-        </button>
-      </div>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                
+                {/* --- COLUMNA IZQUIERDA: DATOS DE FACTURA --- */}
+                <div className="lg:col-span-1 space-y-6">
+                    <div className="bg-white p-6 rounded-xl shadow-md border border-gray-200">
+                        <h2 className="font-bold text-lg text-gray-700 mb-4 border-b pb-2">Datos de Factura</h2>
+                        
+                        <div className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-bold text-gray-700 mb-1">N° Factura Física</label>
+                                <input 
+                                    type="text" 
+                                    value={invoiceNumber} 
+                                    onChange={e => setInvoiceNumber(e.target.value.toUpperCase())}
+                                    className="w-full border p-2 rounded focus:ring-2 focus:ring-indigo-500 outline-none uppercase"
+                                    placeholder="001-001-123456789"
+                                />
+                            </div>
 
-      {(error || listError) && (
-        <div className="space-y-2">
-          {error && <div className="p-3 rounded-lg bg-red-100 text-red-700">{error}</div>}
-          {listError && <div className="p-3 rounded-lg bg-yellow-100 text-yellow-700">{listError}</div>}
-        </div>
-      )}
+                            <div>
+                                <label className="block text-sm font-bold text-gray-700 mb-1">Proveedor</label>
+                                <div className="flex gap-2">
+                                    <select 
+                                        value={selectedSupplier}
+                                        onChange={e => setSelectedSupplier(e.target.value)}
+                                        className="w-full border p-2 rounded bg-white"
+                                    >
+                                        <option value="">-- Seleccionar --</option>
+                                        {suppliers.map(s => (
+                                            <option key={s.id} value={s.id}>{s.name}</option>
+                                        ))}
+                                    </select>
+                                    <button 
+                                        onClick={() => setIsSupplierModalOpen(true)}
+                                        className="bg-green-100 text-green-700 p-2 rounded hover:bg-green-200 transition"
+                                        title="Crear Nuevo Proveedor"
+                                    >
+                                        <HiUserAdd size={20} />
+                                    </button>
+                                </div>
+                            </div>
 
-      {loading ? (
-        <p className="text-gray-500">Preparando formulario...</p>
-      ) : (
-        <DataTable columns={columns} data={invoices} emptyMessage="No hay compras registradas." />
-      )}
+                            <div>
+                                <label className="block text-sm font-bold text-gray-700 mb-1">Fecha Emisión</label>
+                                <input 
+                                    type="date" 
+                                    value={invoiceDate} 
+                                    onChange={e => setInvoiceDate(e.target.value)}
+                                    className="w-full border p-2 rounded"
+                                />
+                            </div>
+                        </div>
+                    </div>
 
-      <ModalForm
-        title="Registrar compra"
-        isOpen={isModalOpen}
-        onClose={handleCloseModal}
-        onSubmit={handleSubmit}
-        submitLabel="Guardar compra"
-        isSubmitting={isSubmitting}
-        footer={(
-          <div className="flex w-full items-center justify-between gap-4">
-            <span>Total estimado:</span>
-            <span className="font-semibold text-secondary text-lg">${totalCost.toFixed(2)}</span>
-          </div>
-        )}
-      >
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-semibold text-gray-700">Número de factura *</label>
-            <input
-              type="text"
-              name="invoice_number"
-              value={formState.invoice_number}
-              onChange={handleInvoiceChange}
-              required
-              className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-semibold text-gray-700">Fecha *</label>
-            <input
-              type="date"
-              name="invoice_date"
-              value={formState.invoice_date}
-              onChange={handleInvoiceChange}
-              required
-              className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-semibold text-gray-700">Proveedor *</label>
-            <select
-              name="supplier_id"
-              value={formState.supplier_id}
-              onChange={handleInvoiceChange}
-              required
-              className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent"
-            >
-              <option value="">Selecciona un proveedor</option>
-              {suppliers.map((supplier) => (
-                <option key={supplier.id} value={supplier.id}>
-                  {supplier.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-semibold text-gray-700">PIN de autorización *</label>
-            <input
-              type="password"
-              name="pin"
-              value={formState.pin}
-              onChange={handleInvoiceChange}
-              required
-              className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent"
-            />
-          </div>
-        </div>
+                    {/* --- AGREGAR PRODUCTOS --- */}
+                    <div className="bg-indigo-50 p-6 rounded-xl shadow-md border border-indigo-100">
+                        <h2 className="font-bold text-lg text-indigo-800 mb-4 border-b border-indigo-200 pb-2">Agregar Producto</h2>
+                        
+                        <form onSubmit={handleAddItem} className="space-y-4">
+                            <div>
+                                <label className="block text-xs font-bold text-indigo-600 mb-1">BUSCAR PRODUCTO</label>
+                                <div className="relative">
+                                    <div className="flex gap-2 mb-1">
+                                        <input 
+                                            type="text"
+                                            value={productSearchTerm}
+                                            onChange={e => {
+                                                setProductSearchTerm(e.target.value);
+                                                setSelectedProduct(''); // Resetear selección al buscar
+                                            }}
+                                            className="w-full p-2 pl-8 border rounded focus:ring-2 focus:ring-indigo-500 outline-none"
+                                            placeholder="Escribe nombre o SKU..."
+                                        />
+                                        <HiSearch className="absolute left-2.5 top-3 text-gray-400" />
+                                        
+                                        <button 
+                                            type="button"
+                                            onClick={() => setIsProductModalOpen(true)}
+                                            className="bg-blue-100 text-blue-700 p-2 rounded hover:bg-blue-200 transition flex-shrink-0"
+                                            title="Crear Nuevo Producto"
+                                        >
+                                            <HiPlus size={20} />
+                                        </button>
+                                    </div>
+                                    
+                                    {/* Selector Filtrado */}
+                                    <select 
+                                        value={selectedProduct}
+                                        onChange={e => {
+                                            setSelectedProduct(e.target.value);
+                                            // Auto-rellenar nombre en buscador para UX
+                                            const p = products.find(prod => prod.id === parseInt(e.target.value));
+                                            if(p) setProductSearchTerm(p.name);
+                                        }}
+                                        className="w-full border p-2 rounded bg-white text-sm"
+                                        size="5" // Mostrar como lista desplegada
+                                    >
+                                        {filteredProducts.length === 0 ? (
+                                            <option disabled>No hay coincidencias</option>
+                                        ) : (
+                                            filteredProducts.map(p => (
+                                                <option key={p.id} value={p.id}>
+                                                    {p.name} (SKU: {p.sku})
+                                                </option>
+                                            ))
+                                        )}
+                                    </select>
+                                </div>
+                            </div>
 
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-lg font-semibold text-secondary">Productos</h3>
-            <button
-              type="button"
-              onClick={handleAddItem}
-              className="text-accent font-semibold"
-            >
-              + Agregar producto
-            </button>
-          </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-xs font-bold text-indigo-600">CANTIDAD</label>
+                                    <input 
+                                        type="number" min="1" 
+                                        value={quantity} 
+                                        onChange={e => setQuantity(e.target.value)}
+                                        className="w-full border p-2 rounded text-center font-bold"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-indigo-600">COSTO UNIT. ($)</label>
+                                    <input 
+                                        type="number" step="0.01" min="0.01"
+                                        value={cost} 
+                                        onChange={e => setCost(e.target.value)}
+                                        className="w-full border p-2 rounded text-center font-bold text-green-700"
+                                        placeholder="0.00"
+                                    />
+                                </div>
+                            </div>
 
-          {items.map((item, index) => (
-            <div key={index} className="grid grid-cols-1 md:grid-cols-12 gap-3 bg-gray-50 p-4 rounded-lg">
-              <div className="md:col-span-5">
-                <label className="block text-sm font-semibold text-gray-700">Producto *</label>
-                <select
-                  value={item.product_id}
-                  onChange={(event) => handleItemChange(index, 'product_id', event.target.value)}
-                  required
-                  className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent"
-                >
-                  <option value="">Selecciona un producto</option>
-                  {products.map((product) => (
-                    <option key={product.id} value={product.id}>
-                      {product.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="md:col-span-3">
-                <label className="block text-sm font-semibold text-gray-700">Cantidad *</label>
-                <input
-                  type="number"
-                  min="1"
-                  value={item.quantity}
-                  onChange={(event) => handleItemChange(index, 'quantity', event.target.value)}
-                  className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent"
-                />
-              </div>
-              <div className="md:col-span-3">
-                <label className="block text-sm font-semibold text-gray-700">Costo unitario *</label>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={item.cost_per_unit}
-                  onChange={(event) => handleItemChange(index, 'cost_per_unit', event.target.value)}
-                  className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent"
-                />
-              </div>
-              <div className="md:col-span-1 flex items-end">
-                {items.length > 1 && (
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveItem(index)}
-                    className="text-red-500 hover:underline"
-                  >
-                    Quitar
-                  </button>
-                )}
-              </div>
+                            <button type="submit" className="w-full bg-indigo-600 text-white font-bold py-2 rounded hover:bg-indigo-700 transition">
+                                Agregar a la Lista
+                            </button>
+                        </form>
+                    </div>
+                </div>
+
+                {/* --- COLUMNA DERECHA: RESUMEN Y GUARDAR --- */}
+                <div className="lg:col-span-2 flex flex-col h-full">
+                    <div className="bg-white rounded-xl shadow-md border border-gray-200 flex-grow flex flex-col overflow-hidden">
+                        <div className="p-4 bg-gray-50 border-b border-gray-200 flex justify-between items-center">
+                            <h2 className="font-bold text-gray-700">Detalle de Compra</h2>
+                            <span className="bg-blue-100 text-blue-800 text-xs font-bold px-2 py-1 rounded">
+                                {cart.length} Items
+                            </span>
+                        </div>
+
+                        <div className="flex-grow overflow-auto p-0">
+                            <table className="w-full text-left border-collapse">
+                                <thead className="bg-gray-100 text-gray-600 text-xs uppercase sticky top-0">
+                                    <tr>
+                                        <th className="p-3">Producto</th>
+                                        <th className="p-3 text-center">Cant.</th>
+                                        <th className="p-3 text-right">Costo Unit.</th>
+                                        <th className="p-3 text-right">Subtotal</th>
+                                        <th className="p-3 text-center">X</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-100 text-sm">
+                                    {cart.length === 0 ? (
+                                        <tr>
+                                            <td colSpan="5" className="p-8 text-center text-gray-400">
+                                                Agrega productos desde el panel izquierdo
+                                            </td>
+                                        </tr>
+                                    ) : (
+                                        cart.map((item, idx) => (
+                                            <tr key={idx} className="hover:bg-gray-50">
+                                                <td className="p-3 font-medium text-gray-800">{item.product_name}</td>
+                                                <td className="p-3 text-center">{item.quantity}</td>
+                                                <td className="p-3 text-right">${item.cost_per_unit.toFixed(2)}</td>
+                                                <td className="p-3 text-right font-bold text-gray-800">${item.total.toFixed(2)}</td>
+                                                <td className="p-3 text-center">
+                                                    <button onClick={() => handleRemoveItem(idx)} className="text-red-400 hover:text-red-600">
+                                                        <HiTrash size={18}/>
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        ))
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <div className="p-6 bg-gray-50 border-t border-gray-200">
+                            <div className="flex justify-between items-end mb-4">
+                                <div>
+                                    <label className="block text-sm font-bold text-gray-700 mb-1">Confirma con tu PIN</label>
+                                    <input 
+                                        type="password" 
+                                        value={pin}
+                                        onChange={e => setPin(e.target.value)}
+                                        className="border p-2 rounded w-32 text-center tracking-widest"
+                                        placeholder="****"
+                                    />
+                                </div>
+                                <div className="text-right">
+                                    <p className="text-sm text-gray-500 uppercase">Total Factura</p>
+                                    <p className="text-4xl font-bold text-gray-800">${grandTotal.toFixed(2)}</p>
+                                </div>
+                            </div>
+                            
+                            <button 
+                                onClick={handleSubmitInvoice}
+                                className="w-full bg-green-600 text-white font-bold py-4 rounded-xl shadow-lg hover:bg-green-700 transition transform hover:-translate-y-1"
+                            >
+                                REGISTRAR INGRESO A BODEGA
+                            </button>
+                        </div>
+                    </div>
+                </div>
             </div>
-          ))}
+
+            {/* --- MODAL CREAR PRODUCTO --- */}
+            <ModalForm
+                isOpen={isProductModalOpen}
+                onClose={() => setIsProductModalOpen(false)}
+                title="Crear Nuevo Producto Rápido"
+                submitLabel="Crear Producto"
+                onSubmit={handleQuickProduct}
+            >
+                <div className="space-y-3">
+                    <div className="flex gap-2">
+                        <div className="flex-1">
+                            <label className="block text-xs font-bold text-gray-500">NOMBRE</label>
+                            <input type="text" value={newProdName} onChange={e => setNewProdName(e.target.value.toUpperCase())} className="w-full border p-2 rounded" />
+                        </div>
+                        <div className="w-1/3">
+                            <label className="block text-xs font-bold text-gray-500">SKU / CÓDIGO</label>
+                            <input type="text" value={newProdSku} onChange={e => setNewProdSku(e.target.value.toUpperCase())} className="w-full border p-2 rounded" />
+                        </div>
+                    </div>
+                    <div className="flex gap-2">
+                        <div className="flex-1">
+                            <label className="block text-xs font-bold text-gray-500">PRECIO VENTA P3 ($)</label>
+                            <input type="number" step="0.01" value={newProdPrice} onChange={e => setNewProdPrice(e.target.value)} className="w-full border p-2 rounded" />
+                        </div>
+                        <div className="flex-1">
+                            <label className="block text-xs font-bold text-gray-500">CATEGORÍA</label>
+                            <select value={newProdCat} onChange={e => setNewProdCat(e.target.value)} className="w-full border p-2 rounded bg-white">
+                                <option value="">Sin Categoría</option>
+                                {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                            </select>
+                        </div>
+                    </div>
+                    <p className="text-xs text-gray-400 mt-2">* El costo se definirá al agregarlo a la factura.</p>
+                </div>
+            </ModalForm>
+
+            {/* --- MODAL CREAR PROVEEDOR --- */}
+            <ModalForm
+                isOpen={isSupplierModalOpen}
+                onClose={() => setIsSupplierModalOpen(false)}
+                title="Nuevo Proveedor"
+                submitLabel="Guardar Proveedor"
+                onSubmit={handleQuickSupplier}
+            >
+                <div className="space-y-3">
+                    <div>
+                        <label className="block text-xs font-bold text-gray-500">NOMBRE EMPRESA / PERSONA</label>
+                        <input type="text" value={newSuppName} onChange={e => setNewSuppName(e.target.value.toUpperCase())} className="w-full border p-2 rounded" />
+                    </div>
+                    <div>
+                        <label className="block text-xs font-bold text-gray-500">TELÉFONO (Opcional)</label>
+                        <input type="text" value={newSuppPhone} onChange={e => setNewSuppPhone(e.target.value)} className="w-full border p-2 rounded" />
+                    </div>
+                </div>
+            </ModalForm>
         </div>
-      </ModalForm>
-    </div>
-  );
-}
+    );
+};
 
 export default PurchaseInvoicesPage;
