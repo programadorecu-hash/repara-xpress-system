@@ -540,36 +540,31 @@ def adjust_inventory_stock(
         raise HTTPException(status_code=403, detail="No tienes permiso para ajustar el stock.")
 
     try:
-        # 1. El "empleado" (crud.py) prepara el movimiento y actualiza el stock (en memoria)
+        # 1. El "empleado" (crud.py) prepara el movimiento
         movement = crud.adjust_stock(db=db, adjustment=adjustment, user_id=current_user.id)
         
-        # 2. Revisamos si el empleado nos devolvió algo
-        if movement is None:
-            # Si no devolvió nada, es porque la cantidad no cambió.
-            # No hay nada que guardar, así que le decimos al usuario.
-            db.rollback() # Deshacemos cualquier cambio en memoria
-            raise HTTPException(status_code=400, detail="La cantidad especificada es la misma que la actual. No se realizó ningún ajuste.")
-
-        # 3. Guardamos cambios
-        db.commit()
+        # 2. Si crud nos devolvió algo, lo guardamos.
+        if movement:
+            db.commit()
+            full_movement = crud.get_inventory_movement_by_id(db, movement.id)
+            return full_movement
         
-        # 4. CORRECCIÓN ERROR 500:
-        # En lugar de db.refresh(movement), que a veces falla con relaciones perezosas,
-        # cargamos el objeto explícitamente con sus relaciones.
-        full_movement = crud.get_inventory_movement_by_id(db, movement.id)
+        # 3. Si movement es None (significa que no hubo cambios y decidimos no registrarlo),
+        # devolvemos un éxito falso para que el frontend no de error rojo.
+        # Pero con el cambio en crud.py, esto casi nunca pasará.
+        return {"status": "success", "message": "Stock verificado. Sin cambios."}
         
-        return full_movement
-        
+    except HTTPException as he:
+        # [CAMBIO] Si es una alerta controlada (400, 403), la dejamos pasar tal cual
+        db.rollback()
+        raise he
     except ValueError as e:
-        # Si el "empleado" (crud) nos dijo que no había stock o algo salió mal...
-        db.rollback() # Deshacemos los cambios
+        db.rollback() 
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        # Por si ocurre cualquier otro error (como el db.refresh(None) que tenías antes)
-        db.rollback() # Deshacemos todo
-        # Devolvemos un error 500 genérico pero registramos el detalle
-        print(f"Error inesperado en adjust_inventory_stock: {e}")
-        raise HTTPException(status_code=500, detail="Ocurrió un error interno al ajustar el stock.")
+        db.rollback() 
+        print(f"Error CRÍTICO en adjust_inventory_stock: {e}")
+        raise HTTPException(status_code=500, detail="Error interno del servidor.")
 
 # ===================================================================
 # --- ENDPOINTS PARA MOVIMIENTOS (KARDEX) ---

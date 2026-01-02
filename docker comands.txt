@@ -7,4 +7,4 @@ docker compose logs tunnel
 arbol.txt
 
 cd C:\Users\Usuario\Desktop\repara-xpress-system
-tree "C:\Users\Usuario\Desktop\repara-xpress-system" /F | Out-File "C:\Users\Usuario\Desktop\repara-xpress-system\arbol.txt"
+Get-ChildItem -Path "C:\Users\Usuario\Desktop\repara-xpress-system" -Recurse | Where-Object { $_.FullName -notmatch 'node_modules|\.git|__pycache__|venv|dist|build|\.next' } | ForEach-Object { $indent = ($_.FullName.Replace("C:\Users\Usuario\Desktop\repara-xpress-system", "").Split('\').Count - 2); "  " * $indent + "|-- " + $_.Name } | Out-File "C:\Users\Usuario\Desktop\repara-xpress-system\arbol_limpio.txt"

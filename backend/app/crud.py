@@ -377,8 +377,9 @@ def adjust_stock(db: Session, adjustment: schemas.StockAdjustmentCreate, user_id
     # Calculamos la diferencia que necesitamos mover
     quantity_change = adjustment.new_quantity - current_quantity
 
-    if quantity_change == 0:
-        return None # No hay nada que hacer
+    # [CAMBIO] Permitimos confirmar el stock (diferencia 0) para que quede registro de auditoría
+    # if quantity_change == 0:
+    #    return None 
 
     # Creamos el movimiento en el Kardex
     movement = schemas.InventoryMovementCreate(
@@ -413,8 +414,8 @@ def create_inventory_movement(db: Session, movement: schemas.InventoryMovementCr
 
     # Si no hay registro de stock, creamos uno (asumiendo que es una entrada o ajuste inicial)
     if not db_stock:
-        # Solo permitir crear si la cantidad es positiva (entrada/ajuste)
-        if movement.quantity_change <= 0:
+        # [CAMBIO] Permitimos crear stock con 0 (inicialización vacía). Solo bloqueamos negativos.
+        if movement.quantity_change < 0:
              product = get_product(db, movement.product_id)
              product_name = product.name if product else f"ID {movement.product_id}"
              raise ValueError(f"Intento de sacar stock inexistente para '{product_name}'.")

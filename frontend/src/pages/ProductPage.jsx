@@ -18,6 +18,7 @@ function ProductPage() {
 
   // Nuevo estado para el modo "Auditoría de Costos"
   const [showZeroCostOnly, setShowZeroCostOnly] = useState(false);
+  const [zeroCostCount, setZeroCostCount] = useState(0); // <--- Memoria para el contador
 
   const fetchProducts = async () => {
     try {
@@ -35,6 +36,13 @@ function ProductPage() {
 
   useEffect(() => {
     fetchProducts();
+
+    // --- SENSOR DE COSTOS ---
+    // Preguntamos silenciosamente cuántos hay sin costo para actualizar el botón
+    api.get("/products/reports/zero-cost")
+       .then(response => setZeroCostCount(response.data.length))
+       .catch(err => console.error("Error actualizando contador del botón", err));
+
   }, [showZeroCostOnly]); // Se recarga si cambias el modo
 
   const handleSaveProduct = async (productData) => {
@@ -122,7 +130,7 @@ function ProductPage() {
                     onClick={() => setShowZeroCostOnly(!showZeroCostOnly)}
                     className={`px-4 py-2 rounded-lg font-bold transition ${showZeroCostOnly ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
                 >
-                    {showZeroCostOnly ? "Ver Todos" : "⚠️ Corregir Costos (0)"}
+                    {showZeroCostOnly ? "Ver Todos" : `⚠️ Corregir Costos (${zeroCostCount})`}
                 </button>
             )}
 

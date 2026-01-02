@@ -75,8 +75,13 @@ function ProductForm({ productToEdit, onSave, onClose }) {
     let val;
     if (type === "checkbox") {
       val = checked;
-    } else if (name.startsWith("price") || name === "average_cost" || name === "category_id") {
-      val = value ? parseFloat(value) : 0;
+    } else if (name.startsWith("price") || name === "average_cost") {
+      // [ARREGLO] Permitimos borrar completamente (cadena vacía)
+      // Si el campo se vacía, guardamos "" en lugar de 0 para que no aparezca el "0 pegajoso"
+      val = value === "" ? "" : parseFloat(value);
+    } else if (name === "category_id") {
+      // Las categorías sí necesitan ser números o nulos
+      val = value ? parseInt(value) : null;
     } else {
       // Si es texto (SKU, Nombre, Descripción), lo forzamos a mayúsculas
       val = value ? value.toUpperCase() : "";
@@ -331,9 +336,11 @@ function ProductForm({ productToEdit, onSave, onClose }) {
                   type="number"
                   step="0.01"
                   name="price_3" // Mantenemos el nombre técnico price_3 para PVP
-                  value={product.price_3}
+                  // [ARREGLO] Si es 0, mostramos vacío para que puedas escribir
+                  value={product.price_3 === 0 ? "" : product.price_3}
                   onChange={handleChange}
                   className="w-full p-2 pl-6 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none font-bold text-gray-800"
+                  placeholder="0.00"
                 />
               </div>
             </div>
@@ -347,9 +354,10 @@ function ProductForm({ productToEdit, onSave, onClose }) {
                   type="number"
                   step="0.01"
                   name="price_2"
-                  value={product.price_2}
+                  value={product.price_2 === 0 ? "" : product.price_2}
                   onChange={handleChange}
                   className="w-full p-2 pl-6 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
+                  placeholder="0.00"
                 />
               </div>
             </div>
@@ -363,9 +371,10 @@ function ProductForm({ productToEdit, onSave, onClose }) {
                   type="number"
                   step="0.01"
                   name="price_1"
-                  value={product.price_1}
+                  value={product.price_1 === 0 ? "" : product.price_1}
                   onChange={handleChange}
                   className="w-full p-2 pl-6 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
+                  placeholder="0.00"
                 />
               </div>
             </div>
@@ -383,14 +392,14 @@ function ProductForm({ productToEdit, onSave, onClose }) {
             <div className="relative">
                 <span className="absolute left-3 top-2 text-gray-500">$</span>
                 <input
-                    type="number"
-                    step="0.0001" // Más precisión para costos
-                    name="average_cost"
-                    value={product.average_cost}
-                    onChange={handleChange}
-                    disabled={!canEditCost}
-                    className={`w-full p-2 pl-6 border rounded outline-none ${!canEditCost ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : 'bg-white border-gray-300 focus:ring-2 focus:ring-blue-500'}`}
-                    placeholder="0.00"
+                  type="number"
+                  step="0.0001" // Más precisión para costos
+                  name="average_cost"
+                  value={product.average_cost === 0 ? "" : product.average_cost}
+                  onChange={handleChange}
+                  disabled={!canEditCost}
+                  className={`w-full p-2 pl-6 border rounded outline-none ${!canEditCost ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : 'bg-white border-gray-300 focus:ring-2 focus:ring-blue-500'}`}
+                  placeholder="0.00"
                 />
             </div>
           </div>
