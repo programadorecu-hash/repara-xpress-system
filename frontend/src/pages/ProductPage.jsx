@@ -16,10 +16,15 @@ function ProductPage() {
   const [productForAdjustment, setProductForAdjustment] = useState(null);
   const { user } = useContext(AuthContext);
 
+  // Nuevo estado para el modo "Auditoría de Costos"
+  const [showZeroCostOnly, setShowZeroCostOnly] = useState(false);
+
   const fetchProducts = async () => {
     try {
       setLoading(true);
-      const response = await api.get("/products/");
+      // Si estamos en modo "Sin Costo", llamamos al nuevo endpoint
+      const endpoint = showZeroCostOnly ? "/products/reports/zero-cost" : "/products/";
+      const response = await api.get(endpoint);
       setProducts(response.data);
     } catch (err) {
       setError("No se pudieron cargar los productos.");
@@ -30,7 +35,7 @@ function ProductPage() {
 
   useEffect(() => {
     fetchProducts();
-  }, []);
+  }, [showZeroCostOnly]); // Se recarga si cambias el modo
 
   const handleSaveProduct = async (productData) => {
     try {
@@ -108,19 +113,31 @@ function ProductPage() {
     <div className="bg-white p-6 rounded-xl shadow-md border">
       <div className="flex justify-between items-center mb-4">
         <h1 className="text-2xl font-bold text-secondary">
-          Catálogo de Productos
+          {showZeroCostOnly ? "⚠️ Artículos Sin Valor Inicial" : "Catálogo de Productos"}
         </h1>
-        {canManageProducts && (
-          <button
-            onClick={() => {
-              setProductToEdit(null);
-              setIsFormOpen(true);
-            }}
-            className="bg-accent text-white font-bold py-2 px-4 rounded-lg"
-          >
-            + Nuevo Producto
-          </button>
-        )}
+        <div className="flex gap-2">
+            {/* BOTÓN TOGGLE: VER SIN COSTO */}
+            {canManageProducts && (
+                <button
+                    onClick={() => setShowZeroCostOnly(!showZeroCostOnly)}
+                    className={`px-4 py-2 rounded-lg font-bold transition ${showZeroCostOnly ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                >
+                    {showZeroCostOnly ? "Ver Todos" : "⚠️ Corregir Costos (0)"}
+                </button>
+            )}
+
+            {canManageProducts && (
+            <button
+                onClick={() => {
+                setProductToEdit(null);
+                setIsFormOpen(true);
+                }}
+                className="bg-accent text-white font-bold py-2 px-4 rounded-lg hover:bg-teal-600"
+            >
+                + Nuevo Producto
+            </button>
+            )}
+        </div>
       </div>
 
       <div className="overflow-x-auto">
@@ -165,23 +182,37 @@ function ProductPage() {
                   ${product.price_3.toFixed(2)}
                 </td>
                 {isLoggedIn && (
-                  <td className="py-3 px-4 text-center">
-                    <button
-                      onClick={() => setSelectedProduct(product)}
-                      className="text-blue-500 hover:underline mr-4"
-                    >
+                  <td className="py-3 px-4 text-center space-x-3">
+                    {/* Botón Ver */}
+                    <button onClick={() => setSelectedProduct(product)} className="text-blue-500 hover:underline text-xs font-semibold">
                       Ver
                     </button>
+                    
                     {canManageProducts && (
-                      <button
-                        onClick={() => {
-                          setProductToEdit(product);
-                          setIsFormOpen(true);
-                        }}
-                        className="text-green-500 hover:underline"
-                      >
-                        Editar
-                      </button>
+                      <>
+                        {/* Botón Editar */}
+                        <button
+                            onClick={() => {
+                            setProductToEdit(product);
+                            setIsFormOpen(true);
+                            }}
+                            className="text-green-600 hover:underline text-xs font-semibold"
+                        >
+                            Editar
+                        </button>
+                        
+                        {/* BOTÓN NUEVO: AJUSTE DE STOCK RÁPIDO */}
+                        <button
+                            onClick={() => {
+                                setProductForAdjustment(product);
+                                setIsAdjustmentFormOpen(true);
+                            }}
+                            className="text-purple-600 hover:underline text-xs font-semibold"
+                            title="Corregir inventario (Olvidé uno)"
+                        >
+                            Stock
+                        </button>
+                      </>
                     )}
                   </td>
                 )}

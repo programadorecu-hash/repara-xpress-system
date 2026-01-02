@@ -2,11 +2,28 @@ import React, { useState, useEffect, useRef } from "react";
 import api from "../services/api";
 // Importamos íconos modernos para la interfaz de fotos
 import { HiOutlineCamera, HiOutlinePhotograph, HiOutlineCloudUpload, HiOutlineTrash } from "react-icons/hi";
+import { useContext } from "react";
+import { AuthContext } from "../context/AuthContext";
 
 function ProductForm({ productToEdit, onSave, onClose }) {
+  const { user } = useContext(AuthContext);
+  const canEditCost = user?.role === "admin" || user?.role === "inventory_manager";
+
+  // Estilos para ocultar flechas en inputs numéricos
+  const noArrowsStyle = `
+    input[type=number]::-webkit-inner-spin-button, 
+    input[type=number]::-webkit-outer-spin-button { 
+      -webkit-appearance: none; 
+      margin: 0; 
+    }
+    input[type=number] {
+      -moz-appearance: textfield;
+    }
+  `;
+
   // Estado para almacenar los datos del producto que se está creando o editando.
  const [product, setProduct] = useState({
-    sku: "",
+   sku: "",
     name: "",
     description: "",
     price_1: 0,
@@ -301,58 +318,78 @@ function ProductForm({ productToEdit, onSave, onClose }) {
               className="w-full p-2 border rounded "
             />
           </div>
-          {/* Fila de Precios de Venta */}
+          <style>{noArrowsStyle}</style>
+
+          {/* Fila de Precios de Venta (REORDENADA LÓGICAMENTE) */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* PRECIO 3: Ahora es el PVP (El más alto usualmente) */}
             <div>
-              <label className="font-semibold">Precio 1 (Distribuidor)</label>
-              <input
-                type="number"
-                step="0.01"
-                name="price_1"
-                value={product.price_1}
-                onChange={handleChange}
-                className="w-full p-2 border rounded"
-              />
+              <label className="font-bold text-gray-700 text-sm">Precio Final (PVP)</label>
+              <div className="relative">
+                <span className="absolute left-3 top-2 text-gray-400">$</span>
+                <input
+                  type="number"
+                  step="0.01"
+                  name="price_3" // Mantenemos el nombre técnico price_3 para PVP
+                  value={product.price_3}
+                  onChange={handleChange}
+                  className="w-full p-2 pl-6 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none font-bold text-gray-800"
+                />
+              </div>
             </div>
+
+            {/* PRECIO 2: Descuento */}
             <div>
-              <label className="font-semibold">Precio 2 (Descuento)</label>
-              <input
-                type="number"
-                step="0.01"
-                name="price_2"
-                value={product.price_2}
-                onChange={handleChange}
-                className="w-full p-2 border rounded"
-              />
+              <label className="font-semibold text-gray-600 text-sm">Con Descuento</label>
+              <div className="relative">
+                <span className="absolute left-3 top-2 text-gray-400">$</span>
+                <input
+                  type="number"
+                  step="0.01"
+                  name="price_2"
+                  value={product.price_2}
+                  onChange={handleChange}
+                  className="w-full p-2 pl-6 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
+                />
+              </div>
             </div>
+
+            {/* PRECIO 1: Mayorista/Frecuente (El más bajo) */}
             <div>
-              <label className="font-semibold">Precio 3 (Normal)</label>
-              <input
-                type="number"
-                step="0.01"
-                name="price_3"
-                value={product.price_3}
-                onChange={handleChange}
-                className="w-full p-2 border rounded"
-              />
+              <label className="font-semibold text-gray-600 text-sm">Cliente Frecuente</label>
+              <div className="relative">
+                <span className="absolute left-3 top-2 text-gray-400">$</span>
+                <input
+                  type="number"
+                  step="0.01"
+                  name="price_1"
+                  value={product.price_1}
+                  onChange={handleChange}
+                  className="w-full p-2 pl-6 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
+                />
+              </div>
             </div>
           </div>
 
-          {/* NUEVO: Campo de Costo Promedio (Solo visible para Admins/Gerentes en teoría, pero útil aquí) */}
-          <div className="bg-orange-50 p-3 rounded-lg border border-orange-200">
-            <label className="font-bold text-orange-800 text-sm">Costo Promedio (Costo Real de Compra)</label>
-            <p className="text-xs text-orange-600 mb-1">
-               Úsalo para establecer el costo inicial del inventario si no tienes facturas de compra.
+          {/* Campo de Costo Promedio (Diseño limpio y profesional) */}
+          <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 mt-2">
+            <div className="flex justify-between items-center mb-1">
+                <label className="font-bold text-gray-700 text-sm">Costo Promedio (Interno)</label>
+                {!canEditCost && <span className="text-xs text-red-500 bg-red-50 px-2 py-1 rounded">Solo Admin</span>}
+            </div>
+            <p className="text-xs text-gray-500 mb-2">
+               Costo real de compra. Se actualiza automáticamente con las facturas.
             </p>
             <div className="relative">
                 <span className="absolute left-3 top-2 text-gray-500">$</span>
                 <input
                     type="number"
-                    step="0.01"
+                    step="0.0001" // Más precisión para costos
                     name="average_cost"
                     value={product.average_cost}
                     onChange={handleChange}
-                    className="w-full p-2 pl-6 border rounded border-orange-300 focus:ring-2 focus:ring-orange-500 outline-none"
+                    disabled={!canEditCost}
+                    className={`w-full p-2 pl-6 border rounded outline-none ${!canEditCost ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : 'bg-white border-gray-300 focus:ring-2 focus:ring-blue-500'}`}
                     placeholder="0.00"
                 />
             </div>

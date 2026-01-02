@@ -290,6 +290,15 @@ def delete_product_by_id(product_id: int, db: Session = Depends(get_db), _role_c
         raise HTTPException(status_code=404, detail="Producto no encontrado para eliminar")
     return db_product
 
+# --- NUEVO ENDPOINT: PRODUCTOS SIN COSTO ---
+@app.get("/products/reports/zero-cost", response_model=List[schemas.Product])
+def read_products_zero_cost(
+    db: Session = Depends(get_db),
+    _role_check: None = Depends(security.require_role(required_roles=["admin", "inventory_manager"]))
+):
+    return crud.get_products_zero_cost(db)
+# -------------------------------------------
+
 @limiter.limit("10/minute")  # Subidas acotadas para evitar abuso/picos
 @app.post("/products/{product_id}/upload-image/", response_model=schemas.Product)
 def upload_product_image(
@@ -541,16 +550,15 @@ def adjust_inventory_stock(
             db.rollback() # Deshacemos cualquier cambio en memoria
             raise HTTPException(status_code=400, detail="La cantidad especificada es la misma que la actual. No se realizó ningún ajuste.")
 
-        # 3. ¡AQUÍ ESTÁ EL ARREGLO!
-        # Si SÍ nos devolvió un movimiento, ahora la "recepcionista" (main.py)
-        # guarda permanentemente los cambios en la base de datos.
+        # 3. Guardamos cambios
         db.commit()
         
-        # 4. Y le pedimos a la base de datos el "recibo" completo (con id, fecha, etc.)
-        db.refresh(movement) 
-
-        # 5. Ahora sí, devolvemos el movimiento completo y firmado.
-        return movement
+        # 4. CORRECCIÓN ERROR 500:
+        # En lugar de db.refresh(movement), que a veces falla con relaciones perezosas,
+        # cargamos el objeto explícitamente con sus relaciones.
+        full_movement = crud.get_inventory_movement_by_id(db, movement.id)
+        
+        return full_movement
         
     except ValueError as e:
         # Si el "empleado" (crud) nos dijo que no había stock o algo salió mal...

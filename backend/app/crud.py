@@ -282,10 +282,11 @@ def create_location(db: Session, location: schemas.LocationCreate):
     db.add(db_bodega)
     
     # 4. Creamos la "Caja Fuerte de Ventas" (CashAccount)
+    # ARREGLO ESTÉTICO: Nombre en mayúsculas
     db_caja_ventas = models.CashAccount(
-        name=f"Caja Ventas - {db_sucursal.name}",
-        account_type="CAJA_VENTAS", # Usamos el nuevo tipo
-        location_id=db_sucursal.id # La conectamos a la Oficina
+        name=f"CAJA VENTAS - {db_sucursal.name.upper()}",
+        account_type="CAJA_VENTAS", 
+        location_id=db_sucursal.id 
     )
     db.add(db_caja_ventas)
 
@@ -1235,6 +1236,7 @@ def get_sales(
 def create_cash_account(db: Session, account: schemas.CashAccountCreate):
     # Convertimos el nombre a MAYÚSCULAS antes de guardar
     account_data = account.model_dump()
+    # ARREGLO VISUAL: El nombre de la caja siempre en mayúsculas para consistencia
     account_data['name'] = account_data['name'].upper()
     
     db_account = models.CashAccount(**account_data)
@@ -2117,4 +2119,23 @@ def generate_financial_report(
         net_utility=round(net_utility, 2),
         net_margin_percent=round(net_margin_percent, 2)
     )
+
+# --- NUEVO: Reporte de Productos sin Costo ---
+def get_products_zero_cost(db: Session):
+    """Devuelve productos activos que tienen costo promedio 0."""
+    return db.query(models.Product).filter(
+        models.Product.is_active == True,
+        models.Product.average_cost == 0
+    ).options(joinedload(models.Product.images)).all()
+# ---------------------------------------------
+
 # --- FIN DE NUESTRO CÓDIGO ---
+
+# --- Función para obtener un movimiento completo (Corrige error 500) ---
+def get_inventory_movement_by_id(db: Session, movement_id: int):
+    return db.query(models.InventoryMovement).options(
+        joinedload(models.InventoryMovement.product),
+        joinedload(models.InventoryMovement.location),
+        joinedload(models.InventoryMovement.user)
+    ).filter(models.InventoryMovement.id == movement_id).first()
+# -----------------------------------------------------------------------

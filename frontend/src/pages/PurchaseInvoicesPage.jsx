@@ -19,7 +19,14 @@ const PurchaseInvoicesPage = () => {
     
     // --- ESTADOS DEL FORMULARIO PRINCIPAL ---
     const [invoiceNumber, setInvoiceNumber] = useState('');
-    const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().split('T')[0]);
+    // ARREGLO FECHA: Usar hora local, no UTC
+    const [invoiceDate, setInvoiceDate] = useState(() => {
+        const today = new Date();
+        const year = today.getFullYear();
+        const month = String(today.getMonth() + 1).padStart(2, '0');
+        const day = String(today.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    });
     const [selectedSupplier, setSelectedSupplier] = useState('');
     const [pin, setPin] = useState('');
     
@@ -44,6 +51,10 @@ const PurchaseInvoicesPage = () => {
     // Formulario Proveedor Rápido
     const [newSuppName, setNewSuppName] = useState('');
     const [newSuppPhone, setNewSuppPhone] = useState('');
+    // CAMPOS NUEVOS
+    const [newSuppAddress, setNewSuppAddress] = useState('');
+    const [newSuppEmail, setNewSuppEmail] = useState('');
+    const [newSuppContact, setNewSuppContact] = useState('');
 
     // --- CARGA INICIAL ---
     useEffect(() => {
@@ -123,14 +134,17 @@ const PurchaseInvoicesPage = () => {
         setCart(newCart);
     };
 
-    // --- CREACIÓN RÁPIDA: PROVEEDOR ---
+    // --- CREACIÓN RÁPIDA: PROVEEDOR (MEJORADA) ---
     const handleQuickSupplier = async () => {
         if (!newSuppName) return toast.warning("Nombre requerido");
         try {
             const res = await axios.post(`${API_URL}/suppliers/`, {
                 name: newSuppName.toUpperCase(),
-                phone: newSuppPhone,
-                email: null, contact_person: null
+                phone: newSuppPhone || null,
+                email: newSuppEmail || null, 
+                contact_person: newSuppContact || null,
+                // Si tu backend soporta dirección en proveedor, añádela aquí.
+                // Si no, la omitimos para evitar error 422.
             }, { headers: { Authorization: `Bearer ${token}` } });
             
             setSuppliers([...suppliers, res.data]);
@@ -180,22 +194,61 @@ const PurchaseInvoicesPage = () => {
         if (cart.length === 0) return toast.warning("El carrito está vacío");
         if (!selectedSupplier) return toast.warning("Selecciona un proveedor");
         if (!pin) return toast.warning("Ingresa tu PIN");
-
+        
+        // 1. Necesitamos el ID de la ubicación actual para la compra
+        // Asumimos que viene del token/contexto. Si no está en 'activeShift', usamos un default o error.
+        // Pero el backend recibe 'location_id' como query param en tu código actual de main.py
+        
+        // CORRECCIÓN 422: Validar tipos estrictamente
         try {
+            // El endpoint en main.py es: POST /purchase-invoices/?location_id=...
+            // Necesitamos el location_id. Lo sacamos del turno activo.
+            const userProfile = await axios.get(`${API_URL}/users/me/profile`, { headers: { Authorization: `Bearer ${token}` } });
+            const activeLocId = userProfile.data.active_shift?.location_id;
+
+            if (!activeLocId) {
+                return toast.error("Debes tener un turno activo para registrar compras (para saber a qué bodega va).");
+            }
+
             const payload = {
-                invoice_number: invoiceNumber,
+                invoice_number: invoiceNumber || "S/N", // Evitar string vacío
                 invoice_date: invoiceDate,
-                supplier_id: parseInt(selectedSupplier),
+                supplier_id: parseInt(selectedSupplier, 10), // Forzar entero
                 items: cart.map(item => ({
-                    product_id: item.product_id,
-                    quantity: item.quantity,
-                    cost_per_unit: item.cost_per_unit
+                    product_id: parseInt(item.product_id, 10),
+                    quantity: parseInt(item.quantity, 10),
+                    cost_per_unit: parseFloat(item.cost_per_unit)
                 })),
                 pin: pin
             };
 
             await axios.post(`${API_URL}/purchase-invoices/`, payload, {
-                headers: { Authorization: `Bearer ${token}` }
+                headers: { Authorization: `Bearer ${token}` },
+                params: { location_id: activeLocId } // <--- ESTO FALTABA Y CAUSABA ERROR 422
+            });
+
+            toast.success("Factura de compra registrada correctamente");
+
+            // 1. Obtener la ubicación del turno activo (para saber a qué bodega va)
+            // Usamos una llamada síncrona al perfil si no tenemos el dato en el contexto inmediato
+            // O mejor, intentamos obtenerlo del usuario actual
+            let targetLocationId = null;
+            try {
+                const profileRes = await axios.get(`${API_URL}/users/me/profile`, { 
+                    headers: { Authorization: `Bearer ${token}` } 
+                });
+                targetLocationId = profileRes.data.active_shift?.location_id;
+            } catch (e) {
+                console.error("Error obteniendo turno", e);
+            }
+
+            if (!targetLocationId) {
+                return toast.error("Debes iniciar turno en una sucursal para registrar compras.");
+            }
+
+            await axios.post(`${API_URL}/purchase-invoices/`, payload, {
+                headers: { Authorization: `Bearer ${token}` },
+                params: { location_id: targetLocationId } // <--- ESTO FALTABA
             });
 
             toast.success("Factura de compra registrada correctamente");
@@ -470,7 +523,7 @@ const PurchaseInvoicesPage = () => {
                 </div>
             </ModalForm>
 
-            {/* --- MODAL CREAR PROVEEDOR --- */}
+            {/* --- MODAL CREAR PROVEEDOR (COMPLETO) --- */}
             <ModalForm
                 isOpen={isSupplierModalOpen}
                 onClose={() => setIsSupplierModalOpen(false)}
@@ -480,12 +533,22 @@ const PurchaseInvoicesPage = () => {
             >
                 <div className="space-y-3">
                     <div>
-                        <label className="block text-xs font-bold text-gray-500">NOMBRE EMPRESA / PERSONA</label>
-                        <input type="text" value={newSuppName} onChange={e => setNewSuppName(e.target.value.toUpperCase())} className="w-full border p-2 rounded" />
+                        <label className="block text-xs font-bold text-gray-500">NOMBRE EMPRESA / PERSONA *</label>
+                        <input type="text" value={newSuppName} onChange={e => setNewSuppName(e.target.value.toUpperCase())} className="w-full border p-2 rounded" required />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                        <div>
+                            <label className="block text-xs font-bold text-gray-500">TELÉFONO</label>
+                            <input type="text" value={newSuppPhone} onChange={e => setNewSuppPhone(e.target.value)} className="w-full border p-2 rounded" />
+                        </div>
+                        <div>
+                             <label className="block text-xs font-bold text-gray-500">CONTACTO (VENDEDOR)</label>
+                             <input type="text" value={newSuppContact} onChange={e => setNewSuppContact(e.target.value)} className="w-full border p-2 rounded" />
+                        </div>
                     </div>
                     <div>
-                        <label className="block text-xs font-bold text-gray-500">TELÉFONO (Opcional)</label>
-                        <input type="text" value={newSuppPhone} onChange={e => setNewSuppPhone(e.target.value)} className="w-full border p-2 rounded" />
+                        <label className="block text-xs font-bold text-gray-500">EMAIL</label>
+                        <input type="email" value={newSuppEmail} onChange={e => setNewSuppEmail(e.target.value)} className="w-full border p-2 rounded" />
                     </div>
                 </div>
             </ModalForm>
