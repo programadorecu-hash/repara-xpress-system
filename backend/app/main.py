@@ -138,6 +138,58 @@ async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
 def read_root():
     return {"message": "¡Bienvenido a la API de Repara Xpress Quito!"}
 
+# ===================================================================
+# --- ENDPOINTS PÚBLICOS (VISOR DE DOCUMENTOS) ---
+# ===================================================================
+
+@app.get("/public/view/sale/{public_id}", response_class=StreamingResponse)
+def view_public_sale_receipt(public_id: str, db: Session = Depends(get_db)):
+    """
+    Permite a un cliente ver su recibo sin iniciar sesión, usando el enlace secreto.
+    """
+    # 1. Buscamos la venta por su código secreto
+    db_sale = crud.get_sale_by_public_id(db, public_id=public_id)
+    if not db_sale:
+        # Si no existe (o el link está mal), devolvemos 404 texto plano
+        return PlainTextResponse("El documento no existe o el enlace es inválido.", status_code=404)
+
+    # 2. Recuperamos configuración de empresa
+    company_settings = crud.get_company_settings(db)
+
+    # 3. Generamos el PDF
+    sale_schema = schemas.Sale.model_validate(db_sale)
+    settings_schema = schemas.CompanySettings.model_validate(company_settings)
+    
+    pdf_buffer = pdf_utils.generate_sale_receipt_pdf(sale_schema, settings_schema)
+    
+    # 4. Lo mostramos en el navegador (inline)
+    headers = {
+        "Content-Disposition": f'inline; filename="recibo_{sale_schema.id}.pdf"'
+    }
+    return StreamingResponse(pdf_buffer, media_type="application/pdf", headers=headers)
+
+@app.get("/public/view/work-order/{public_id}", response_class=StreamingResponse)
+def view_public_work_order(public_id: str, db: Session = Depends(get_db)):
+    """
+    Permite a un cliente ver su orden de trabajo sin iniciar sesión.
+    """
+    db_work_order = crud.get_work_order_by_public_id(db, public_id=public_id)
+    if not db_work_order:
+        return PlainTextResponse("El documento no existe o el enlace es inválido.", status_code=404)
+
+    company_settings = crud.get_company_settings(db)
+
+    schema_work_order = schemas.WorkOrder.model_validate(db_work_order)
+    schema_settings = schemas.CompanySettings.model_validate(company_settings)
+
+    pdf_buffer = pdf_utils.generate_work_order_pdf(schema_work_order, schema_settings)
+
+    headers = {
+        "Content-Disposition": f'inline; filename="orden_{schema_work_order.work_order_number}.pdf"'
+    }
+    return StreamingResponse(pdf_buffer, media_type="application/pdf", headers=headers)
+# -------------------------------------------------------------------
+
 # --- INICIO DE NUESTRO CÓDIGO (ASISTENTE DE CONFIGURACIÓN) ---
 # ===================================================================
 # --- ENDPOINTS PARA CONFIGURACIÓN INICIAL ---

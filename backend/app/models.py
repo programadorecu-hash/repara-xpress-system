@@ -1,3 +1,4 @@
+import uuid # <--- NUEVO IMPORT
 from sqlalchemy import (
     Column, Integer, String, Float, Boolean, ForeignKey, UniqueConstraint, DateTime, desc
 )
@@ -152,6 +153,10 @@ class WorkOrder(Base):
     deposit_amount = Column(Float, default=0, nullable=False)
     final_cost = Column(Float, nullable=True)
 
+    # --- NUEVO: ID Público para compartir enlace ---
+    public_id = Column(String, unique=True, index=True, default=lambda: str(uuid.uuid4()))
+    # -----------------------------------------------
+
     # --- NUEVOS CAMPOS AÑADIDOS ---
     
     # 1. Campos para contraseñas y cuentas (opcionales)
@@ -227,6 +232,10 @@ class Sale(Base):
     iva_percentage = Column(Float, nullable=False, default=12.0) # El IVA se define en el frontend (0 o 15) pero aquí necesita un default
     payment_method = Column(String, nullable=False)
     payment_method_details = Column(JSON, nullable=True)
+
+    # --- NUEVO: ID Público para compartir enlace ---
+    public_id = Column(String, unique=True, index=True, default=lambda: str(uuid.uuid4()))
+    # -----------------------------------------------
 
     # --- NUEVAS COLUMNAS PARA DATOS DEL CLIENTE ---
     customer_ci = Column(String, index=True, nullable=False) # Cédula/RUC Obligatorio
@@ -412,6 +421,11 @@ class CompanySettings(Base):
     
     # Mensaje pie de página para recibos
     footer_message = Column(String, default="Gracias por su compra")
+
+    # --- NUEVO: Configuración para WhatsApp ---
+    whatsapp_country_code = Column(String, default="+593") # Código de país por defecto (ej: +593)
+    whatsapp_default_message = Column(String, default="Hola, adjunto su documento.") # Mensaje predeterminado
+    # ------------------------------------------
 
     # Configuración actualizada el:
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

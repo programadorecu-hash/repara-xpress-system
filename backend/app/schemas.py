@@ -403,6 +403,7 @@ class LostSaleLog(LostSaleLogBase):
 
 class WorkOrder(WorkOrderBase):
     id: int
+    public_id: str | None = None # <--- NUEVO
     created_at: datetime
     status: str
     final_cost: float | None = None
@@ -424,6 +425,7 @@ class WorkOrder(WorkOrderBase):
 class WorkOrderPublic(BaseModel):
     # --- Campos visibles ---
     id: int
+    public_id: str | None = None # <--- NUEVO
     created_at: datetime
     status: str
     final_cost: float | None = None
@@ -511,6 +513,7 @@ class SaleItem(SaleItemBase):
         
 class Sale(SaleBase):
     id: int
+    public_id: str | None = None # <--- NUEVO
     created_at: datetime
     subtotal_amount: float
     tax_amount: float
@@ -652,6 +655,10 @@ class CompanySettingsBase(BaseModel):
     phone: str | None = None
     address: str | None = None
     footer_message: str | None = None
+    # --- NUEVO: Campos para WhatsApp ---
+    whatsapp_country_code: str | None = "+593"
+    whatsapp_default_message: str | None = "Hola, adjunto su documento."
+    # -----------------------------------
 
 class CompanySettingsCreate(CompanySettingsBase):
     pass

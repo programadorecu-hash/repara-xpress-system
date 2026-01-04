@@ -10,7 +10,11 @@ function CompanySettingsPage() {
     phone: '',
     address: '',
     footer_message: '',
-    logo_url: null
+    logo_url: null,
+    // --- NUEVO: Estado inicial para WhatsApp ---
+    whatsapp_country_code: '+593',
+    whatsapp_default_message: ''
+    // ------------------------------------------
   });
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -212,6 +216,37 @@ function CompanySettingsPage() {
                     placeholder="Ej: Gracias por su compra - No se aceptan devoluciones"
                   />
                 </div>
+
+                {/* --- NUEVA SECCIÓN: CONFIGURACIÓN WHATSAPP --- */}
+                <div className="md:col-span-2 mt-4 pt-4 border-t border-gray-200">
+                  <h3 className="text-md font-bold text-gray-800 mb-3">Configuración de WhatsApp</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-1">Código de País por Defecto</label>
+                      <input
+                        type="text"
+                        name="whatsapp_country_code"
+                        value={settings.whatsapp_country_code || '+593'}
+                        onChange={handleChange}
+                        className="w-full p-2 border border-gray-300 rounded"
+                        placeholder="Ej: +593"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-1">Mensaje Predeterminado</label>
+                      <input
+                        type="text"
+                        name="whatsapp_default_message"
+                        value={settings.whatsapp_default_message || ''}
+                        onChange={handleChange}
+                        className="w-full p-2 border border-gray-300 rounded"
+                        placeholder="Hola, adjunto su documento..."
+                      />
+                    </div>
+                  </div>
+                </div>
+                {/* ------------------------------------------- */}
+
               </div>
 
               <div className="flex justify-end mt-6">

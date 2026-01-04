@@ -1,11 +1,12 @@
 // frontend/src/pages/SalesHistoryPage.jsx
 import React, { useState, useEffect, useContext, useMemo } from "react";
-import api from "../services/api";
+import api, { getCompanySettings } from "../services/api"; // Importamos getCompanySettings
 import { AuthContext } from "../context/AuthContext";
-import ModalForm from '../components/ModalForm.jsx'; // Asegúrate de tener este componente
+import ModalForm from '../components/ModalForm.jsx'; 
 import { 
     HiOutlineSearch, HiOutlinePrinter, HiOutlineRefresh, 
-    HiOutlineReceiptRefund, HiOutlineExclamation 
+    HiOutlineReceiptRefund, HiOutlineExclamation,
+    HiOutlineChatAlt2 // Icono para WhatsApp
 } from 'react-icons/hi';
 
 // Función para obtener la fecha de hoy en formato 'YYYY-MM-DD'
@@ -42,6 +43,9 @@ function SalesHistoryPage() {
   const [refundResult, setRefundResult] = useState(null);
   const [refundError, setRefundError] = useState('');
 
+  // --- Configuración WhatsApp ---
+  const [companyInfo, setCompanyInfo] = useState(null);
+
   // --- Calculadoras ---
   const totalFilteredSales = useMemo(() => {
     return sales.reduce((total, sale) => total + sale.total_amount, 0);
@@ -61,10 +65,20 @@ function SalesHistoryPage() {
   // --- Efectos ---
   useEffect(() => {
     fetchSales();
+    fetchCompanyInfo(); // Cargamos info de la empresa
     if (canSeeAllLocations) {
       api.get("/locations/").then(res => setLocations(res.data)).catch(console.error);
     }
   }, [canSeeAllLocations]);
+
+  const fetchCompanyInfo = async () => {
+    try {
+      const settings = await getCompanySettings();
+      setCompanyInfo(settings);
+    } catch (error) {
+      console.error("Error cargando configuración empresa", error);
+    }
+  };
 
   const fetchSales = async () => {
     setLoading(true);
@@ -131,24 +145,51 @@ function SalesHistoryPage() {
   const handleViewReceipt = async (saleId) => {
     setIsPrintingId(saleId);
     try {
-      // Pedimos el archivo como 'blob' (datos crudos)
       const response = await api.get(`/sales/${saleId}/receipt`, { responseType: "blob" });
-      
-      // --- CORRECCIÓN: AÑADIMOS EL TIPO 'application/pdf' ---
       const pdfBlob = new Blob([response.data], { type: "application/pdf" });
       const url = window.URL.createObjectURL(pdfBlob);
-      
-      // Abrimos el PDF en una nueva pestaña
       window.open(url, "_blank");
-      
-      // (Opcional) Liberamos memoria después de un rato, aunque window.open suele requerir que la URL siga viva un momento
-      // setTimeout(() => window.URL.revokeObjectURL(url), 1000); 
     } catch (err) {
       console.error(err);
       alert("Error al generar recibo.");
     } finally {
       setIsPrintingId(null);
     }
+  };
+
+  // --- FUNCIÓN WHATSAPP CON ENLACE PÚBLICO ---
+  const handleSendWhatsApp = (sale) => {
+    if (!sale.customer_phone) return alert("Cliente sin teléfono.");
+
+    // 1. Preparar número
+    let phone = sale.customer_phone.trim().replace(/\s+/g, '');
+    const countryCode = companyInfo?.whatsapp_country_code || "+593";
+    if (phone.startsWith("0")) phone = countryCode + phone.substring(1);
+    else if (!phone.startsWith("+")) phone = countryCode + phone;
+
+    // 2. Construir Enlace Público ABSOLUTO
+    let API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+    
+    // Si la URL empieza con / (es relativa, ej: /api), le pegamos el dominio actual
+    if (API_URL.startsWith('/')) {
+      API_URL = window.location.origin + API_URL;
+    }
+
+    const publicLink = `${API_URL}/public/view/sale/${sale.public_id}`;
+
+    // 3. Preparar mensaje
+    const defaultMsg = companyInfo?.whatsapp_default_message || "Hola, gracias por su compra.";
+    const message = `${defaultMsg}
+    
+Puede ver y descargar su comprobante aquí:
+${publicLink}`;
+
+    // 4. Abrir WhatsApp (Web o App)
+    const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    const baseUrl = isMobile ? "whatsapp://send" : "https://web.whatsapp.com/send";
+    const whatsappUrl = `${baseUrl}?phone=${phone.replace('+', '')}&text=${encodeURIComponent(message)}`;
+    
+    window.open(whatsappUrl, '_blank');
   };
 
   // --- LÓGICA REEMBOLSO ---
@@ -334,6 +375,15 @@ function SalesHistoryPage() {
                     title="Ver Recibo"
                   >
                     <HiOutlinePrinter className="w-5 h-5" />
+                  </button>
+
+                  {/* Botón WhatsApp */}
+                  <button 
+                    onClick={() => handleSendWhatsApp(sale)}
+                    className="text-green-500 hover:text-green-700"
+                    title="Enviar recibo por WhatsApp"
+                  >
+                    <HiOutlineChatAlt2 className="w-5 h-5" />
                   </button>
                   
                   {/* Botón Reembolsar (Rojo) */}

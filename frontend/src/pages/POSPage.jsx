@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useContext } from "react";
-import api from "../services/api";
+import api, { getCompanySettings } from "../services/api"; // <-- IMPORTAR getCompanySettings
 import { AuthContext } from "../context/AuthContext";
 import PaymentModal from "../components/PaymentModal.jsx";
-import { HiOutlineSearch } from "react-icons/hi";
+import { HiOutlineSearch, HiOutlineChatAlt2 } from "react-icons/hi"; // <-- IMPORTAR ICONO WHATSAPP
 
 function POSPage() {
   // --- FUNCIÓN PARA BUSCAR CLIENTE ---
@@ -61,8 +61,16 @@ function POSPage() {
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
   const [customerAddress, setCustomerAddress] = useState("");
-  const [customerEmail, setCustomerEmail] = useState(""); // Añadimos email también
+  const [customerEmail, setCustomerEmail] = useState(""); 
   const [isDownloadingReceipt, setIsDownloadingReceipt] = useState(false);
+  
+  // --- Estado para WhatsApp ---
+  const [companyInfo, setCompanyInfo] = useState(null);
+  
+  // Cargar configuración al iniciar
+  useEffect(() => {
+    getCompanySettings().then(setCompanyInfo).catch(console.error);
+  }, []);
 
   // Calcula el total cada vez que el carrito cambia
   useEffect(() => {
@@ -484,6 +492,38 @@ function POSPage() {
     } finally {
       setIsDownloadingReceipt(false);
     }
+  };
+
+  // --- FUNCIÓN WHATSAPP POS CON ENLACE (APP NATIVA) ---
+  const handleSendWhatsApp = () => {
+    if (!lastSuccessfulSale) return;
+    if (!lastSuccessfulSale.customer_phone) return alert("Cliente sin teléfono.");
+
+    // 1. Preparar número
+    let phone = lastSuccessfulSale.customer_phone.trim().replace(/\s+/g, '');
+    const countryCode = companyInfo?.whatsapp_country_code || "+593";
+    if (phone.startsWith("0")) phone = countryCode + phone.substring(1);
+    else if (!phone.startsWith("+")) phone = countryCode + phone;
+
+    // 2. Construir Enlace ABSOLUTO
+    let API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+    if (API_URL.startsWith('/')) {
+      API_URL = window.location.origin + API_URL;
+    }
+    const publicLink = `${API_URL}/public/view/sale/${lastSuccessfulSale.public_id}`;
+
+    // 3. Mensaje
+    const defaultMsg = companyInfo?.whatsapp_default_message || "Hola, gracias por su compra.";
+    const message = `${defaultMsg}
+    
+Su recibo digital está disponible aquí:
+${publicLink}`;
+
+    // 4. Abrir DIRECTAMENTE LA APP
+    // Usamos whatsapp://send siempre para intentar abrir la App nativa en Windows/Móvil
+    const whatsappUrl = `whatsapp://send?phone=${phone.replace('+', '')}&text=${encodeURIComponent(message)}`;
+    
+    window.open(whatsappUrl, '_blank');
   };
 
   // --- Diseño Básico de la Interfaz ---
@@ -1126,9 +1166,21 @@ function POSPage() {
                 disabled={isDownloadingReceipt}
               >
                 {isDownloadingReceipt
-                  ? "Generando recibo..."
-                  : "Descargar Recibo"}
+                  ? "Procesando..."
+                  : "Descargar / Imprimir"}
               </button>
+
+              {/* BOTÓN WHATSAPP POS */}
+              <button
+                onClick={handleSendWhatsApp}
+                disabled={isDownloadingReceipt}
+                className="w-full flex items-center justify-center gap-2 bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg transition duration-150 shadow-md"
+              >
+                <HiOutlineChatAlt2 className="w-5 h-5" />
+                Enviar por WhatsApp
+              </button>
+              {/* ------------------ */}
+
               <button
                 onClick={() => setLastSuccessfulSale(null)} // Limpia el estado para ocultar el mensaje
                 className="w-full bg-accent hover:bg-teal-500 text-white font-bold py-2 px-4 rounded-lg transition duration-150"

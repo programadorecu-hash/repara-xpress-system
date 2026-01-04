@@ -611,7 +611,7 @@ def get_lost_sale_logs(db: Session, skip: int = 0, limit: int = 100):
 # --- ÓRDENES DE TRABAJO ---
 # ===================================================================
 def get_work_order(db: Session, work_order_id: int):
-    return (
+    order = (
         db.query(models.WorkOrder)
         .options(
             joinedload(models.WorkOrder.user),
@@ -623,36 +623,62 @@ def get_work_order(db: Session, work_order_id: int):
         .filter(models.WorkOrder.id == work_order_id)
         .first()
     )
+    # --- AUTO-GENERACIÓN DE PUBLIC_ID PARA ÓRDENES ANTIGUAS ---
+    if order and not order.public_id:
+        order.public_id = str(uuid.uuid4())
+        db.commit()
+        db.refresh(order)
+    # ----------------------------------------------------------
+    return order
+
+def get_work_order_by_public_id(db: Session, public_id: str):
+    """Busca una orden usando su código secreto público"""
+    return (
+        db.query(models.WorkOrder)
+        .options(
+            joinedload(models.WorkOrder.user),
+            joinedload(models.WorkOrder.location),
+            selectinload(models.WorkOrder.images),
+            selectinload(models.WorkOrder.notes).selectinload(models.WorkOrderNote.user),
+            selectinload(models.WorkOrder.notes).selectinload(models.WorkOrderNote.location),
+        )
+        .filter(models.WorkOrder.public_id == public_id)
+        .first()
+    )
 
 
 
 def get_work_orders(db: Session, user: models.User, skip: int = 0, limit: int = 100):
     """
-    Obtiene las órdenes de trabajo con lógica de permisos.
-    - Admins/Managers ven todas las órdenes.
-    - Otros roles solo ven las de su turno activo.
+    Obtiene las órdenes de trabajo y AUTO-REPARA los public_id faltantes.
     """
-    # Preparamos la consulta base, incluyendo los datos del usuario y la ubicación.
     query = db.query(models.WorkOrder).options(
         joinedload(models.WorkOrder.user),
         joinedload(models.WorkOrder.location)
     )
 
-    # --- LÓGICA DE PERMISOS ---
-    # Si el rol del usuario NO es 'admin' o 'inventory_manager'...
     if user.role not in ["admin", "inventory_manager"]:
-        # ...buscamos su turno activo para saber dónde está trabajando.
         active_shift = get_active_shift_for_user(db, user_id=user.id)
-
-        # Si no tiene un turno activo, no puede ver ninguna orden.
         if not active_shift:
-            return [] # Le devolvemos una lista vacía.
-
-        # Filtramos la búsqueda para que SOLO devuelva órdenes de su sucursal actual.
+            return [] 
         query = query.filter(models.WorkOrder.location_id == active_shift.location_id)
 
-    # Finalmente, ordenamos las órdenes de la más nueva a la más antigua y las devolvemos.
-    return query.order_by(models.WorkOrder.created_at.desc()).offset(skip).limit(limit).all()
+    results = query.order_by(models.WorkOrder.created_at.desc()).offset(skip).limit(limit).all()
+
+    # --- BLOQUE DE AUTO-REPARACIÓN ---
+    # Si encontramos órdenes sin código público, se lo creamos ahora mismo.
+    has_changes = False
+    for order in results:
+        if not order.public_id:
+            order.public_id = str(uuid.uuid4())
+            has_changes = True
+    
+    if has_changes:
+        db.commit() # Guardamos los nuevos códigos generados
+        # No necesitamos refrescar, el objeto en memoria ya tiene el ID
+    # ---------------------------------
+
+    return results
 
 def create_work_order(db: Session, work_order: schemas.WorkOrderCreate, user_id: int, location_id: int):
     # 1. Crear la Orden de Trabajo básica
@@ -721,15 +747,45 @@ def update_work_order(db: Session, work_order_id: int, work_order_update: schema
     return db_work_order
 
 def search_ready_work_orders(db: Session, user: models.User, search: str | None = None, skip: int = 0, limit: int = 100):
-    """
-    Busca órdenes de trabajo con estado 'LISTO' visibles para el usuario actual.
-    Permite filtrar por número de orden (ID), nombre de cliente o cédula.
-    """
-    # Consulta base, incluyendo usuario y ubicación
     query = db.query(models.WorkOrder).options(
         joinedload(models.WorkOrder.user),
         joinedload(models.WorkOrder.location)
-    ).filter(models.WorkOrder.status == 'LISTO') # <-- SOLO ÓRDENES LISTAS
+    ).filter(models.WorkOrder.status == 'LISTO')
+
+    if user.role not in ["admin", "inventory_manager"]:
+        active_shift = get_active_shift_for_user(db, user_id=user.id)
+        if not active_shift: return []
+        query = query.filter(models.WorkOrder.location_id == active_shift.location_id)
+
+    if search:
+        search_term_like = f"%{search.lower()}%"
+        search_term_int = None
+        try:
+            search_term_int = int(search)
+        except ValueError:
+            pass
+
+        filters = [
+            func.lower(models.WorkOrder.customer_name).like(search_term_like),
+            func.lower(models.WorkOrder.customer_id_card).like(search_term_like)
+        ]
+        if search_term_int is not None:
+            filters.append(models.WorkOrder.id == search_term_int)
+
+        query = query.filter(or_(*filters))
+
+    results = query.order_by(models.WorkOrder.created_at.desc()).offset(skip).limit(limit).all()
+
+    # --- AUTO-REPARACIÓN ---
+    has_changes = False
+    for order in results:
+        if not order.public_id:
+            order.public_id = str(uuid.uuid4())
+            has_changes = True
+    if has_changes: db.commit()
+    # -----------------------
+
+    return results
 
     # Aplicar filtro de permisos basado en rol y turno (igual que en get_work_orders)
     if user.role not in ["admin", "inventory_manager"]:
@@ -1148,7 +1204,7 @@ def create_sale(db: Session, sale: schemas.SaleCreate, user_id: int, location_id
 
 
 def get_sale(db: Session, sale_id: int):
-    return (
+    sale = (
         db.query(models.Sale)
         .options(
             joinedload(models.Sale.user),
@@ -1156,6 +1212,27 @@ def get_sale(db: Session, sale_id: int):
             joinedload(models.Sale.items).joinedload(models.SaleItem.product),
         )
         .filter(models.Sale.id == sale_id)
+        .first()
+    )
+    # --- AUTO-GENERACIÓN DE PUBLIC_ID PARA VENTAS ANTIGUAS ---
+    # Si la venta existe pero no tiene código secreto, se lo creamos ahora mismo.
+    if sale and not sale.public_id:
+        sale.public_id = str(uuid.uuid4())
+        db.commit()
+        db.refresh(sale)
+    # ---------------------------------------------------------
+    return sale
+
+def get_sale_by_public_id(db: Session, public_id: str):
+    """Busca una venta usando su código secreto público"""
+    return (
+        db.query(models.Sale)
+        .options(
+            joinedload(models.Sale.user),
+            joinedload(models.Sale.location),
+            joinedload(models.Sale.items).joinedload(models.SaleItem.product),
+        )
+        .filter(models.Sale.public_id == public_id)
         .first()
     )
 
@@ -1226,8 +1303,19 @@ def get_sales(
         )
     # --- FIN DE LA NUEVA LÓGICA DE FILTROS ---
 
-    # 6. Devolvemos la lista filtrada, de la más nueva a la más vieja
-    return query.order_by(models.Sale.created_at.desc()).offset(skip).limit(limit).all()
+    # 6. Ejecutamos consulta y AUTO-REPARAMOS IDs faltantes
+    results = query.order_by(models.Sale.created_at.desc()).offset(skip).limit(limit).all()
+    
+    has_changes = False
+    for sale in results:
+        if not sale.public_id:
+            sale.public_id = str(uuid.uuid4())
+            has_changes = True
+    
+    if has_changes:
+        db.commit()
+
+    return results
 # --- FIN DE NUESTRO CÓDIGO ---
 
 

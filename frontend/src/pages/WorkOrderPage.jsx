@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useContext } from "react";
-import api from "../services/api";
+import api, { getCompanySettings } from "../services/api"; // Importar getCompanySettings
 import { AuthContext } from "../context/AuthContext";
+import { HiOutlineChatAlt2 } from "react-icons/hi"; // Icono WhatsApp
 // --- 1. IMPORTAMOS NUESTRO NUEVO FORMULARIO ---
 import WorkOrderForm from "../components/WorkOrderForm.jsx";
 
@@ -26,6 +27,9 @@ function WorkOrderPage() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [selectedOrderId, setSelectedOrderId] = useState(null);
   const [notesOpenFor, setNotesOpenFor] = useState(null);
+  
+  // Estado para WhatsApp
+  const [companyInfo, setCompanyInfo] = useState(null);
 
   // Función para cargar o recargar la lista de órdenes.
   const fetchWorkOrders = async () => {
@@ -43,6 +47,8 @@ function WorkOrderPage() {
 
   useEffect(() => {
     fetchWorkOrders();
+    // Cargar config empresa
+    getCompanySettings().then(setCompanyInfo).catch(console.error);
   }, []);
 
   const formatDate = (dateString) => {
@@ -139,7 +145,8 @@ function WorkOrderPage() {
                     onEdit={handleOpenEditForm}
                     notesOpenFor={notesOpenFor}
                     setNotesOpenFor={setNotesOpenFor}
-                    onStatusChange={handleStatusChange} // Pasamos la función nueva
+                    onStatusChange={handleStatusChange}
+                    companyInfo={companyInfo} // <--- NUEVO
                   />
                 </div>
               ))}
@@ -152,6 +159,7 @@ function WorkOrderPage() {
             notesOpenFor={notesOpenFor}
             setNotesOpenFor={setNotesOpenFor}
             onStatusChange={handleStatusChange} // Pasamos la función nueva
+            companyInfo={companyInfo} //
           />
         )}
       </div>
@@ -175,8 +183,57 @@ const WorkOrderTable = ({
   onEdit,
   notesOpenFor,
   setNotesOpenFor,
-  onStatusChange // Recibimos la función
-}) => (
+  onStatusChange,
+  companyInfo // <--- Recibimos
+}) => {
+  // Función interna para WhatsApp (Lógica Anti-Spam y Universal)
+  const handleWhatsApp = (order) => {
+    if (!order.customer_phone) return alert("Sin teléfono");
+    
+    let phone = order.customer_phone.trim().replace(/\s+/g, '');
+    const countryCode = companyInfo?.whatsapp_country_code || "+593";
+    
+    if (phone.startsWith("0")) phone = countryCode + phone.substring(1);
+    else if (!phone.startsWith("+")) phone = countryCode + phone;
+
+    // 1. Mensaje Base (Información del Estado)
+    const statusText = STATUS_LABELS[order.status] || order.status;
+    const baseMsg = companyInfo?.whatsapp_default_message || "Hola, actualizamos el estado de su equipo.";
+    
+    let message = `${baseMsg}
+Orden: #${order.work_order_number}
+Equipo: ${order.device_brand} ${order.device_model}
+Estado Actual: *${statusText}*`;
+
+    // 2. LÓGICA ANTI-SPAM: Solo adjuntar el enlace si el estado es 'RECIBIDO'
+    if (order.status === 'RECIBIDO') {
+        let API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+        if (API_URL.startsWith('/')) {
+          API_URL = window.location.origin + API_URL;
+        }
+        // Usamos el ID público (que el backend ya habrá reparado si faltaba)
+        const pId = order.public_id || 'consultar-taller';
+        const publicLink = `${API_URL}/public/view/work-order/${pId}`;
+
+        message += `
+
+Para su respaldo, puede descargar su orden aquí:
+${publicLink}`;
+    }
+
+    message += `
+
+Gracias por su confianza.`;
+
+    // 3. ENLACE UNIVERSAL (wa.me)
+    // Esto funciona mejor en Windows porque permite al navegador preguntar
+    // "¿Abrir WhatsApp Desktop?" en lugar de forzar la versión Web o fallar.
+    const whatsappUrl = `https://wa.me/${phone.replace('+', '')}?text=${encodeURIComponent(message)}`;
+    
+    window.open(whatsappUrl, '_blank');
+  };
+
+  return (
   <div className="overflow-x-auto">
     {orders.length === 0 ? (
       <p className="text-center text-gray-400 py-4">
@@ -272,6 +329,15 @@ const WorkOrderTable = ({
                     {notesOpenFor === order.id ? "Ocultar" : "Notas"}
                   </button>
 
+                  {/* Botón WhatsApp */}
+                  <button
+                    onClick={() => handleWhatsApp(order)}
+                    className="text-green-600 hover:text-green-800"
+                    title="Notificar por WhatsApp"
+                  >
+                    <HiOutlineChatAlt2 className="w-5 h-5" />
+                  </button>
+
                   {/* Ver/Editar (tu flujo existente) */}
                   <button
                     onClick={() => onEdit(order.id)}
@@ -297,5 +363,6 @@ const WorkOrderTable = ({
     )}
   </div>
 );
+};
 
 export default WorkOrderPage;
