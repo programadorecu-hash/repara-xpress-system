@@ -6,7 +6,8 @@ import ModalForm from './ModalForm.jsx';
 // Estado inicial
 const emptyForm = { amount: '', description: '', category_id: '', account_id: '', pin: '', work_order_id: '' };
 
-function ExpenseModal({ isOpen, onClose, onExpenseSaved }) {
+// Aceptamos un nuevo prop: initialWorkOrderId (el ID de la orden si viene desde la tabla)
+function ExpenseModal({ isOpen, onClose, onExpenseSaved, initialWorkOrderId }) {
   const { activeShift } = useContext(AuthContext); 
   const [formState, setFormState] = useState(emptyForm);
   const [categories, setCategories] = useState([]); 
@@ -33,14 +34,19 @@ function ExpenseModal({ isOpen, onClose, onExpenseSaved }) {
       // 3. --- NUEVO: Cargar Órdenes Activas (Para asociar gastos) ---
       // Traemos las que están en taller (RECIBIDO, REPARANDO, etc)
       api.get('/work-orders/', { params: { limit: 50 } }) // Traemos las últimas 50
-         .then(res => {
-             // Filtramos solo las que no se han entregado
-             const orders = res.data.filter(o => o.status !== 'ENTREGADO' && o.status !== 'SIN_REPARACION');
-             setActiveOrders(orders);
-         })
-         .catch(err => console.error("Error cargando órdenes", err));
+          .then(res => {
+              // Filtramos solo las que no se han entregado
+              const orders = res.data.filter(o => o.status !== 'ENTREGADO' && o.status !== 'SIN_REPARACION');
+              setActiveOrders(orders);
+          })
+          .catch(err => console.error("Error cargando órdenes", err));
+
+      // 4. Si nos pasaron una orden específica (desde la tabla), la pre-seleccionamos
+      if (initialWorkOrderId) {
+        setFormState(prev => ({ ...prev, work_order_id: initialWorkOrderId }));
+      }
     }
-  }, [isOpen, activeShift]);
+  }, [isOpen, activeShift, initialWorkOrderId]); // Añadimos initialWorkOrderId a las dependencias
 
   const handleFormChange = (e) => {
     const { name, value } = e.target;

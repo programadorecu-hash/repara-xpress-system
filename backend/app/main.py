@@ -805,13 +805,14 @@ def update_work_order_status(
 def read_work_orders(
     skip: int = 0, 
     limit: int = 100, 
+    active_only: bool = False, # <--- ACEPTAMOS EL NUEVO PARAMETRO
     db: Session = Depends(get_db),
     # Quitamos el chequeo de rol y en su lugar pedimos el usuario actual.
     current_user: models.User = Depends(security.get_current_user)
 ):
     # Le pasamos el usuario actual a nuestra nueva función de CRUD.
     # Ella se encargará de decidir qué órdenes devolver.
-    return crud.get_work_orders(db, user=current_user, skip=skip, limit=limit)
+    return crud.get_work_orders(db, user=current_user, skip=skip, limit=limit, active_only=active_only)
 
 
 # --- NUEVO ENDPOINT PARA BUSCAR ÓRDENES LISTAS ---
@@ -1318,13 +1319,18 @@ def get_top_sellers_report(start_date: date, end_date: date, db: Session = Depen
 
 @app.get("/reports/dashboard-summary", response_model=schemas.DashboardSummary)
 def get_dashboard_summary_report(
+    location_id: int | None = None, # <--- Nuevo parámetro opcional
     db: Session = Depends(get_db),
     current_user: schemas.User = Depends(security.get_current_user)
 ):
-    # Obtenemos la ubicación del turno activo del usuario
-    active_shift = crud.get_active_shift_for_user(db, user_id=current_user.id)
-    if not active_shift:
-        raise HTTPException(status_code=400, detail="El usuario debe tener un turno activo para ver el resumen.")
+    target_location_id = location_id
+
+    # Si NO nos envían una sucursal específica (es un empleado normal), usamos su turno activo
+    if not target_location_id:
+        active_shift = crud.get_active_shift_for_user(db, user_id=current_user.id)
+        if not active_shift:
+            raise HTTPException(status_code=400, detail="El usuario debe tener un turno activo o seleccionar una sucursal.")
+        target_location_id = active_shift.location_id
     
     # --- ¡AQUÍ ESTÁ EL ARREGLO DEL RELOJ! ---
     try:
@@ -1343,7 +1349,7 @@ def get_dashboard_summary_report(
     today = now_in_ecuador.date()
     # --- FIN DEL ARREGLO ---
 
-    summary = crud.get_dashboard_summary(db, location_id=active_shift.location_id, target_date=today)
+    summary = crud.get_dashboard_summary(db, location_id=target_location_id, target_date=today)
     return summary
 
 @app.get("/reports/inventory-audit", response_model=List[schemas.InventoryMovement])

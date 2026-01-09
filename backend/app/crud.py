@@ -648,7 +648,7 @@ def get_work_order_by_public_id(db: Session, public_id: str):
 
 
 
-def get_work_orders(db: Session, user: models.User, skip: int = 0, limit: int = 100):
+def get_work_orders(db: Session, user: models.User, skip: int = 0, limit: int = 100, active_only: bool = False):
     """
     Obtiene las órdenes de trabajo y AUTO-REPARA los public_id faltantes.
     """
@@ -656,6 +656,12 @@ def get_work_orders(db: Session, user: models.User, skip: int = 0, limit: int = 
         joinedload(models.WorkOrder.user),
         joinedload(models.WorkOrder.location)
     )
+
+    # --- NUEVO FILTRO: Si pedimos solo activas, ignoramos las terminadas ---
+    if active_only:
+        # Trae todo LO QUE NO SEA "ENTREGADO" ni "SIN_REPARACION"
+        query = query.filter(models.WorkOrder.status.notin_(["ENTREGADO", "SIN_REPARACION"]))
+    # -----------------------------------------------------------------------
 
     if user.role not in ["admin", "inventory_manager"]:
         active_shift = get_active_shift_for_user(db, user_id=user.id)

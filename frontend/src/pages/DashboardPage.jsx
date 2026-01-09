@@ -150,73 +150,77 @@ function DashboardPage() {
 
   // DashboardPage.jsx
 
-  // --- Lógica de Carga de Datos (RE-MODIFICADA) ---
+  // DashboardPage.jsx
+
+  // --- Lógica de Carga de Datos (ORIGINAL) ---
 
   // 1. "Actualizar Tablero" (Tarjetas de Resumen)
-  // La sacamos de useEffect para poder llamarla desde el "walkie-talkie"
   const fetchSummary = async () => {
-    setLoadingSummary(true); // Poner "cargando..."
+    setLoadingSummary(true); 
     try {
+      // Usamos el endpoint normal (el backend decide qué mostrar según el usuario)
       const response = await api.get("/reports/dashboard-summary");
       setSummary(response.data);
-      setError(""); // Limpiar errores viejos si la carga es exitosa
+      setError(""); 
     } catch (err) {
-      setError("No se pudo cargar el resumen. ¿Iniciaste un turno?");
+      setError("No se pudo cargar el resumen.");
     } finally {
-      setLoadingSummary(false); // Quitar "cargando..."
+      setLoadingSummary(false); 
     }
   };
 
   // 2. "Actualizar Lista" (Listas de abajo y Alertas)
   const fetchDashboardLists = async () => {
-    // Revisamos si tenemos un turno activo (o si es admin) antes de llamar
-    // Nota: Los admins siempre pueden ver, aunque no tengan turno en frontend, el backend lo maneja.
-
     try {
       setLoadingLists(true);
-      // --- ARREGLO DE ZONA HORARIA ---
-      // Obtenemos la fecha local (Ecuador) en formato YYYY-MM-DD
-      // 'en-CA' es un truco para obtener formato ISO (año-mes-día) usando la hora local del PC
       const today = new Date().toLocaleDateString("en-CA");
 
-      // Pedimos el "hilo de recibos" (Ventas)
+      // 1. Pedimos Ventas (Hilo de recibos)
       const salesPromise = api.get("/sales/", {
         params: {
           start_date: today,
           end_date: today,
           limit: 20,
-          // Si hay turno, filtramos. Si es admin sin turno, el backend puede mostrar todo o nada según config.
-          // Por ahora mantenemos la lógica segura del frontend:
           location_id: activeShift?.location?.id,
         },
       });
 
-      // Pedimos la "pizarra de tareas" (Órdenes)
-      const ordersPromise = api.get("/work-orders/", { params: { limit: 20 } });
+      // 2. Pedimos Órdenes (Pizarra de tareas)
+      // Usamos active_only=true para que el servidor filtre por nosotros
+      const ordersPromise = api.get("/work-orders/", { 
+        params: { 
+          limit: 50, 
+          active_only: true 
+        } 
+      });
 
-      // --- NUEVO: Pedimos las alertas de stock ---
+      // 3. Pedimos Alertas de Stock
       const stockPromise = api.get("/reports/low-stock");
 
-      // Esperamos a que las 3 peticiones terminen
+      // --- AQUÍ ESTABA EL ERROR ---
+      // Esperamos a que lleguen los 3 mensajeros.
+      // Corregimos "ordersResponse" por "ordersPromise" dentro de la lista.
       const [salesResponse, ordersResponse, stockResponse] = await Promise.all([
         salesPromise,
-        ordersPromise,
-        stockPromise, // <-- Añadido
+        ordersPromise, // <--- ¡CORREGIDO! Usamos la promesa (el pedido), no la respuesta.
+        stockPromise,
       ]);
 
       setTodaysSales(salesResponse.data);
 
+      // Como el servidor ya filtró, usamos los datos directos
+      // (Mantenemos un filtro extra por seguridad, pero ya debería venir limpio)
       const allOrders = ordersResponse.data;
       const activeOrders = allOrders.filter(
         (order) =>
-          order.status !== "ENTREGADO" && order.status !== "SIN_REPARACION"
+          order.status !== "ENTREGADO" && 
+          order.status !== "SIN_REPARACION"
       );
       setActiveOrders(activeOrders);
 
-      // --- Guardamos las alertas ---
       setLowStockItems(stockResponse.data);
     } catch (err) {
-      console.error(err);
+      console.error("Error cargando listas:", err);
       setError("No se pudieron cargar los datos del tablero.");
     } finally {
       setLoadingLists(false);
@@ -225,10 +229,8 @@ function DashboardPage() {
 
   // 3. Este es el "Arranque" de la página
   useEffect(() => {
-    // Cuando la página carga, llama a las dos funciones
     fetchSummary();
     fetchDashboardLists();
-    // IMPORTANTE: Le decimos que se re-ejecute si el turno cambia
   }, [activeShift]);
 
   // --- NUEVO "ESCUCHA-CAMPANAS" (PARA VENTAS) ---
@@ -472,38 +474,63 @@ function DashboardPage() {
             </p>
           </div>
 
-          {/* --- 6. NUEVO: Panel "Órdenes Activas" --- */}
+          {/* --- 6. Panel "Órdenes Activas" (AGRUPADO POR SUCURSAL) --- */}
           <div className="bg-white p-6 rounded-xl shadow-md border">
             <h2 className="text-xl font-bold text-secondary mb-4">
-              Órdenes Activas en Sucursal
+              Órdenes Activas
             </h2>
-            {/* Le damos un alto máximo y scroll */}
-            <div className="space-y-3 max-h-64 overflow-y-auto">
+            <div className="space-y-4 max-h-80 overflow-y-auto pr-2 custom-scrollbar">
               {activeOrders.length === 0 ? (
-                <p className="text-gray-500 text-sm">
-                  No hay órdenes pendientes.
-                </p>
+                <p className="text-gray-500 text-sm">No hay órdenes pendientes.</p>
               ) : (
-                // Creamos la lista (pizarra de tareas)
-                activeOrders.map((order) => (
-                  <div
-                    key={order.id}
-                    className="flex justify-between items-center border-b pb-2 last:border-b-0"
-                  >
-                    <div>
-                      {/* Hacemos que el N° de orden sea un enlace a la página de órdenes */}
-                      <Link
-                        to={`/ordenes`}
-                        className="font-semibold text-sm text-accent hover:underline"
-                      >
-                        #{order.work_order_number} - {order.customer_name}
-                      </Link>
-                      <p className="text-xs text-gray-500">
-                        {order.device_brand} {order.device_model}
-                      </p>
+                // Lógica de agrupación en tiempo real
+                Object.entries(
+                  activeOrders.reduce((groups, order) => {
+                    // Usamos el nombre de la sucursal como clave para agrupar
+                    const locName = order.location?.name || "Sin Sucursal";
+                    if (!groups[locName]) groups[locName] = [];
+                    groups[locName].push(order);
+                    return groups;
+                  }, {})
+                ).map(([locationName, orders]) => (
+                  <div key={locationName} className="mb-4 last:mb-0">
+                    {/* Cabecera de Sucursal (DISEÑO SLIM: Estilo Corporativo Fino) */}
+                    {/* Redujimos el padding vertical (py-1.5) y el margen inferior (mb-2) */}
+                    <div className="sticky top-0 z-10 bg-white/95 backdrop-blur-sm border-l-4 border-accent shadow-sm px-3 py-1.5 mb-2 rounded-r flex items-center justify-between">
+                      <span className="font-bold text-secondary uppercase tracking-wider text-xs flex items-center gap-2">
+                        {/* Pequeño punto decorativo */}
+                        <span className="w-1.5 h-1.5 rounded-full bg-accent"></span>
+                        {locationName}
+                      </span>
+                      {/* Etiqueta discreta a la derecha (Texto más pequeño) */}
+                      <span className="text-[9px] font-semibold text-gray-400 bg-gray-50 px-1.5 py-0.5 rounded border border-gray-100">
+                        SUCURSAL
+                      </span>
                     </div>
-                    {/* Usamos nuestro "molde" de colores para el estado */}
-                    <StatusBadge status={order.status} />
+                    
+                    {/* Lista de órdenes de esa sucursal */}
+                    <div className="space-y-2 pl-2">
+                        {orders.map((order) => (
+                          <div
+                            key={order.id}
+                            className="flex justify-between items-center border-b border-gray-100 pb-2 last:border-b-0 hover:bg-gray-50 p-2 rounded transition-colors"
+                          >
+                            <div>
+                              <Link
+                                to={`/ordenes`}
+                                className="font-semibold text-sm text-accent hover:underline flex items-center gap-2"
+                              >
+                                <span>#{order.work_order_number}</span>
+                                <span className="text-gray-800 font-normal truncate max-w-[150px]">- {order.customer_name}</span>
+                              </Link>
+                              <p className="text-xs text-gray-500 flex gap-2 mt-0.5">
+                                <span className="bg-gray-100 px-1 rounded text-[10px] border">{order.device_brand} {order.device_model}</span>
+                              </p>
+                            </div>
+                            <StatusBadge status={order.status} />
+                          </div>
+                        ))}
+                    </div>
                   </div>
                 ))
               )}

@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useContext } from "react";
 import api, { getCompanySettings } from "../services/api"; // Importar getCompanySettings
 import { AuthContext } from "../context/AuthContext";
-import { HiOutlineChatAlt2 } from "react-icons/hi"; // Icono WhatsApp
+import { HiOutlineChatAlt2, HiOutlineCurrencyDollar, HiOutlineClipboardList } from "react-icons/hi"; // Iconos de acciones
 // --- 1. IMPORTAMOS NUESTRO NUEVO FORMULARIO ---
 import WorkOrderForm from "../components/WorkOrderForm.jsx";
+import ExpenseModal from "../components/ExpenseModal.jsx"; // Importamos el modal de gastos
 
 import WorkOrderNotes from "../components/WorkOrderNotes.jsx"; // Panel de notas internas
 
@@ -27,6 +28,10 @@ function WorkOrderPage() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [selectedOrderId, setSelectedOrderId] = useState(null);
   const [notesOpenFor, setNotesOpenFor] = useState(null);
+
+  // Estados para el Modal de Gastos Rápido
+  const [isExpenseModalOpen, setIsExpenseModalOpen] = useState(false);
+  const [expenseOrderId, setExpenseOrderId] = useState(null);
   
   // Estado para WhatsApp
   const [companyInfo, setCompanyInfo] = useState(null);
@@ -109,6 +114,12 @@ function WorkOrderPage() {
     }
   };
 
+  // --- 5. FUNCIÓN PARA ABRIR MODAL DE GASTO ---
+  const handleOpenExpense = (orderId) => {
+    setExpenseOrderId(orderId); // Guardamos a qué orden pertenece el gasto
+    setIsExpenseModalOpen(true); // Abrimos la ventana
+  };
+
   if (loading && workOrders.length === 0)
     return (
       <p className="text-center text-gray-500 animate-pulse mt-10">
@@ -146,7 +157,8 @@ function WorkOrderPage() {
                     notesOpenFor={notesOpenFor}
                     setNotesOpenFor={setNotesOpenFor}
                     onStatusChange={handleStatusChange}
-                    companyInfo={companyInfo} // <--- NUEVO
+                    onExpense={handleOpenExpense} // Pasamos la función
+                    companyInfo={companyInfo} 
                   />
                 </div>
               ))}
@@ -158,13 +170,14 @@ function WorkOrderPage() {
             onEdit={handleOpenEditForm}
             notesOpenFor={notesOpenFor}
             setNotesOpenFor={setNotesOpenFor}
-            onStatusChange={handleStatusChange} // Pasamos la función nueva
-            companyInfo={companyInfo} //
+            onStatusChange={handleStatusChange}
+            onExpense={handleOpenExpense} // Pasamos la función
+            companyInfo={companyInfo}
           />
         )}
       </div>
 
-      {/* --- RENDERIZADO DEL FORMULARIO MODAL --- */}
+      {/* --- RENDERIZADO DEL FORMULARIO MODAL (ORDEN) --- */}
       {isFormOpen && (
         <WorkOrderForm
           orderId={selectedOrderId}
@@ -172,6 +185,17 @@ function WorkOrderPage() {
           onSave={handleSave}
         />
       )}
+
+      {/* --- RENDERIZADO DEL MODAL DE GASTOS --- */}
+      <ExpenseModal 
+        isOpen={isExpenseModalOpen}
+        onClose={() => setIsExpenseModalOpen(false)}
+        initialWorkOrderId={expenseOrderId} // Le pasamos el ID pre-cargado
+        onExpenseSaved={() => {
+            // Opcional: Podríamos recargar la orden si quisiéramos mostrar el total de gastos ahí mismo
+            console.log("Gasto guardado"); 
+        }}
+      />
     </>
   );
 }
@@ -184,7 +208,8 @@ const WorkOrderTable = ({
   notesOpenFor,
   setNotesOpenFor,
   onStatusChange,
-  companyInfo // <--- Recibimos
+  onExpense, // <--- Nueva prop recibida
+  companyInfo 
 }) => {
   // Función interna para WhatsApp (Lógica Anti-Spam y Universal)
   const handleWhatsApp = (order) => {
@@ -243,12 +268,13 @@ Gracias por su confianza.`;
       <table className="min-w-full bg-white text-sm">
         <thead className="bg-gray-100 text-gray-600 font-medium">
           <tr>
-            <th className="py-3 px-4 text-left">N°</th>
-            <th className="py-3 px-4 text-left">Cliente</th>
-            <th className="py-3 px-4 text-left">Equipo</th>
-            <th className="py-3 px-4 text-left">Fecha</th>
-            <th className="py-3 px-4 text-left">Estado</th>
-            <th className="py-3 px-4 text-center">Acciones</th>
+            {/* Definimos anchos fijos para que todas las tablas se alineen igual */}
+            <th className="py-3 px-4 text-left w-[10%]">N°</th>
+            <th className="py-3 px-4 text-left w-[20%]">Cliente</th>
+            <th className="py-3 px-4 text-left w-[20%]">Equipo</th>
+            <th className="py-3 px-4 text-left w-[15%]">Fecha</th>
+            <th className="py-3 px-4 text-left w-[15%]">Estado</th>
+            <th className="py-3 px-4 text-center w-[20%]">Acciones</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-100">
@@ -261,9 +287,13 @@ Gracias por su confianza.`;
                   {order.work_order_number}
                 </td>
 
-                {/* Cliente + contacto */}
-                <td className="py-3 px-4">
-                  <div className="font-bold text-gray-800">
+                {/* Cliente + contacto (Ahora CLICABLE) */}
+                <td 
+                  className="py-3 px-4 cursor-pointer hover:bg-blue-50 transition-colors group"
+                  onClick={() => onEdit(order.id)}
+                  title="Abrir orden"
+                >
+                  <div className="font-bold text-gray-800 group-hover:text-blue-600">
                     {order.customer_name}
                   </div>
                   <div className="text-xs text-gray-500">
@@ -271,8 +301,14 @@ Gracias por su confianza.`;
                   </div>
                 </td>
 
-                {/* Dispositivo */}
-                <td className="py-3 px-4 text-gray-700">{`${order.device_brand} ${order.device_model}`}</td>
+                {/* Dispositivo (Ahora CLICABLE) */}
+                <td 
+                  className="py-3 px-4 text-gray-700 cursor-pointer hover:text-blue-600 hover:font-medium transition-colors"
+                  onClick={() => onEdit(order.id)}
+                  title="Abrir orden"
+                >
+                  {`${order.device_brand} ${order.device_model}`}
+                </td>
 
                 {/* Fecha */}
                 <td className="py-3 px-4 text-gray-500">{formatDate(order.created_at)}</td>
@@ -302,48 +338,45 @@ Gracias por su confianza.`;
                 </td>
                 {/* ------------------------------------------ */}
 
-                {/* Acciones */}
-                <td className="py-3 px-4 text-center space-x-3">
-                  {/* Botón Nuevo: Gasto Asociado */}
+                {/* Acciones (ICONOS) */}
+                <td className="py-3 px-4 flex justify-center items-center space-x-4">
+                  
+                  {/* 1. Gasto (Signo de Dólar) */}
                   <button
-                    onClick={() => {
-                        // Aquí abriremos un modal de gastos especial.
-                        // Por ahora, para no complicar más la respuesta, usamos un alert
-                        // Pero el backend YA ESTÁ LISTO para recibir 'work_order_id' en el gasto.
-                        alert("Funcionalidad pendiente de UI: Gasto en Orden #" + order.work_order_number);
+                    onClick={(e) => {
+                        e.stopPropagation(); // Evita abrir la orden
+                        onExpense(order.id); // Llamamos a la función real
                     }}
-                    className="text-orange-500 hover:underline text-xs font-medium"
+                    className="text-orange-500 hover:text-orange-700 transition-colors p-1 rounded-full hover:bg-orange-50"
+                    title="Agregar Gasto / Cobro Adicional"
                   >
-                    +Gasto
+                    <HiOutlineCurrencyDollar className="w-6 h-6" />
                   </button>
 
-                  {/* Abrir/cerrar panel de notas para ESTA orden */}
+                  {/* 2. Notas (Clipboard) - Cambia de color si está activo */}
                   <button
-                    onClick={() =>
-                      setNotesOpenFor(
-                        notesOpenFor === order.id ? null : order.id
-                      )
-                    }
-                    className="text-brand-deep hover:underline text-brand text-xs font-medium"
+                    onClick={(e) => {
+                      e.stopPropagation(); // Evita abrir la orden
+                      setNotesOpenFor(notesOpenFor === order.id ? null : order.id);
+                    }}
+                    className={`transition-colors p-1 rounded-full hover:bg-gray-100 ${
+                        notesOpenFor === order.id ? "text-blue-600 bg-blue-50" : "text-gray-500 hover:text-blue-600"
+                    }`}
+                    title={notesOpenFor === order.id ? "Ocultar Notas" : "Ver Notas Internas"}
                   >
-                    {notesOpenFor === order.id ? "Ocultar" : "Notas"}
+                    <HiOutlineClipboardList className="w-6 h-6" />
                   </button>
 
-                  {/* Botón WhatsApp */}
+                  {/* 3. WhatsApp (Chat) */}
                   <button
-                    onClick={() => handleWhatsApp(order)}
-                    className="text-green-600 hover:text-green-800"
+                    onClick={(e) => {
+                        e.stopPropagation(); // Evita abrir la orden
+                        handleWhatsApp(order);
+                    }}
+                    className="text-green-600 hover:text-green-800 transition-colors p-1 rounded-full hover:bg-green-50"
                     title="Notificar por WhatsApp"
                   >
-                    <HiOutlineChatAlt2 className="w-5 h-5" />
-                  </button>
-
-                  {/* Ver/Editar (tu flujo existente) */}
-                  <button
-                    onClick={() => onEdit(order.id)}
-                    className="text-blue-500 hover:underline text-brand-deep text-xs font-medium"
-                  >
-                    Ver/Editar
+                    <HiOutlineChatAlt2 className="w-6 h-6" />
                   </button>
                 </td>
               </tr>

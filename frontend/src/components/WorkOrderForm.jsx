@@ -404,20 +404,34 @@ function WorkOrderForm({ orderId, onClose, onSave }) {
       // Quitamos onClick={onClose} aquí
     >
       <div
-        className="bg-white p-6 rounded-lg shadow-xl w-full max-w-4xl text-gray-800 overflow-y-auto max-h-[95vh]"
+        className="bg-white rounded-lg shadow-xl w-full max-w-4xl text-gray-800 max-h-[95vh] flex flex-col relative"
         onClick={(e) => e.stopPropagation()} // Evita que el click dentro cierre el modal
       >
-        <div className="mb-6 flex justify-between items-start">
-          <div>
-            <h2 className="text-2xl font-bold text-secondary">
-              {orderId ? `Ver / Editar Orden #${order.work_order_number}` : "Crear Nueva Orden de Trabajo"}
-            </h2>
-            {orderId && order.user && (
-              <p className="text-xs text-gray-400 mt-1">Creada por: <span className="font-semibold">{order.user.email}</span></p>
-            )}
+        {/* --- NUEVO: Botón X Flotante (Siempre visible) --- */}
+        <button 
+            onClick={onClose} 
+            className="absolute top-3 right-3 z-10 p-2 bg-gray-100 hover:bg-red-100 text-gray-500 hover:text-red-600 rounded-full transition-colors shadow-sm"
+            title="Cerrar ventana"
+        >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+        </button>
+
+        {/* --- NUEVO: Contenedor con Scroll para el contenido --- */}
+        <div className="p-6 overflow-y-auto custom-scrollbar">
+          
+          <div className="mb-6 flex justify-between items-start">
+            <div>
+              <h2 className="text-2xl font-bold text-secondary">
+                {orderId ? `Ver / Editar Orden #${order.work_order_number}` : "Crear Nueva Orden de Trabajo"}
+              </h2>
+              {orderId && order.user && (
+                <p className="text-xs text-gray-400 mt-1">Creada por: <span className="font-semibold">{order.user.email}</span></p>
+              )}
+            </div>
+            {/* Aquí quitamos el botón viejo para no tener dos */}
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-2xl font-bold leading-none">&times;</button>
-        </div>
 
         {loading && <p className="text-accent animate-pulse">Procesando...</p>}
         {error && <p className="bg-red-100 text-red-800 p-3 rounded-lg my-4">{error}</p>}
@@ -616,6 +630,8 @@ function WorkOrderForm({ orderId, onClose, onSave }) {
             </div>
           </div>
         )}
+        
+        </div> {/* --- FIN DEL CONTENEDOR CON SCROLL --- */}
       </div>
     </div>
   );
