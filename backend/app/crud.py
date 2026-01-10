@@ -1,7 +1,8 @@
 
 from collections import defaultdict
 from decimal import Decimal, ROUND_HALF_UP
-from sqlalchemy.sql import func, and_, case, literal_column, or_, text
+from sqlalchemy.sql import func, and_, case, literal_column, or_, text, cast
+from sqlalchemy import String # Importamos String para el cast
 from sqlalchemy.orm import Session, joinedload, outerjoin, selectinload
 from datetime import date, datetime # Añadimos datetime
 import pytz # Añadimos pytz para la zona horaria
@@ -648,7 +649,7 @@ def get_work_order_by_public_id(db: Session, public_id: str):
 
 
 
-def get_work_orders(db: Session, user: models.User, skip: int = 0, limit: int = 100, active_only: bool = False):
+def get_work_orders(db: Session, user: models.User, skip: int = 0, limit: int = 100, active_only: bool = False, search: str | None = None):
     """
     Obtiene las órdenes de trabajo y AUTO-REPARA los public_id faltantes.
     """
@@ -656,6 +657,19 @@ def get_work_orders(db: Session, user: models.User, skip: int = 0, limit: int = 
         joinedload(models.WorkOrder.user),
         joinedload(models.WorkOrder.location)
     )
+
+    # --- FILTRO DE BÚSQUEDA (Nombre o Cédula) ---
+    if search:
+        search_term = f"%{search.lower()}%"
+        query = query.filter(
+            or_(
+                func.lower(models.WorkOrder.customer_name).like(search_term),
+                func.lower(models.WorkOrder.customer_id_card).like(search_term),
+                # También buscamos por el ID de la orden (si es un número)
+                cast(models.WorkOrder.id, String).like(search_term)
+            )
+        )
+    # --------------------------------------------
 
     # --- NUEVO FILTRO: Si pedimos solo activas, ignoramos las terminadas ---
     if active_only:

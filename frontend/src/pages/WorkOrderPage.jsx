@@ -35,12 +35,18 @@ function WorkOrderPage() {
   
   // Estado para WhatsApp
   const [companyInfo, setCompanyInfo] = useState(null);
+  
+  // Estado para Búsqueda
+  const [searchTerm, setSearchTerm] = useState("");
 
   // Función para cargar o recargar la lista de órdenes.
-  const fetchWorkOrders = async () => {
+  const fetchWorkOrders = async (term = "") => {
     try {
       setLoading(true);
-      const response = await api.get("/work-orders/");
+      // Enviamos el término de búsqueda si existe
+      const response = await api.get("/work-orders/", {
+        params: { search: term }
+      });
       setWorkOrders(response.data);
     } catch (err) {
       setError("No se pudieron cargar las órdenes de trabajo.");
@@ -56,6 +62,14 @@ function WorkOrderPage() {
     getCompanySettings().then(setCompanyInfo).catch(console.error);
   }, []);
 
+  // Manejador del input de búsqueda (con delay para no saturar)
+  useEffect(() => {
+    const delayDebounceFn = setTimeout(() => {
+      fetchWorkOrders(searchTerm);
+    }, 500); // Espera medio segundo después de que dejes de escribir
+
+    return () => clearTimeout(delayDebounceFn);
+  }, [searchTerm]);
   const formatDate = (dateString) => {
     const options = { year: "numeric", month: "short", day: "numeric" };
     return new Date(dateString).toLocaleDateString("es-EC", options);
@@ -131,12 +145,29 @@ function WorkOrderPage() {
   return (
     <>
       <div className="bg-white p-6 rounded-xl shadow-md border text-secondary">
-        <div className="flex justify-between items-center mb-6">
+        <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
           <h1 className="text-2xl font-bold">Gestión de Órdenes de Trabajo</h1>
+          
+          {/* BARRA DE BÚSQUEDA */}
+          <div className="relative w-full md:w-96">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <svg className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </div>
+            <input
+              type="text"
+              className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-accent focus:border-accent sm:text-sm"
+              placeholder="Buscar por cliente, cédula o N° orden..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
+
           {/* El botón ahora abre el formulario de creación */}
           <button
             onClick={handleOpenCreateForm}
-            className="bg-brand text-white font-bold py-2 px-4 rounded-lg shadow hover:bg-indigo-900 transition-colors"
+            className="bg-brand text-white font-bold py-2 px-4 rounded-lg shadow hover:bg-indigo-900 transition-colors whitespace-nowrap"
           >
             + Nueva Orden
           </button>

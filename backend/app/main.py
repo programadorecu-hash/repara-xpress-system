@@ -805,14 +805,15 @@ def update_work_order_status(
 def read_work_orders(
     skip: int = 0, 
     limit: int = 100, 
-    active_only: bool = False, # <--- ACEPTAMOS EL NUEVO PARAMETRO
+    active_only: bool = False,
+    search: str | None = None, # <--- ACEPTAMOS BÚSQUEDA
     db: Session = Depends(get_db),
     # Quitamos el chequeo de rol y en su lugar pedimos el usuario actual.
     current_user: models.User = Depends(security.get_current_user)
 ):
     # Le pasamos el usuario actual a nuestra nueva función de CRUD.
     # Ella se encargará de decidir qué órdenes devolver.
-    return crud.get_work_orders(db, user=current_user, skip=skip, limit=limit, active_only=active_only)
+    return crud.get_work_orders(db, user=current_user, skip=skip, limit=limit, active_only=active_only, search=search)
 
 
 # --- NUEVO ENDPOINT PARA BUSCAR ÓRDENES LISTAS ---
