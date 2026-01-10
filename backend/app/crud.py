@@ -687,6 +687,33 @@ def get_work_orders(db: Session, user: models.User, skip: int = 0, limit: int = 
     return results
 
 def create_work_order(db: Session, work_order: schemas.WorkOrderCreate, user_id: int, location_id: int):
+    # --- INICIO LÓGICA CLIENTE INTELIGENTE (UPSERT) ---
+    # Antes de crear la orden, verificamos si el cliente existe para actualizarlo o crearlo.
+    # Esto evita duplicados y mantiene la base de datos de clientes al día.
+    existing_customer = get_customer_by_id_card(db, id_card=work_order.customer_id_card)
+
+    if existing_customer:
+        # Si el cliente YA EXISTE, actualizamos sus datos con la info fresca de esta orden.
+        # Así, si cambió de teléfono o dirección, se actualiza la ficha general.
+        existing_customer.name = work_order.customer_name
+        existing_customer.phone = work_order.customer_phone
+        existing_customer.email = work_order.customer_email
+        existing_customer.address = work_order.customer_address
+        # No hace falta db.add, SQLAlchemy detecta el cambio en el objeto "dirty"
+    else:
+        # Si NO EXISTE, creamos la ficha del cliente nuevo automáticamente.
+        new_customer = models.Customer(
+            id_card=work_order.customer_id_card,
+            name=work_order.customer_name,
+            phone=work_order.customer_phone,
+            email=work_order.customer_email,
+            address=work_order.customer_address,
+            location_id=location_id, # Registramos en qué sucursal apareció por primera vez
+            notes="Cliente registrado automáticamente desde Orden de Trabajo"
+        )
+        db.add(new_customer)
+    # --- FIN LÓGICA CLIENTE INTELIGENTE ---
+
     # 1. Crear la Orden de Trabajo básica
     work_order_data = work_order.model_dump(exclude={"pin", "deposit_payment_method"})
     db_work_order = models.WorkOrder(**work_order_data, user_id=user_id, location_id=location_id)
