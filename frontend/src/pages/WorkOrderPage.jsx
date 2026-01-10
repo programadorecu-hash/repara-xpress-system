@@ -223,7 +223,9 @@ const WorkOrderTable = ({
 
     // 1. Mensaje Base (Información del Estado)
     const statusText = STATUS_LABELS[order.status] || order.status;
-    const baseMsg = companyInfo?.whatsapp_default_message || "Hola, actualizamos el estado de su equipo.";
+    
+    // USAMOS EL MENSAJE PERSONALIZADO DE ÓRDENES (O EL DEFAULT SI ESTÁ VACÍO)
+    const baseMsg = companyInfo?.whatsapp_work_order_message || "Hola, actualizamos el estado de su equipo.";
     
     let message = `${baseMsg}
 Orden: #${order.work_order_number}

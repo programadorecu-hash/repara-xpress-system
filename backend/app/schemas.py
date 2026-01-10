@@ -657,7 +657,8 @@ class CompanySettingsBase(BaseModel):
     footer_message: str | None = None
     # --- NUEVO: Campos para WhatsApp ---
     whatsapp_country_code: str | None = "+593"
-    whatsapp_default_message: str | None = "Hola, adjunto su documento."
+    whatsapp_default_message: str | None = "Hola, adjunto su documento." # Ventas
+    whatsapp_work_order_message: str | None = "Hola, actualizamos el estado de su equipo." # Órdenes
     # -----------------------------------
 
 class CompanySettingsCreate(CompanySettingsBase):

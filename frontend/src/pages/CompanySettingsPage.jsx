@@ -13,7 +13,8 @@ function CompanySettingsPage() {
     logo_url: null,
     // --- NUEVO: Estado inicial para WhatsApp ---
     whatsapp_country_code: '+593',
-    whatsapp_default_message: ''
+    whatsapp_default_message: '',
+    whatsapp_work_order_message: '' // <--- Nuevo campo
     // ------------------------------------------
   });
   const [isLoading, setIsLoading] = useState(false);
@@ -233,7 +234,7 @@ function CompanySettingsPage() {
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-1">Mensaje Predeterminado</label>
+                      <label className="block text-sm font-semibold text-gray-700 mb-1">Mensaje Ventas (Recibos)</label>
                       <input
                         type="text"
                         name="whatsapp_default_message"
@@ -243,6 +244,21 @@ function CompanySettingsPage() {
                         placeholder="Hola, adjunto su documento..."
                       />
                     </div>
+                    
+                    {/* Nuevo campo para Órdenes */}
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-semibold text-gray-700 mb-1">Mensaje Órdenes de Trabajo</label>
+                      <textarea
+                        rows="2"
+                        name="whatsapp_work_order_message"
+                        value={settings.whatsapp_work_order_message || ''}
+                        onChange={handleChange}
+                        className="w-full p-2 border border-gray-300 rounded resize-none"
+                        placeholder="Hola, actualizamos el estado de su equipo..."
+                      />
+                      <p className="text-xs text-gray-500 mt-1">El sistema añadirá automáticamente el número de orden y estado debajo de este mensaje.</p>
+                    </div>
+
                   </div>
                 </div>
                 {/* ------------------------------------------- */}

@@ -424,7 +424,12 @@ class CompanySettings(Base):
 
     # --- NUEVO: Configuración para WhatsApp ---
     whatsapp_country_code = Column(String, default="+593") # Código de país por defecto (ej: +593)
-    whatsapp_default_message = Column(String, default="Hola, adjunto su documento.") # Mensaje predeterminado
+    
+    # Mensaje para VENTAS (Recibos)
+    whatsapp_default_message = Column(String, default="Hola, adjunto su documento.") 
+    
+    # Mensaje para ÓRDENES DE TRABAJO
+    whatsapp_work_order_message = Column(String, default="Hola, actualizamos el estado de su equipo.")
     # ------------------------------------------
 
     # Configuración actualizada el:
