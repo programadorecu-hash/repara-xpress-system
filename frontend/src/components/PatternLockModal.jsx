@@ -106,18 +106,40 @@ const PatternLockModal = ({ isOpen, onClose, onSave, initialPattern = "" }) => {
               className="opacity-80"
             />
 
-            {/* Puntos (Círculos) */}
-            {points.map(p => (
-              <circle 
-                key={p.id} 
-                cx={p.x} 
-                cy={p.y} 
-                r="12" 
-                className={path.includes(p.id) ? "fill-green-600" : "fill-gray-400"}
-                stroke="white"
-                strokeWidth="2"
-              />
-            ))}
+            {/* Puntos (Círculos con Números) */}
+            {points.map(p => {
+              // Calculamos el orden: ¿Es el punto 1, el 2, el 3...?
+              const index = path.indexOf(p.id);
+              const isSelected = index !== -1;
+
+              return (
+                <g key={p.id}>
+                  {/* El Círculo */}
+                  <circle 
+                    cx={p.x} 
+                    cy={p.y} 
+                    r="16" 
+                    className={isSelected ? "fill-green-600" : "fill-gray-400"}
+                    stroke="white"
+                    strokeWidth="2"
+                  />
+                  {/* El Número (Solo si está seleccionado) */}
+                  {isSelected && (
+                    <text 
+                      x={p.x} 
+                      y={p.y + 5} 
+                      textAnchor="middle" 
+                      fill="white" 
+                      fontSize="14" 
+                      fontWeight="bold"
+                      pointerEvents="none"
+                    >
+                      {index + 1}
+                    </text>
+                  )}
+                </g>
+              );
+            })}
           </svg>
         </div>
 
