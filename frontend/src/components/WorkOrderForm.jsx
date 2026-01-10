@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from "react";
 import api, { deliverWorkOrderUnrepaired, deleteWorkOrderImage } from "../services/api";
+import PatternLockModal from "./PatternLockModal"; // <--- IMPORTANTE
 
-// --- COMPONENTE DE SLOT DE FOTO (EL CUADRADITO CON +) ---
-const PhotoSlot = ({ index, image, orderId, onUpload }) => {
+// --- COMPONENTE DE SLOT DE FOTO (MEJORADO: CON ZOOM) ---
+const PhotoSlot = ({ index, image, orderId, onUpload, onView }) => {
   const [showOptions, setShowOptions] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   
@@ -77,8 +78,13 @@ const PhotoSlot = ({ index, image, orderId, onUpload }) => {
   const openCamera = async () => {
     setIsCameraOpen(true);
     try {
+      // SOLICITAMOS MÁXIMA RESOLUCIÓN POSIBLE (HD/4K)
       const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: { facingMode: "environment" } // Intenta usar la cámara trasera
+        video: { 
+            facingMode: "environment",
+            width: { ideal: 4096 }, // Pedimos 4K idealmente
+            height: { ideal: 2160 } 
+        } 
       });
       streamRef.current = stream;
       if (videoRef.current) videoRef.current.srcObject = stream;
@@ -92,13 +98,20 @@ const PhotoSlot = ({ index, image, orderId, onUpload }) => {
     const video = videoRef.current;
     const canvas = canvasRef.current;
     if (video && canvas) {
+      // 1. Usamos la resolución nativa máxima que nos da el video
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
-      canvas.getContext("2d").drawImage(video, 0, 0);
+      
+      // 2. Dibujamos con suavizado de imagen desactivado para más nitidez en bordes
+      const ctx = canvas.getContext("2d");
+      ctx.imageSmoothingEnabled = false; 
+      ctx.drawImage(video, 0, 0);
+
+      // 3. Guardamos con CALIDAD MÁXIMA (1.0) en lugar de 0.8
       canvas.toBlob(blob => {
         uploadFile(blob);
         closeCamera();
-      }, "image/jpeg", 0.8);
+      }, "image/jpeg", 1.0); // <--- AQUÍ ESTÁ EL CAMBIO CLAVE (1.0 es 100% calidad)
     }
   };
 
@@ -114,7 +127,10 @@ const PhotoSlot = ({ index, image, orderId, onUpload }) => {
   // CASO A: Ya hay foto -> Mostrarla
   if (image) {
     return (
-      <div className="relative w-24 h-24 rounded-lg overflow-hidden shadow-sm border border-gray-200 group bg-gray-100">
+      <div 
+        className="relative w-24 h-24 rounded-lg overflow-hidden shadow-sm border border-gray-200 group bg-gray-100 cursor-zoom-in hover:shadow-md transition-shadow"
+        onClick={() => onView && onView(image)}
+      >
         <img 
           src={`${import.meta.env.VITE_API_URL || "http://localhost:8000"}${image.image_url}`} 
           alt={image.tag}
@@ -238,6 +254,8 @@ function WorkOrderForm({ orderId, onClose, onSave }) {
   // --- Estado para el modal de "Entregar Sin Reparar" ---
   const [showUnrepaired, setShowUnrepaired] = useState(false);
   const [unrepairedData, setUnrepairedData] = useState({ fee: 2.00, reason: "Cliente retiró sin reparar", pin: "" });
+  // Estado para el modal de patrón
+  const [showPatternModal, setShowPatternModal] = useState(false);
   
   const handleUnrepairedSubmit = async () => {
     try {
@@ -301,6 +319,23 @@ function WorkOrderForm({ orderId, onClose, onSave }) {
   const [order, setOrder] = useState(initialState);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  // Estado para el visor de fotos (Lightbox)
+  const [viewImage, setViewImage] = useState(null);
+  // Estados para el Zoom
+  const [isZoomed, setIsZoomed] = useState(false);
+  const [zoomOrigin, setZoomOrigin] = useState("center center");
+
+  // Función mágica: Calcula dónde está el mouse para mover la lupa
+  const handleMouseMove = (e) => {
+    if (!isZoomed) return;
+    // Obtenemos las coordenadas de la imagen
+    const { left, top, width, height } = e.target.getBoundingClientRect();
+    // Calculamos el porcentaje exacto donde está el mouse
+    const x = ((e.clientX - left) / width) * 100;
+    const y = ((e.clientY - top) / height) * 100;
+    // Movemos el foco del zoom a ese punto
+    setZoomOrigin(`${x}% ${y}%`);
+  };
 
   useEffect(() => {
     if (orderId) {
@@ -478,7 +513,20 @@ function WorkOrderForm({ orderId, onClose, onSave }) {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
                <input type="text" name="device_serial" value={order.device_serial || ""} onChange={handleChange} placeholder="Serie / IMEI" className="p-2 border rounded" disabled={!!orderId} />
                <input type="text" name="device_password" value={order.device_password || ""} onChange={handleChange} placeholder="PIN / Contraseña" className="p-2 border rounded" autoComplete="new-password" />
-               <input type="text" name="device_unlock_pattern" value={order.device_unlock_pattern || ""} onChange={handleChange} placeholder="Patrón" className="p-2 border rounded" />
+               
+               {/* CAMPO DE PATRÓN INTERACTIVO */}
+               <div className="relative">
+                 <button 
+                   type="button"
+                   onClick={() => setShowPatternModal(true)}
+                   className={`w-full p-2 border rounded text-left flex justify-between items-center ${order.device_unlock_pattern ? "bg-green-50 border-green-300 text-green-700" : "bg-white text-gray-400"}`}
+                 >
+                   <span>{order.device_unlock_pattern ? `Patrón: ${order.device_unlock_pattern}` : "Dibujar Patrón"}</span>
+                   <span className="text-lg">罒</span>
+                 </button>
+                 {/* Input oculto para que se guarde en el estado del formulario */}
+                 <input type="hidden" name="device_unlock_pattern" value={order.device_unlock_pattern || ""} />
+               </div>
             </div>
              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
                <input type="text" name="device_account" value={order.device_account || ""} onChange={handleChange} placeholder="Cuenta Google / iCloud" className="p-2 border rounded" autoComplete="new-password" />
@@ -526,6 +574,7 @@ function WorkOrderForm({ orderId, onClose, onSave }) {
                   image={img} 
                   orderId={orderId} 
                   onUpload={handleImagesUpdated} 
+                  onView={setViewImage}
                 />
               ))}
               
@@ -534,24 +583,36 @@ function WorkOrderForm({ orderId, onClose, onSave }) {
           </fieldset>
           {/* ------------------------------------- */}
 
-          {/* PROBLEMA Y COSTOS */}
-          <fieldset className="border p-4 rounded-lg">
-            <fieldset className="border p-4 rounded-lg bg-gray-50 border-gray-200 mt-4">
+          {/* 1. ESTADO FÍSICO (Separado para que no se pegue) */}
+          <fieldset className="border p-4 rounded-lg bg-gray-50 border-gray-200">
             <legend className="text-lg font-semibold px-2 text-gray-700">Estado del Equipo (Recepción)</legend>
             <textarea 
               name="physical_condition" 
               value={order.physical_condition || ""} 
               onChange={handleChange} 
               placeholder="Detalle aquí: Pantalla rayada, golpe en esquina, sin tapa, etc..." 
-              className="w-full p-2 border rounded focus:ring-2 focus:ring-gray-400 outline-none h-20 text-sm" 
+              className="w-full p-2 border rounded focus:ring-2 focus:ring-gray-400 outline-none h-20 text-sm bg-white" 
             />
             <p className="text-xs text-gray-500 mt-1">
               * Esta información aparecerá en el recibo impreso.
             </p>
           </fieldset>
-          {/* --------------------------------------- */}
+
+          {/* 2. DIAGNÓSTICO Y PRESUPUESTO (Con título corregido) */}
+          <fieldset className="border p-4 rounded-lg">
             <legend className="text-lg font-semibold px-2 text-gray-700">Diagnóstico y Presupuesto</legend>
-            <textarea name="reported_issue" value={order.reported_issue} onChange={handleChange} placeholder="Problema reportado..." className="w-full p-2 border rounded mb-4 focus:ring-2 focus:ring-accent outline-none" required />
+            
+            {/* Título agregado */}
+            <label className="font-semibold block mb-2 text-gray-700">Daño o Trabajo a realizar</label>
+            <textarea 
+              name="reported_issue" 
+              value={order.reported_issue} 
+              onChange={handleChange} 
+              placeholder="Describa el problema o trabajo a realizar..." 
+              className="w-full p-2 border rounded mb-4 focus:ring-2 focus:ring-accent outline-none" 
+              required 
+            />
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="font-semibold block mb-1 text-sm">Costo Estimado ($)</label>
@@ -630,9 +691,80 @@ function WorkOrderForm({ orderId, onClose, onSave }) {
             </div>
           </div>
         )}
+
+        {/* --- NUEVO: MODAL DE DIBUJO DE PATRÓN --- */}
+        <PatternLockModal 
+          isOpen={showPatternModal}
+          onClose={() => setShowPatternModal(false)}
+          initialPattern={order.device_unlock_pattern}
+          onSave={(patternString) => setOrder(prev => ({ ...prev, device_unlock_pattern: patternString }))}
+        />
         
         </div> {/* --- FIN DEL CONTENEDOR CON SCROLL --- */}
       </div>
+
+      {/* --- VISOR DE IMAGEN (LIGHTBOX CON ZOOM TÁCTICO) --- */}
+      {viewImage && (
+        <div 
+          className="fixed inset-0 z-[100] bg-black bg-opacity-95 flex items-center justify-center p-4 animate-fade-in"
+          onClick={() => { setViewImage(null); setIsZoomed(false); }} // Al cerrar, reseteamos el zoom
+        >
+          {/* Botón Cerrar Gigante */}
+          <button 
+            className="absolute top-4 right-4 text-white hover:text-gray-300 z-[110] bg-black bg-opacity-50 rounded-full p-2"
+            onClick={() => { setViewImage(null); setIsZoomed(false); }}
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+
+          {/* Imagen Grande (Contenedor relativo para el zoom) */}
+          <div 
+            className="relative overflow-hidden rounded shadow-2xl transition-all duration-200 ease-out"
+            style={{ 
+                // Si está zoomed, ocupamos más espacio, si no, nos ajustamos
+                maxWidth: isZoomed ? '100vw' : '90vw', 
+                maxHeight: isZoomed ? '100vh' : '85vh',
+                cursor: isZoomed ? 'zoom-out' : 'zoom-in'
+            }}
+          >
+            <img 
+              src={`${import.meta.env.VITE_API_URL || "http://localhost:8000"}${viewImage.image_url}`} 
+              alt="Evidencia Grande" 
+              className="w-full h-full object-contain transition-transform duration-100 ease-linear"
+              style={{
+                // Aquí ocurre la magia: Escala 2.5x y se mueve según el mouse
+                transform: isZoomed ? "scale(2.5)" : "scale(1)",
+                transformOrigin: zoomOrigin
+              }}
+              // Eventos del mouse
+              onClick={(e) => { e.stopPropagation(); setIsZoomed(!isZoomed); }} 
+              onMouseMove={handleMouseMove}
+            />
+          </div>
+
+          {/* Barra de Acciones Inferior (Solo visible si NO hay zoom, para no estorbar) */}
+          {!isZoomed && (
+            <div className="absolute bottom-6 flex flex-col items-center gap-2 z-[110]" onClick={(e) => e.stopPropagation()}>
+              <p className="text-white text-xs opacity-70 mb-1">Click en la imagen para hacer Zoom</p>
+              <a 
+                href={`${import.meta.env.VITE_API_URL || "http://localhost:8000"}${viewImage.image_url}`} 
+                download 
+                target="_blank"
+                rel="noreferrer"
+                className="bg-white text-black px-6 py-3 rounded-full font-bold hover:bg-gray-200 flex items-center gap-2 shadow-lg"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd" />
+                </svg>
+                Descargar Original
+              </a>
+            </div>
+          )}
+        </div>
+      )}
+
     </div>
   );
 }
