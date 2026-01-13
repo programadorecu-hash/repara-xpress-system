@@ -78,8 +78,16 @@ function PaymentModal({
         return;
     }
 
-    // Lógica normal para otros métodos
-    if (remaining <= 0 && methodId !== "EFECTIVO") return;
+    // --- MEJORA UX: Reemplazo inteligente ---
+    // Si solo hay 1 pago, es EFECTIVO, y cubre el total (o sea, es el estado inicial),
+    // al hacer clic en otro método, REEMPLAZAMOS el efectivo en lugar de agregar otro pago.
+    if (payments.length === 1 && payments[0].method === "EFECTIVO" && Math.abs(payments[0].amount - totalAmount) < 0.01) {
+        setPayments([{ method: methodId, amount: totalAmount, reference: "" }]);
+        return;
+    }
+
+    // Lógica normal para otros métodos (pagos mixtos)
+    if (remaining <= 0.01 && methodId !== "EFECTIVO") return;
     const amountToSuggest = remaining > 0 ? remaining : 0;
     setPayments([...payments, { method: methodId, amount: amountToSuggest, reference: "" }]);
   };
@@ -211,27 +219,27 @@ function PaymentModal({
           <div className="space-y-3 mb-6">
             <p className="text-sm font-bold text-gray-700">Detalle:</p>
             {payments.map((payment, index) => (
-              <div key={index} className={`flex flex-col sm:flex-row gap-3 items-center border p-3 rounded-lg shadow-sm ${payment.method === 'CREDIT_NOTE' ? 'bg-purple-50 border-purple-200' : 'bg-white border-gray-300'}`}>
+              <div key={index} className={`flex flex-col sm:flex-row gap-3 items-stretch sm:items-center border p-3 rounded-lg shadow-sm ${payment.method === 'CREDIT_NOTE' ? 'bg-purple-50 border-purple-200' : 'bg-white border-gray-300'}`}>
                 
-                {/* Selector (Solo lectura si es Nota de Crédito) */}
-                <div className="w-full sm:w-1/3">
+                {/* Selector (25% ancho) */}
+                <div className="w-full sm:w-1/4">
                     {payment.method === 'CREDIT_NOTE' ? (
-                        <div className="w-full p-2.5 bg-purple-100 border border-purple-200 rounded-lg text-sm font-bold text-purple-800 flex items-center gap-2">
-                            <HiCheckCircle className="w-5 h-5"/> Nota de Crédito
+                        <div className="w-full h-full p-2.5 bg-purple-100 border border-purple-200 rounded-lg text-sm font-bold text-purple-800 flex items-center justify-center gap-2">
+                            <HiCheckCircle className="w-5 h-5 flex-shrink-0"/> Nota Crédito
                         </div>
                     ) : (
                         <select
                             value={payment.method}
                             onChange={(e) => handlePaymentChange(index, 'method', e.target.value)}
-                            className="w-full p-2.5 bg-gray-100 border border-gray-300 rounded-lg text-sm font-bold text-gray-800 focus:ring-2 focus:ring-blue-500 outline-none"
+                            className="w-full h-full p-2.5 bg-gray-100 border border-gray-300 rounded-lg text-sm font-bold text-gray-800 focus:ring-2 focus:ring-blue-500 outline-none"
                         >
                             {PAYMENT_METHODS_CONFIG.filter(m => m.id !== 'CREDIT_NOTE').map(opt => <option key={opt.id} value={opt.id}>{opt.label}</option>)}
                         </select>
                     )}
                 </div>
 
-                {/* Monto */}
-                <div className="w-full sm:w-1/3 relative">
+                {/* Monto (25% ancho) */}
+                <div className="w-full sm:w-1/4 relative">
                   <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500 font-bold">$</span>
                   <input
                     type="number"
@@ -244,19 +252,19 @@ function PaymentModal({
                   />
                 </div>
 
-                {/* Referencia */}
-                <div className="w-full sm:w-1/3 flex gap-2">
+                {/* Referencia (50% ancho - MÁS ESPACIO) */}
+                <div className="w-full sm:w-1/2 flex gap-2">
                     {payment.method === "CREDIT_NOTE" ? (
-                         <div className="flex-1 p-2.5 border border-purple-200 bg-purple-50 rounded-lg text-sm font-mono text-center text-purple-900 font-bold">
-                            {payment.reference}
+                         <div className="flex-1 p-2.5 border border-purple-200 bg-purple-50 rounded-lg text-sm font-mono text-center text-purple-900 font-bold flex items-center justify-center overflow-hidden">
+                            <span className="truncate">{payment.reference}</span>
                          </div>
                     ) : (payment.method !== "EFECTIVO" ? (
                         <input 
                             type="text"
                             value={payment.reference}
                             onChange={(e) => handlePaymentChange(index, 'reference', e.target.value)}
-                            placeholder="REF"
-                            className="flex-1 p-2.5 border border-gray-300 rounded-lg text-sm uppercase focus:ring-2 focus:ring-blue-500 outline-none"
+                            placeholder="Referencia / Banco"
+                            className="flex-1 min-w-0 p-2.5 border border-gray-300 rounded-lg text-sm uppercase focus:ring-2 focus:ring-blue-500 outline-none"
                         />
                     ) : (
                         <div className="flex-1"></div>
@@ -265,7 +273,8 @@ function PaymentModal({
                     <button 
                       type="button"
                       onClick={() => handleRemovePayment(index)} 
-                      className="p-2.5 text-gray-400 hover:text-red-600 hover:bg-red-50 border border-gray-200 rounded-lg transition"
+                      className="flex-shrink-0 p-2.5 text-gray-400 hover:text-red-600 hover:bg-red-50 border border-gray-200 rounded-lg transition"
+                      title="Eliminar pago"
                     >
                       <HiOutlineTrash className="w-6 h-6" />
                     </button>

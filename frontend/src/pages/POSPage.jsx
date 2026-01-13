@@ -188,8 +188,10 @@ function POSPage() {
           price_1: itemToAdd.price_1,
           price_2: itemToAdd.price_2,
           price_3: itemToAdd.price_3,
-          selected_price_level: 3, // Por defecto usamos P3
-          unit_price: itemToAdd.price_3, // El precio unitario actual es P3
+          
+          // CAMBIO: El Nivel 1 es el default, y corresponde al PVP (price_3)
+          selected_price_level: 1, 
+          unit_price: itemToAdd.price_3, 
           // --- FIN ---
         };
 
@@ -308,52 +310,52 @@ function POSPage() {
   };
   // --- FIN FUNCIÓN INCREMENTAR CANTIDAD ---
 
-  // --- NUEVA FUNCIÓN: CAMBIAR NIVEL DE PRECIO DEL ITEM ---
+  // --- FUNCIÓN MODIFICADA: CAMBIAR NIVEL DE PRECIO (INVERTIDO P1 <-> P3) ---
   const handleChangePriceLevel = (indexToChange, newLevel) => {
     const updatedCart = cart.map((item, index) => {
-      // Si es el item correcto, no es orden, y el nivel es válido (1, 2, o 3)
       if (
         index === indexToChange &&
         !item.isWorkOrder &&
         [1, 2, 3].includes(newLevel)
       ) {
-        let newPrice = item.price_3; // Default a P3
-        if (newLevel === 1) newPrice = item.price_1;
-        else if (newLevel === 2) newPrice = item.price_2;
+        let newPrice;
+        // AQUÍ HACEMOS EL CAMBIO DE LÓGICA:
+        // Nivel 1 (Botón P1) -> Carga price_3 (PVP / Alto)
+        // Nivel 3 (Botón P3) -> Carga price_1 (Distribuidor / Bajo)
+        if (newLevel === 1) newPrice = item.price_3;      // P1 = PVP
+        else if (newLevel === 2) newPrice = item.price_2; // P2 = Descuento
+        else if (newLevel === 3) newPrice = item.price_1; // P3 = Frecuente
 
-        // Devolver copia con nivel y precio unitario actualizados
         return {
           ...item,
           selected_price_level: newLevel,
           unit_price: newPrice,
         };
       }
-      // Devolver item sin cambios si no aplica
       return item;
     });
     setCart(updatedCart);
   };
   // --- FIN FUNCIÓN CAMBIAR NIVEL DE PRECIO DEL ITEM ---
 
-  // --- NUEVA FUNCIÓN: CAMBIAR NIVEL DE PRECIO GLOBAL ---
+  // --- FUNCIÓN MODIFICADA: CAMBIAR PRECIO GLOBAL (INVERTIDO P1 <-> P3) ---
   const handleChangeAllPriceLevels = (newLevel) => {
-    if (![1, 2, 3].includes(newLevel)) return; // Validar nivel
+    if (![1, 2, 3].includes(newLevel)) return;
 
     const updatedCart = cart.map((item) => {
-      // Solo modificar si es un producto (!isWorkOrder)
       if (!item.isWorkOrder) {
-        let newPrice = item.price_3; // Default P3
-        if (newLevel === 1) newPrice = item.price_1;
-        else if (newLevel === 2) newPrice = item.price_2;
+        let newPrice;
+        // MISMA LÓGICA INVERTIDA
+        if (newLevel === 1) newPrice = item.price_3;      // P1 = PVP
+        else if (newLevel === 2) newPrice = item.price_2; // P2
+        else if (newLevel === 3) newPrice = item.price_1; // P3 = Frecuente
 
-        // Devolver copia con nivel y precio unitario actualizados
         return {
           ...item,
           selected_price_level: newLevel,
           unit_price: newPrice,
         };
       }
-      // Devolver orden de trabajo sin cambios
       return item;
     });
     setCart(updatedCart);

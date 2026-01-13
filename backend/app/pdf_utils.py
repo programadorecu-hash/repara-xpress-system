@@ -809,8 +809,20 @@ def generate_sales_history_pdf(sales_data: list, company_settings: schemas.Compa
     
     # Filtros aplicados
     c.setFont("Helvetica", 9)
-    filter_text = f"Desde: {filters.get('start_date', 'Inicio')}  |  Hasta: {filters.get('end_date', 'Hoy')}"
-    if filters.get('location_id'): filter_text += "  |  Por Sucursal"
+    
+    # --- LÓGICA PARA MOSTRAR SUCURSAL ---
+    loc_display = "TODAS LAS SUCURSALES" # Por defecto
+    
+    if filters.get('location_id'):
+        # Si se filtró por ID, intentamos sacar el nombre real de los datos
+        if sales_data and hasattr(sales_data[0], 'location') and sales_data[0].location:
+            loc_display = f"SUCURSAL: {sales_data[0].location.name.upper()}"
+        else:
+            # Si no hay datos para sacar el nombre, ponemos un genérico claro
+            loc_display = "SUCURSAL SELECCIONADA"
+
+    filter_text = f"Desde: {filters.get('start_date', 'Inicio')}  |  Hasta: {filters.get('end_date', 'Hoy')}  |  {loc_display}"
+    
     if filters.get('search'): filter_text += f"  |  Búsqueda: {filters['search']}"
     
     c.drawCentredString(width / 2, y, filter_text)
@@ -841,16 +853,49 @@ def generate_sales_history_pdf(sales_data: list, company_settings: schemas.Compa
         # Formato fecha
         date_str = sale.created_at.strftime("%d/%m/%Y %H:%M")
         
+        # --- DIBUJAR FILA PRINCIPAL ---
         c.drawString(15 * mm, y, str(sale.id))
         c.drawString(30 * mm, y, date_str)
         c.drawString(60 * mm, y, sale.customer_name[:25])
         c.drawString(110 * mm, y, sale.user.email[:20])
-        c.drawString(150 * mm, y, sale.payment_method.replace("_", " "))
+        
+        # Método de pago (Primera línea)
+        method_str = sale.payment_method.replace("_", " ")
+        c.drawString(150 * mm, y, method_str)
+        
         c.drawRightString(195 * mm, y, f"${sale.total_amount:.2f}")
         
         total_sum += sale.total_amount
-        y -= 5 * mm
+        y -= 4 * mm # Bajamos un poco para ver si hay detalles
 
+        # --- DIBUJAR DETALLES DE PAGO (REFERENCIAS) ---
+        # Si es MIXTO, TRANSFERENCIA o TARJETA y tiene detalles guardados
+        if sale.payment_method_details:
+            details = sale.payment_method_details
+            
+            # Caso 1: Es una lista de pagos (Estructura nueva del PaymentModal)
+            if isinstance(details, list):
+                c.setFont("Helvetica", 6) # Letra pequeña para el detalle
+                for p in details:
+                    # Solo mostramos si NO es efectivo o si tiene referencia explicita
+                    if p.get("method") != "EFECTIVO" and p.get("reference"):
+                        ref_text = f"• {p.get('method')[:4]}: {p.get('reference')}"
+                        c.drawString(150 * mm, y, ref_text)
+                        y -= 2.5 * mm # Espacio por cada línea de referencia
+                c.setFont("Helvetica", 8) # Volvemos a letra normal
+
+            # Caso 2: Es un diccionario simple (Estructura antigua o simple)
+            elif isinstance(details, dict):
+                ref = details.get("reference") or details.get("bank_reference")
+                if ref:
+                    c.setFont("Helvetica", 6)
+                    c.drawString(150 * mm, y, f"Ref: {ref}")
+                    y -= 2.5 * mm
+                    c.setFont("Helvetica", 8)
+
+        # Espacio final entre filas (si no hubo detalles, el 'y' bajó 4mm, si hubo, bajó más)
+        # Ajustamos para asegurar separación uniforme
+        y -= 2 * mm
     # Totales Finales
     c.line(15 * mm, y, 195 * mm, y)
     y -= 6 * mm
