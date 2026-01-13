@@ -1,9 +1,46 @@
 import React, { useState, useEffect } from "react";
+import { FaDownload, FaTimes, FaChevronLeft, FaChevronRight } from "react-icons/fa"; // Iconos para el visor
 import api from "../services/api";
 
 function ProductDetails({ product, onClose }) {
   const [stock, setStock] = useState([]);
   const [loadingStock, setLoadingStock] = useState(false);
+
+  // --- ESTADO DEL VISOR DE IMÁGENES ---
+  const [imageViewerOpen, setImageViewerOpen] = useState(false);
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
+
+  // Helper para obtener URL completa
+  const getImageUrl = (url) => `${import.meta.env.VITE_API_URL || "http://localhost:8000"}${url}`;
+
+  // Funciones del visor
+  const openImageViewer = (index) => {
+    setCurrentImageIndex(index);
+    setImageViewerOpen(true);
+  };
+
+  const closeImageViewer = () => setImageViewerOpen(false);
+
+  const nextImage = (e) => {
+    e.stopPropagation();
+    setCurrentImageIndex((prev) => (prev + 1) % product.images.length);
+  };
+
+  // Corrección: Cambiado 'constZbImage' a 'const prevImage'
+  const prevImage = (e) => {
+    e.stopPropagation();
+    setCurrentImageIndex((prev) => (prev - 1 + product.images.length) % product.images.length);
+  };
+
+  const downloadImage = (e) => {
+    e.stopPropagation();
+    const link = document.createElement("a");
+    link.href = getImageUrl(product.images[currentImageIndex].image_url);
+    link.download = `producto_${product.sku}_${currentImageIndex + 1}.jpg`; 
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   useEffect(() => {
     if (product) {
@@ -41,17 +78,15 @@ function ProductDetails({ product, onClose }) {
 
           <div className="flex items-start space-x-6">
             <img
-              // ARREGLO: Misma lógica que en la tabla. Si hay image_url, usa el backend. Si no, usa el /vite.svg local.
-              // Usamos la "agenda" para saber dónde está el almacén
+              onClick={() => product.images.length > 0 && openImageViewer(0)} // Abre la primera imagen
               src={
                 product.images[0]?.image_url
-                  ? `${
-                      import.meta.env.VITE_API_URL || "http://localhost:8000"
-                    }${product.images[0].image_url}`
+                  ? getImageUrl(product.images[0].image_url)
                   : "/vite.svg"
               }
               alt={product.name}
-              className="h-32 w-32 object-cover rounded-lg shadow-md"
+              className={`h-32 w-32 object-cover rounded-lg shadow-md ${product.images.length > 0 ? 'cursor-pointer hover:opacity-90' : ''}`}
+              title="Click para ampliar"
             />
             <div>
               <h2 className="text-3xl font-bold text-secondary">
@@ -120,15 +155,14 @@ function ProductDetails({ product, onClose }) {
             <h3 className="font-bold text-secondary mb-2 text-lg">Galería</h3>
             <div className="grid grid-cols-3 gap-4">
               {product.images.length > 0 ? (
-                product.images.map((image) => (
-                  // Usamos la "agenda" para saber dónde está el almacén
+                product.images.map((image, index) => (
                   <img
                     key={image.id}
-                    src={`${
-                      import.meta.env.VITE_API_URL || "http://localhost:8000"
-                    }${image.image_url}`}
-                    alt={product.name}
-                    className="w-full h-auto object-cover rounded-lg shadow-md"
+                    onClick={() => openImageViewer(index)}
+                    src={getImageUrl(image.image_url)}
+                    alt={`${product.name} - ${index + 1}`}
+                    className="w-full h-24 object-cover rounded-lg shadow-md cursor-pointer hover:opacity-80 transition-opacity border border-gray-200"
+                    title="Ver en grande"
                   />
                 ))
               ) : (
@@ -138,6 +172,64 @@ function ProductDetails({ product, onClose }) {
           </div>
         </div>
       </div>
+
+      {/* --- VISOR DE IMÁGENES (MODAL/CARRUSEL) --- */}
+      {imageViewerOpen && product.images.length > 0 && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-95 backdrop-blur-sm p-4" onClick={closeImageViewer}>
+            <div className="relative w-full h-full max-w-6xl flex flex-col items-center justify-center" onClick={(e) => e.stopPropagation()}>
+                
+                {/* Botón Cerrar */}
+                <button 
+                    onClick={closeImageViewer}
+                    className="absolute top-0 right-0 m-4 text-white/70 hover:text-white text-4xl transition-colors z-50"
+                >
+                    <FaTimes />
+                </button>
+
+                {/* Imagen Principal */}
+                <img 
+                    src={getImageUrl(product.images[currentImageIndex].image_url)} 
+                    alt="Vista detallada" 
+                    className="max-h-[85vh] max-w-full object-contain rounded-lg shadow-2xl"
+                />
+
+                {/* Flecha Izquierda */}
+                {product.images.length > 1 && (
+                    <button 
+                        onClick={prevImage}
+                        className="absolute left-0 top-1/2 -translate-y-1/2 ml-4 p-3 bg-black/50 text-white rounded-full hover:bg-white/20 transition-all backdrop-blur-md"
+                    >
+                        <FaChevronLeft size={30} />
+                    </button>
+                )}
+
+                {/* Flecha Derecha */}
+                {product.images.length > 1 && (
+                    <button 
+                        onClick={nextImage}
+                        className="absolute right-0 top-1/2 -translate-y-1/2 mr-4 p-3 bg-black/50 text-white rounded-full hover:bg-white/20 transition-all backdrop-blur-md"
+                    >
+                        <FaChevronRight size={30} />
+                    </button>
+                )}
+
+                {/* Barra inferior */}
+                <div className="absolute bottom-4 flex items-center gap-6 bg-black/70 px-6 py-3 rounded-full backdrop-blur-md border border-white/10">
+                    <span className="text-white font-mono text-sm">
+                        {currentImageIndex + 1} / {product.images.length}
+                    </span>
+                    <div className="w-px h-6 bg-white/20"></div>
+                    <button 
+                        onClick={downloadImage}
+                        className="flex items-center gap-2 text-white hover:text-green-400 font-bold transition-colors"
+                    >
+                        <FaDownload /> <span className="text-sm">Descargar</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+      )}
+
     </div>
   );
 }

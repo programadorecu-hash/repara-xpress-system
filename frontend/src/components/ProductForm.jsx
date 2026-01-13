@@ -49,6 +49,25 @@ function ProductForm({ productToEdit, onSave, onClose }) {
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   // Para mostrar errores de cámara (si permisos o dispositivo fallan)
   const [cameraError, setCameraError] = useState("");
+  // --- MODO BLITZ ---
+  const [isBlitzMode, setIsBlitzMode] = useState(false); // Por defecto apagado
+
+  // Función para resetear el formulario (para el modo blitz)
+  const resetForm = () => {
+    setProduct({
+      sku: "", // Se autogenerará si está vacío en el backend, o se deja vacío para llenarlo a mano
+      name: "",
+      description: "",
+      price_1: 0,
+      price_2: 0,
+      price_3: 0,
+      average_cost: 0,
+      category_id: product.category_id, // Mantenemos la categoría anterior para agilizar
+      is_active: true,
+      images: [],
+    });
+    setSelectedFile(null); // Limpiamos selección de archivo
+  };
   // Referencias a video/canvas y al stream para poder detenerlo luego
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
@@ -58,7 +77,17 @@ function ProductForm({ productToEdit, onSave, onClose }) {
 
   // Se ejecuta cuando el componente se carga o cuando 'productToEdit' cambia.
   useEffect(() => {
-    api.get("/categories/").then((response) => setCategories(response.data));
+    api.get("/categories/").then((response) => {
+        setCategories(response.data);
+        // Si no estamos editando (creando nuevo), buscamos y seteamos "General" por defecto
+        if (!productToEdit) {
+            const generalCat = response.data.find(c => c.name.toUpperCase() === "GENERAL");
+            if (generalCat) {
+                setProduct(prev => ({ ...prev, category_id: generalCat.id }));
+            }
+        }
+    });
+
     if (productToEdit) {
       setProduct({
         ...productToEdit,
@@ -67,7 +96,6 @@ function ProductForm({ productToEdit, onSave, onClose }) {
       });
     }
   }, [productToEdit]);
-
   // Maneja los cambios en los campos del formulario.
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -76,24 +104,45 @@ function ProductForm({ productToEdit, onSave, onClose }) {
     if (type === "checkbox") {
       val = checked;
     } else if (name.startsWith("price") || name === "average_cost") {
-      // [ARREGLO] Permitimos borrar completamente (cadena vacía)
-      // Si el campo se vacía, guardamos "" en lugar de 0 para que no aparezca el "0 pegajoso"
       val = value === "" ? "" : parseFloat(value);
     } else if (name === "category_id") {
-      // Las categorías sí necesitan ser números o nulos
       val = value ? parseInt(value) : null;
     } else {
-      // Si es texto (SKU, Nombre, Descripción), lo forzamos a mayúsculas
       val = value ? value.toUpperCase() : "";
     }
 
-    setProduct((prev) => ({ ...prev, [name]: val }));
+    setProduct((prev) => {
+        const newData = { ...prev, [name]: val };
+        
+        // AUTO-GENERAR SKU SI ESTÁ VACÍO Y ESTAMOS ESCRIBIENDO EL NOMBRE EN MODO BLITZ
+        if (isBlitzMode && name === "name" && !productToEdit) {
+            // Genera SKU simple: 3 primeras letras + timestamp corto para evitar duplicados
+            const cleanName = val.replace(/[^A-Z0-9]/g, "").substring(0, 3);
+            if (cleanName.length >= 3) {
+                // Usamos minutos y segundos para algo pseudo-único y corto
+                const timeCode = Date.now().toString().slice(-4); 
+                newData.sku = `${cleanName}-${timeCode}`;
+            }
+        }
+        return newData;
+    });
   };
 
-  // Se ejecuta al enviar el formulario principal para guardar el producto.
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    onSave(product);
+    
+    // MODO BLITZ
+    if (isBlitzMode && !productToEdit) { 
+        await onSave(product, true); 
+        
+        // Reset inteligente: mantenemos la categoría actual
+        const currentCat = product.category_id;
+        resetForm();
+        setProduct(prev => ({ ...prev, category_id: currentCat })); // Restauramos categoría
+        
+    } else {
+        onSave(product);
+    }
   };
 
   // Maneja la creación de una nueva categoría.
@@ -283,9 +332,26 @@ function ProductForm({ productToEdit, onSave, onClose }) {
         className="bg-white p-8 rounded-lg shadow-xl w-full max-w-2xl text-gray-800 overflow-y-auto max-h-[90vh]"
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 className="text-2xl font-bold text-secondary mb-6">
-          {productToEdit ? "Editar" : "Crear"} Producto
-        </h2>
+        <div className="flex justify-between items-center mb-6">
+            <h2 className="text-2xl font-bold text-secondary">
+            {productToEdit ? "Editar" : "Crear"} Producto
+            </h2>
+            {/* TOGGLE MODO BLITZ (Solo al crear) */}
+            {!productToEdit && (
+                <div className="flex items-center gap-2 bg-yellow-100 px-3 py-1 rounded-full border border-yellow-300">
+                    <label className="text-sm font-bold text-yellow-800 cursor-pointer select-none" htmlFor="blitzToggle">
+                        ⚡ Modo Rápido
+                    </label>
+                    <input 
+                        id="blitzToggle"
+                        type="checkbox" 
+                        checked={isBlitzMode} 
+                        onChange={(e) => setIsBlitzMode(e.target.checked)}
+                        className="w-4 h-4 text-yellow-600 focus:ring-yellow-500 border-gray-300 rounded"
+                    />
+                </div>
+            )}
+        </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* --- CODIGO DEL FORMULARIO --- */}
@@ -314,19 +380,22 @@ function ProductForm({ productToEdit, onSave, onClose }) {
               />
             </div>
           </div>
-          <div>
-            <label className="font-semibold">Descripción</label>
-            <textarea
-              name="description"
-              value={product.description || ""}
-              onChange={handleChange}
-              className="w-full p-2 border rounded "
-            />
-          </div>
+          {/* Descripción solo visible si NO es modo Blitz */}
+          {!isBlitzMode && (
+            <div>
+                <label className="font-semibold">Descripción</label>
+                <textarea
+                name="description"
+                value={product.description || ""}
+                onChange={handleChange}
+                className="w-full p-2 border rounded "
+                />
+            </div>
+          )}
           <style>{noArrowsStyle}</style>
 
           {/* Fila de Precios de Venta (REORDENADA LÓGICAMENTE) */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className={`grid grid-cols-1 ${isBlitzMode ? 'md:grid-cols-1' : 'md:grid-cols-3'} gap-4`}>
             {/* PRECIO 3: Ahora es el PVP (El más alto usualmente) */}
             <div>
               <label className="font-bold text-gray-700 text-sm">Precio Final (PVP)</label>
@@ -345,64 +414,71 @@ function ProductForm({ productToEdit, onSave, onClose }) {
               </div>
             </div>
 
-            {/* PRECIO 2: Descuento */}
-            <div>
-              <label className="font-semibold text-gray-600 text-sm">Con Descuento</label>
-              <div className="relative">
-                <span className="absolute left-3 top-2 text-gray-400">$</span>
-                <input
-                  type="number"
-                  step="0.01"
-                  name="price_2"
-                  value={product.price_2 === 0 ? "" : product.price_2}
-                  onChange={handleChange}
-                  className="w-full p-2 pl-6 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
-                  placeholder="0.00"
-                />
-              </div>
-            </div>
+            {/* PRECIOS SECUNDARIOS: Ocultos en modo Blitz para ir rápido */}
+            {!isBlitzMode && (
+                <>
+                    {/* PRECIO 2: Descuento */}
+                    <div>
+                    <label className="font-semibold text-gray-600 text-sm">Con Descuento</label>
+                    <div className="relative">
+                        <span className="absolute left-3 top-2 text-gray-400">$</span>
+                        <input
+                        type="number"
+                        step="0.01"
+                        name="price_2"
+                        value={product.price_2 === 0 ? "" : product.price_2}
+                        onChange={handleChange}
+                        className="w-full p-2 pl-6 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
+                        placeholder="0.00"
+                        />
+                    </div>
+                    </div>
 
-            {/* PRECIO 1: Mayorista/Frecuente (El más bajo) */}
-            <div>
-              <label className="font-semibold text-gray-600 text-sm">Cliente Frecuente</label>
-              <div className="relative">
-                <span className="absolute left-3 top-2 text-gray-400">$</span>
-                <input
-                  type="number"
-                  step="0.01"
-                  name="price_1"
-                  value={product.price_1 === 0 ? "" : product.price_1}
-                  onChange={handleChange}
-                  className="w-full p-2 pl-6 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
-                  placeholder="0.00"
-                />
-              </div>
-            </div>
+                    {/* PRECIO 1: Mayorista/Frecuente (El más bajo) */}
+                    <div>
+                    <label className="font-semibold text-gray-600 text-sm">Cliente Frecuente</label>
+                    <div className="relative">
+                        <span className="absolute left-3 top-2 text-gray-400">$</span>
+                        <input
+                        type="number"
+                        step="0.01"
+                        name="price_1"
+                        value={product.price_1 === 0 ? "" : product.price_1}
+                        onChange={handleChange}
+                        className="w-full p-2 pl-6 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
+                        placeholder="0.00"
+                        />
+                    </div>
+                    </div>
+                </>
+            )}
           </div>
 
-          {/* Campo de Costo Promedio (Diseño limpio y profesional) */}
-          <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 mt-2">
-            <div className="flex justify-between items-center mb-1">
-                <label className="font-bold text-gray-700 text-sm">Costo Promedio (Interno)</label>
-                {!canEditCost && <span className="text-xs text-red-500 bg-red-50 px-2 py-1 rounded">Solo Admin</span>}
+          {/* Campo de Costo Promedio (Oculto en Blitz) */}
+          {!isBlitzMode && (
+            <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 mt-2">
+                <div className="flex justify-between items-center mb-1">
+                    <label className="font-bold text-gray-700 text-sm">Costo Promedio (Interno)</label>
+                    {!canEditCost && <span className="text-xs text-red-500 bg-red-50 px-2 py-1 rounded">Solo Admin</span>}
+                </div>
+                <p className="text-xs text-gray-500 mb-2">
+                Costo real de compra. Se actualiza automáticamente con las facturas.
+                </p>
+                <div className="relative">
+                    <span className="absolute left-3 top-2 text-gray-500">$</span>
+                    <input
+                    type="number"
+                    step="0.0001" // Más precisión para costos
+                    name="average_cost"
+                    value={product.average_cost === 0 ? "" : product.average_cost}
+                    onChange={handleChange}
+                    disabled={!canEditCost}
+                    className={`w-full p-2 pl-6 border rounded outline-none ${!canEditCost ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : 'bg-white border-gray-300 focus:ring-2 focus:ring-blue-500'}`}
+                    placeholder="0.00"
+                    />
+                </div>
             </div>
-            <p className="text-xs text-gray-500 mb-2">
-               Costo real de compra. Se actualiza automáticamente con las facturas.
-            </p>
-            <div className="relative">
-                <span className="absolute left-3 top-2 text-gray-500">$</span>
-                <input
-                  type="number"
-                  step="0.0001" // Más precisión para costos
-                  name="average_cost"
-                  value={product.average_cost === 0 ? "" : product.average_cost}
-                  onChange={handleChange}
-                  disabled={!canEditCost}
-                  className={`w-full p-2 pl-6 border rounded outline-none ${!canEditCost ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : 'bg-white border-gray-300 focus:ring-2 focus:ring-blue-500'}`}
-                  placeholder="0.00"
-                />
-            </div>
-          </div>
+          )}
 
           <div>
             <label className="font-semibold">Categoría</label>
