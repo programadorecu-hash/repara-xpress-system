@@ -75,6 +75,11 @@ class Product(Base):
 
     images = relationship("ProductImage", back_populates="product")
 
+    # --- NUEVA RELACIÓN CON PROVEEDOR ---
+    supplier_id = Column(Integer, ForeignKey("suppliers.id"), nullable=True)
+    supplier = relationship("Supplier", back_populates="products")
+    # ------------------------------------
+
 class Category(Base):
     __tablename__ = "categories"
     id = Column(Integer, primary_key=True, index=True)
@@ -283,6 +288,8 @@ class Supplier(Base):
     email = Column(String, unique=True, index=True, nullable=True)
     phone = Column(String, nullable=True)
     purchase_invoices = relationship("PurchaseInvoice", back_populates="supplier")
+    # --- RELACIÓN INVERSA ---
+    products = relationship("Product", back_populates="supplier")
 
 class PurchaseInvoice(Base):
     __tablename__ = "purchase_invoices"

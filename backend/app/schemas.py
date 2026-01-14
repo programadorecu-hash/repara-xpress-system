@@ -20,6 +20,7 @@ class ProductBase(BaseModel):
     average_cost: float = 0.0 
     is_active: bool = True
     category_id: int | None = None
+    supplier_id: int | None = None # <--- NUEVO CAMPO
     
 class ProductImageBase(BaseModel):
     image_url: str
@@ -303,6 +304,7 @@ class PurchaseInvoiceItemCreate(PurchaseInvoiceItemBase):
     pass
 class PurchaseInvoiceCreate(PurchaseInvoiceBase):
     pin: str
+    target_location_id: int # <--- El usuario elige a qué Sucursal va la mercadería
 class SaleItemCreate(SaleItemBase):
     pass
 # --- INICIO CAMBIO PAGOS MIXTOS ---
@@ -336,18 +338,20 @@ class StockLocationInfo(BaseModel):
     location_name: str
     quantity: int
 
+# --- CORRECCIÓN: Definimos Supplier ANTES de Product ---
+class Supplier(SupplierBase):
+    id: int
+    class Config:
+        from_attributes = True
+
 class Product(ProductBase):
     id: int
     category: Category | None = None
+    supplier: Supplier | None = None 
     images: List[ProductImage] = []
     stock_quantity: Optional[int] = None
     other_locations_stock: List[StockLocationInfo] = []
 
-    class Config:
-        from_attributes = True
-
-class Supplier(SupplierBase):
-    id: int
     class Config:
         from_attributes = True
 

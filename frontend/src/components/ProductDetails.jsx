@@ -1,8 +1,12 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useContext } from "react";
 import { FaDownload, FaTimes, FaChevronLeft, FaChevronRight } from "react-icons/fa"; // Iconos para el visor
 import api from "../services/api";
+import { AuthContext } from "../context/AuthContext";
 
 function ProductDetails({ product, onClose }) {
+  const { user } = useContext(AuthContext); // <--- TRAEMOS AL USUARIO
+  const canViewSensitiveInfo = user?.role === "admin" || user?.role === "inventory_manager"; // <--- DEFINIMOS PERMISO
+
   const [stock, setStock] = useState([]);
   const [loadingStock, setLoadingStock] = useState(false);
 
@@ -149,6 +153,52 @@ function ProductDetails({ product, onClose }) {
               </div>
             </div>
           </div>
+
+          {/* INFORMACIÓN DE COMPRA Y PROVEEDOR (SOLO ADMINS/GERENTES) */}
+          {canViewSensitiveInfo && (
+            <div className="bg-blue-50 p-4 rounded-lg border border-blue-100 mt-6">
+                <h3 className="font-bold text-blue-800 mb-3 text-lg flex items-center gap-2">
+                    🏢 Origen y Costos
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-sm">
+                    
+                    {/* Datos del Proveedor */}
+                    <div>
+                        <p className="text-gray-500 font-bold uppercase text-xs">Proveedor</p>
+                        <p className="text-base font-semibold text-gray-800">
+                            {product.supplier ? product.supplier.name : "No registrado"}
+                        </p>
+                        {product.supplier && (
+                            <>
+                                <p className="text-gray-600 mt-1">📞 {product.supplier.phone || "Sin teléfono"}</p>
+                                <p className="text-gray-600">📧 {product.supplier.email || "Sin email"}</p>
+                            </>
+                        )}
+                    </div>
+
+                    {/* Datos de Fechas */}
+                    <div>
+                        <p className="text-gray-500 font-bold uppercase text-xs">Fecha Ingreso / Registro</p>
+                        {product.created_at && (
+                            <p className="text-base font-mono text-gray-800">
+                                {new Date(product.created_at).toLocaleDateString("es-EC", {
+                                    year: 'numeric', month: 'long', day: 'numeric'
+                                })}
+                            </p>
+                        )}
+                    </div>
+
+                    {/* Datos de Costo */}
+                    <div>
+                        <p className="text-gray-500 font-bold uppercase text-xs">Costo de Compra</p>
+                        <p className="text-xl font-bold text-blue-700">
+                            ${product.average_cost ? product.average_cost.toFixed(2) : "0.00"}
+                        </p>
+                        <p className="text-xs text-blue-600 mt-1">Costo Promedio Unitario</p>
+                    </div>
+                </div>
+            </div>
+          )}
 
           {/* Galería de Imágenes */}
           <div className="bg-white p-4 rounded-lg border mt-6">

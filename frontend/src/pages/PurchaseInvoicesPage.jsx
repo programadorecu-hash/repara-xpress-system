@@ -56,12 +56,34 @@ const PurchaseInvoicesPage = () => {
     const [newSuppEmail, setNewSuppEmail] = useState('');
     const [newSuppContact, setNewSuppContact] = useState('');
 
+    // --- ESTADO DESTINO DE MERCADERÍA ---
+    const [locations, setLocations] = useState([]);
+    const [targetLocation, setTargetLocation] = useState('');
+
     // --- CARGA INICIAL ---
     useEffect(() => {
         fetchSuppliers();
         fetchProducts();
         fetchCategories();
+        fetchLocations(); // <--- Cargar sucursales
     }, [token]);
+
+    const fetchLocations = async () => {
+        try {
+            const res = await axios.get(`${API_URL}/locations/`, { headers: { Authorization: `Bearer ${token}` } });
+            setLocations(res.data);
+            
+            // Opcional: Si el usuario tiene turno activo, pre-seleccionar esa sucursal
+            // (Esto mejora la UX para que no tenga que seleccionar siempre)
+            try {
+                const profile = await axios.get(`${API_URL}/users/me/profile`, { headers: { Authorization: `Bearer ${token}` } });
+                if (profile.data.active_shift?.location_id) {
+                    setTargetLocation(profile.data.active_shift.location_id);
+                }
+            } catch (e) {}
+
+        } catch (error) { console.error("Error cargando sucursales", error); }
+    };
 
     // --- EFECTO DE BÚSQUEDA ---
     useEffect(() => {
@@ -210,10 +232,15 @@ const PurchaseInvoicesPage = () => {
                 return toast.error("Debes tener un turno activo para registrar compras (para saber a qué bodega va).");
             }
 
+            if (!targetLocation) {
+                return toast.warning("Por favor, selecciona la Sucursal de Destino (Bodega).");
+            }
+
             const payload = {
-                invoice_number: invoiceNumber || "S/N", // Evitar string vacío
+                invoice_number: invoiceNumber || "S/N",
                 invoice_date: invoiceDate,
-                supplier_id: parseInt(selectedSupplier, 10), // Forzar entero
+                supplier_id: parseInt(selectedSupplier, 10),
+                target_location_id: parseInt(targetLocation, 10), // <--- ENVIAMOS EL DESTINO ELEGIDO
                 items: cart.map(item => ({
                     product_id: parseInt(item.product_id, 10),
                     quantity: parseInt(item.quantity, 10),
@@ -222,11 +249,14 @@ const PurchaseInvoicesPage = () => {
                 pin: pin
             };
 
+            // Enviamos la petición. 
+            // Nota: Ya no dependemos tanto del 'params: location_id' para la lógica, 
+            // pero lo dejamos por compatibilidad si el backend lo requiere para validar sesión.
+            // Lo importante es que 'payload' lleva 'target_location_id'.
             await axios.post(`${API_URL}/purchase-invoices/`, payload, {
                 headers: { Authorization: `Bearer ${token}` },
-                params: { location_id: activeLocId } // <--- ESTO FALTABA Y CAUSABA ERROR 422
+                params: { location_id: activeLocId } 
             });
-
             toast.success("Factura de compra registrada correctamente");
 
             // 1. Obtener la ubicación del turno activo (para saber a qué bodega va)
@@ -323,6 +353,29 @@ const PurchaseInvoicesPage = () => {
                                     className="w-full border p-2 rounded"
                                 />
                             </div>
+
+                            {/* SELECTOR DE DESTINO */}
+                            <div className="col-span-1 md:col-span-2 bg-blue-50 p-3 rounded-lg border border-blue-200">
+                                <label className="block text-sm font-bold text-blue-800 mb-1">
+                                    📍 Destino de Mercadería (Bodega)
+                                </label>
+                                <select 
+                                    value={targetLocation} 
+                                    onChange={e => setTargetLocation(e.target.value)}
+                                    className="w-full border border-blue-300 p-2 rounded bg-white text-gray-800 font-medium focus:ring-2 focus:ring-blue-500 outline-none"
+                                >
+                                    <option value="">-- Seleccionar Sucursal --</option>
+                                    {locations.map(loc => (
+                                        <option key={loc.id} value={loc.id}>
+                                            Bodega de {loc.name}
+                                        </option>
+                                    ))}
+                                </select>
+                                <p className="text-xs text-blue-600 mt-1">
+                                    El sistema ingresará el stock automáticamente a la bodega de la sucursal seleccionada.
+                                </p>
+                            </div>
+                            {/* ------------------- */}
                         </div>
                     </div>
 

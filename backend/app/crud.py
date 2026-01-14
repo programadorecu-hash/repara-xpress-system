@@ -47,7 +47,7 @@ def create_category(db: Session, category: schemas.CategoryCreate):
 # --- PRODUCTOS ---
 # ===================================================================
 def get_product(db: Session, product_id: int):
-    return db.query(models.Product).filter(models.Product.id == product_id).first()
+    return db.query(models.Product).options(joinedload(models.Product.category), joinedload(models.Product.supplier), joinedload(models.Product.images)).filter(models.Product.id == product_id).first()
 
 def get_products(db: Session, skip: int = 0, limit: int = 100, search: str | None = None, location_id: int | None = None):
     # --- Parte 1: Encontrar los productos que coinciden y su stock local ---
@@ -55,8 +55,7 @@ def get_products(db: Session, skip: int = 0, limit: int = 100, search: str | Non
         models.Product,
         models.Category.name.label("category_name")
     ).outerjoin(models.Category, models.Product.category_id == models.Category.id)\
-     .options(joinedload(models.Product.images)) # Cargar imágenes
-
+     .options(joinedload(models.Product.images), joinedload(models.Product.supplier)) # Cargar imágenes y proveedor
     current_bodega_id = None
     if location_id:
         bodega = get_primary_bodega_for_location(db, location_id=location_id)
@@ -141,6 +140,7 @@ def get_products(db: Session, skip: int = 0, limit: int = 100, search: str | Non
         product_data = row.Product.__dict__
         product_data['images'] = row.Product.images # Adjuntar imágenes
         product_data['category'] = schemas.Category(id=row.Product.category_id, name=row.category_name) if row.Product.category_id else None
+        product_data['supplier'] = row.Product.supplier # Adjuntar proveedor
 
         # Añadir stock local (ya viene en 'row')
         product_data['stock_quantity'] = row.stock_quantity if row.stock_quantity is not None else 0
@@ -953,11 +953,17 @@ def get_purchase_invoices(db: Session, skip: int = 0, limit: int = 100):
 
 def create_purchase_invoice(db: Session, invoice: schemas.PurchaseInvoiceCreate, user_id: int, location_id: int):
     try:
-        # --- CORRECCIÓN: BUSCAR LA BODEGA ---
-        # Las compras deben entrar a la Bodega, no al piso de venta (Sucursal)
-        bodega = get_primary_bodega_for_location(db, location_id=location_id)
-        # Si existe bodega, usamos su ID. Si no (raro), usamos la sucursal misma.
-        target_location_id = bodega.id if bodega else location_id
+        # --- LÓGICA DE DESTINO ROBUSTA ---
+        # 1. ¿El usuario eligió un destino explícito en el formulario? Usamos ese.
+        # 2. ¿No eligió? Usamos la ubicación de su turno actual (location_id) como fallback.
+        dest_sucursal_id = invoice.target_location_id if invoice.target_location_id else location_id
+
+        # 3. Ahora buscamos la BODEGA asociada a esa Sucursal.
+        # (El stock siempre entra a la Bodega, no al piso de venta)
+        bodega = get_primary_bodega_for_location(db, location_id=dest_sucursal_id)
+        
+        # 4. Definimos el ID final donde se guardará el stock
+        final_stock_location_id = bodega.id if bodega else dest_sucursal_id
         # ------------------------------------
 
         total_cost = 0
@@ -1012,8 +1018,8 @@ def create_purchase_invoice(db: Session, invoice: schemas.PurchaseInvoiceCreate,
         for item in invoice.items:
             movement = schemas.InventoryMovementCreate(
                 product_id=item.product_id, 
-                # USAMOS LA BODEGA AQUÍ
-                location_id=target_location_id, 
+                # USAMOS LA BODEGA CALCULADA AQUÍ
+                location_id=final_stock_location_id, 
                 quantity_change=item.quantity, 
                 movement_type="ENTRADA_COMPRA", 
                 reference_id=f"COMPRA-{db_invoice.id}", 
@@ -1429,8 +1435,10 @@ def get_cash_account_balance(db: Session, account_id: int) -> float:
 # ===================================================================
 def get_dashboard_summary(db: Session, location_id: int, target_date: date):
     # Calcula ventas totales del día en la ubicación
-    # CORRECCIÓN: Leemos la zona horaria del sistema, no la ponemos a fuego.
-    app_timezone = os.getenv("TZ", "America/Guayaquil")
+    # BLINDAJE: Si os.getenv devuelve cadena vacía, forzamos el default
+    app_timezone = os.getenv("TZ")
+    if not app_timezone: 
+        app_timezone = "America/Guayaquil"
 
     total_sales = db.query(func.sum(models.Sale.total_amount)).filter(
         models.Sale.location_id == location_id,

@@ -35,10 +35,16 @@ function ProductForm({ productToEdit, onSave, onClose }) {
     images: [],
   }); 
 
-  // Estados para la gestión de categorías.
+  // Estados para la gestión de categorías y proveedores.
   const [categories, setCategories] = useState([]);
+  const [suppliers, setSuppliers] = useState([]); 
+  
+  // Estados para modales internos (Categoría y Proveedor)
   const [isCreatingCategory, setIsCreatingCategory] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
+  
+  const [isCreatingSupplier, setIsCreatingSupplier] = useState(false); // <--- NUEVO
+  const [newSupplierName, setNewSupplierName] = useState("");        // <--- NUEVO
 
   // Estados para la gestión de subida de imágenes.
   const [selectedFile, setSelectedFile] = useState(null);
@@ -77,9 +83,9 @@ function ProductForm({ productToEdit, onSave, onClose }) {
 
   // Se ejecuta cuando el componente se carga o cuando 'productToEdit' cambia.
   useEffect(() => {
+    // Cargar Categorías
     api.get("/categories/").then((response) => {
         setCategories(response.data);
-        // Si no estamos editando (creando nuevo), buscamos y seteamos "General" por defecto
         if (!productToEdit) {
             const generalCat = response.data.find(c => c.name.toUpperCase() === "GENERAL");
             if (generalCat) {
@@ -88,10 +94,14 @@ function ProductForm({ productToEdit, onSave, onClose }) {
         }
     });
 
+    // Cargar Proveedores
+    api.get("/suppliers/").then((response) => setSuppliers(response.data));
+
     if (productToEdit) {
       setProduct({
         ...productToEdit,
         category_id: productToEdit.category?.id || null,
+        supplier_id: productToEdit.supplier?.id || null, // <--- CARGAR PROVEEDOR
         images: productToEdit.images || [],
       });
     }
@@ -105,7 +115,7 @@ function ProductForm({ productToEdit, onSave, onClose }) {
       val = checked;
     } else if (name.startsWith("price") || name === "average_cost") {
       val = value === "" ? "" : parseFloat(value);
-    } else if (name === "category_id") {
+    } else if (name === "category_id" || name === "supplier_id") {
       val = value ? parseInt(value) : null;
     } else {
       val = value ? value.toUpperCase() : "";
@@ -159,6 +169,28 @@ function ProductForm({ productToEdit, onSave, onClose }) {
       setNewCategoryName("");
     } catch (error) {
       alert("Error al crear la categoría.");
+    }
+  };
+
+// Maneja la creación de un nuevo proveedor (Rápido).
+  const handleCreateSupplier = async () => {
+    if (!newSupplierName) return;
+    try {
+      // Enviamos solo el nombre para crearlo rápido. Luego se pueden editar los detalles.
+      const response = await api.post("/suppliers/", {
+        name: newSupplierName,
+      });
+      const newSupplier = response.data;
+      
+      // Actualizamos la lista y seleccionamos el nuevo automáticamente
+      setSuppliers((prev) => [...prev, newSupplier]);
+      setProduct((prev) => ({ ...prev, supplier_id: newSupplier.id }));
+      
+      setIsCreatingSupplier(false);
+      setNewSupplierName("");
+    } catch (error) {
+      console.error(error);
+      alert("Error al crear el proveedor. Verifique que no exista ya.");
     }
   };
 
@@ -480,31 +512,99 @@ function ProductForm({ productToEdit, onSave, onClose }) {
             </div>
           )}
 
-          <div>
-            <label className="font-semibold">Categoría</label>
-            <div className="flex items-center space-x-2">
-              <select
-                name="category_id"
-                value={product.category_id || ""}
-                onChange={handleChange}
-                className="w-full p-2 border rounded "
-              >
-                <option value="">Sin Categoría</option>
-                {categories.map((cat) => (
-                  <option key={cat.id} value={cat.id}>
-                    {cat.name}
-                  </option>
-                ))}
-              </select>
-              <button
-                type="button"
-                onClick={() => setIsCreatingCategory(true)}
-                className="py-2 px-4 bg-gray-200 rounded-lg hover:bg-gray-300 whitespace-nowrap"
-              >
-                + Nueva
-              </button>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* SECCIÓN CATEGORÍA */}
+            <div>
+                <label className="font-semibold">Categoría</label>
+                <div className="flex items-center space-x-2">
+                <select
+                    name="category_id"
+                    value={product.category_id || ""}
+                    onChange={handleChange}
+                    className="w-full p-2 border rounded "
+                >
+                    <option value="">Sin Categoría</option>
+                    {categories.map((cat) => (
+                    <option key={cat.id} value={cat.id}>
+                        {cat.name}
+                    </option>
+                    ))}
+                </select>
+                <button
+                    type="button"
+                    onClick={() => setIsCreatingCategory(true)}
+                    className="px-3 py-2 bg-gray-200 rounded hover:bg-gray-300"
+                    title="Nueva Categoría"
+                >
+                    +
+                </button>
+                </div>
+            </div>
+
+            {/* SECCIÓN PROVEEDOR */}
+            <div>
+                <label className="font-semibold">Proveedor (Origen)</label>
+                <div className="flex items-center space-x-2">
+                    <select
+                        name="supplier_id"
+                        value={product.supplier_id || ""}
+                        onChange={handleChange}
+                        className="w-full p-2 border rounded"
+                    >
+                        <option value="">-- Seleccionar Proveedor --</option>
+                        {suppliers.map((sup) => (
+                        <option key={sup.id} value={sup.id}>
+                            {sup.name}
+                        </option>
+                        ))}
+                    </select>
+                    <button
+                        type="button"
+                        onClick={() => setIsCreatingSupplier(true)}
+                        className="px-3 py-2 bg-gray-200 rounded hover:bg-gray-300 font-bold"
+                        title="Nuevo Proveedor"
+                    >
+                        +
+                    </button>
+                </div>
             </div>
           </div>
+
+          {/* FORMULARIO RÁPIDO PARA NUEVO PROVEEDOR */}
+          {isCreatingSupplier && (
+            <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg mt-2">
+              <label className="font-semibold text-blue-800 text-sm">
+                Nombre del Nuevo Proveedor
+              </label>
+              <div className="flex items-center space-x-2 mt-2">
+                <input
+                  type="text"
+                  value={newSupplierName}
+                  // Nombre en mayúsculas
+                  onChange={(e) => setNewSupplierName(e.target.value.toUpperCase())}
+                  className="w-full p-2 border rounded bg-white"
+                  placeholder="Ej: DISTRIBUIDORA XYZ"
+                  autoFocus
+                />
+                <button
+                  type="button"
+                  onClick={handleCreateSupplier}
+                  className="py-2 px-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-bold shadow-sm"
+                >
+                  Guardar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsCreatingSupplier(false)}
+                  className="py-2 px-4 text-gray-500 hover:text-red-500 font-bold"
+                >
+                  X
+                </button>
+              </div>
+            </div>
+          )}
+          
+          {/* SECCIÓN CREAR CATEGORÍA (Condicional) */}
           {isCreatingCategory && (
             <div className="p-4 bg-gray-100 rounded-lg">
               <label className="font-semibold">
