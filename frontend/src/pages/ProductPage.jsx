@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useContext } from "react";
-import { FaEdit, FaBox, FaDownload, FaTimes, FaChevronLeft, FaChevronRight, FaEye } from "react-icons/fa";
+import { FaEdit, FaBox, FaDownload, FaTimes, FaChevronLeft, FaChevronRight, FaEye, FaFileExcel } from "react-icons/fa";
 import api from "../services/api";
 import { AuthContext } from "../context/AuthContext.jsx";
 import ProductDetails from "../components/ProductDetails.jsx";
@@ -64,6 +64,76 @@ function ProductPage() {
   // Nuevo estado para el modo "Auditoría de Costos"
   const [showZeroCostOnly, setShowZeroCostOnly] = useState(false);
   const [zeroCostCount, setZeroCostCount] = useState(0); // <--- Memoria para el contador
+
+  // --- ESTADOS PARA EXPORTAR EXCEL ---
+  const [locations, setLocations] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [filterLocation, setFilterLocation] = useState("");
+  const [filterCategory, setFilterCategory] = useState("");
+
+  // Cargar listas para los filtros (Sucursales y Categorías)
+  useEffect(() => {
+    const fetchFilters = async () => {
+        try {
+            const [locRes, catRes] = await Promise.all([
+                api.get("/locations/"),
+                api.get("/categories/")
+            ]);
+            setLocations(locRes.data);
+            setCategories(catRes.data);
+        } catch (error) {
+            console.error("Error cargando filtros", error);
+        }
+    };
+    if (user) fetchFilters();
+  }, [user]);
+
+  const handleDownloadExcel = async () => {
+      try {
+          // 1. Preparamos los filtros
+          const params = {};
+          if (filterLocation) params.location_id = filterLocation;
+          if (filterCategory) params.category_id = filterCategory;
+
+          // --- SOLUCIÓN ROBUSTA: FORZAR TOKEN ---
+          // Recuperamos el token manualmente del bolsillo (localStorage)
+          const token = localStorage.getItem('accessToken');
+          
+          if (!token) {
+              alert("No estás autenticado. Por favor, inicia sesión.");
+              return;
+          }
+
+          // 2. Pedimos el archivo
+          const response = await api.get("/products/export/excel", {
+              params: params,
+              responseType: 'blob',
+              headers: {
+                  'Authorization': `Bearer ${token}` // <--- Gafete grapado manualmente
+              }
+          });
+          // --- FIN SOLUCIÓN ROBUSTA ---
+
+          // 3. Convertimos esa "masa de datos" en un enlace descargable invisible
+          const url = window.URL.createObjectURL(new Blob([response.data]));
+          const link = document.createElement('a');
+          link.href = url;
+          
+          // Le ponemos nombre al archivo con la fecha de hoy
+          const date = new Date().toISOString().split('T')[0];
+          link.setAttribute('download', `Inventario_${date}.xlsx`);
+          
+          // Hacemos "clic" automático en el enlace y luego lo borramos
+          document.body.appendChild(link);
+          link.click();
+          link.parentNode.removeChild(link);
+          window.URL.revokeObjectURL(url);
+
+      } catch (error) {
+          console.error("Error descargando Excel:", error);
+          alert("No se pudo descargar el inventario. Verifica que tengas permisos.");
+      }
+  };
 
   const fetchProducts = async () => {
     try {
@@ -201,14 +271,55 @@ function ProductPage() {
         </div>
       </div>
 
-      {/* BARRA DE BÚSQUEDA */}
-      <div className="mb-4">
+      {/* BARRA DE HERRAMIENTAS: FILTROS Y EXCEL */}
+      {canManageProducts && (
+        <div className="mb-4 bg-gray-50 p-3 rounded-lg flex flex-wrap gap-4 items-center justify-between border border-gray-200">
+            <div className="flex gap-2 items-center">
+                <span className="text-sm font-semibold text-gray-600">Exportar:</span>
+                
+                {/* Selector de Sucursal */}
+                <select 
+                    className="p-2 border rounded-md text-sm"
+                    value={filterLocation}
+                    onChange={(e) => setFilterLocation(e.target.value)}
+                >
+                    <option value="">Todas las Sucursales</option>
+                    {locations.map(loc => (
+                        <option key={loc.id} value={loc.id}>{loc.name}</option>
+                    ))}
+                </select>
+
+                {/* Selector de Categoría */}
+                <select 
+                    className="p-2 border rounded-md text-sm"
+                    value={filterCategory}
+                    onChange={(e) => setFilterCategory(e.target.value)}
+                >
+                    <option value="">Todas las Categorías</option>
+                    {categories.map(cat => (
+                        <option key={cat.id} value={cat.id}>{cat.name}</option>
+                    ))}
+                </select>
+            </div>
+
+            <button
+                onClick={handleDownloadExcel}
+                className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition font-bold shadow-sm"
+                title="Descargar en Excel"
+            >
+                <FaFileExcel /> Descargar Inventario
+            </button>
+        </div>
+      )}
+
+      {/* BARRA DE BÚSQUEDA MEJORADA */}
+      <div className="mb-4 flex justify-end">
         <input
           type="text"
-          placeholder="🔍 Buscar producto por Nombre o SKU..."
+          placeholder="🔍 Buscar por Nombre o SKU..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm"
+          className="w-full max-w-sm px-4 py-2 border border-gray-300 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm text-sm transition-all"
         />
       </div>
 

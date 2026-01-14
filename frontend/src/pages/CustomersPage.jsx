@@ -4,8 +4,9 @@ import ModalForm from '../components/ModalForm.jsx';
 import { AuthContext } from '../context/AuthContext.jsx';
 import { 
   HiOutlineUserAdd, HiOutlineSearch, HiPencil, HiTrash, 
-  HiOutlineOfficeBuilding, HiOutlineUser 
+  HiOutlineOfficeBuilding, HiOutlineUser, HiDownload 
 } from 'react-icons/hi';
+import { FaFileExcel } from 'react-icons/fa'; // Importamos el icono de Excel también
 
 const emptyForm = {
   name: '',
@@ -100,6 +101,37 @@ function CustomersPage() {
     }
   };
 
+  // --- FUNCIÓN DE DESCARGA SECRETA (SOLO ADMIN) ---
+  const handleDownloadExcel = async () => {
+      try {
+          const token = localStorage.getItem('accessToken');
+          if (!token) {
+              alert("Sesión no válida.");
+              return;
+          }
+
+          const response = await api.get("/customers/export/excel", {
+              responseType: 'blob',
+              headers: { 'Authorization': `Bearer ${token}` }
+          });
+
+          const url = window.URL.createObjectURL(new Blob([response.data]));
+          const link = document.createElement('a');
+          link.href = url;
+          const date = new Date().toISOString().split('T')[0];
+          link.setAttribute('download', `Clientes_${date}.xlsx`);
+          document.body.appendChild(link);
+          link.click();
+          link.parentNode.removeChild(link);
+          window.URL.revokeObjectURL(url);
+
+      } catch (error) {
+          console.error("Error descargando clientes:", error);
+          alert("Error: Solo el Administrador puede descargar esta base de datos.");
+      }
+  };
+  // ------------------------------------------------
+
   const handleSubmit = async () => {
     setIsSubmitting(true);
     try {
@@ -148,12 +180,25 @@ function CustomersPage() {
             <h1 className="text-3xl font-bold text-gray-800 tracking-tight">Directorio de Clientes</h1>
             <p className="text-sm text-gray-500 mt-1">Base de datos centralizada por sucursal</p>
         </div>
-        <button 
-          onClick={handleOpenCreate}
-          className="bg-gray-900 hover:bg-black text-white font-bold py-3 px-6 rounded-xl shadow-lg flex items-center gap-2 transition-transform transform active:scale-95"
-        >
-          <HiOutlineUserAdd className="w-5 h-5" /> Nuevo Cliente
-        </button>
+        <div className="flex gap-2">
+            {/* BOTÓN SECRETO: Solo visible para el ADMIN */}
+            {user?.role === 'admin' && (
+                <button 
+                  onClick={handleDownloadExcel}
+                  className="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-xl shadow-lg flex items-center gap-2 transition-transform transform active:scale-95"
+                  title="Descargar Base de Datos Completa"
+                >
+                  <FaFileExcel className="w-5 h-5" /> Excel
+                </button>
+            )}
+
+            <button 
+              onClick={handleOpenCreate}
+              className="bg-gray-900 hover:bg-black text-white font-bold py-3 px-6 rounded-xl shadow-lg flex items-center gap-2 transition-transform transform active:scale-95"
+            >
+              <HiOutlineUserAdd className="w-5 h-5" /> Nuevo Cliente
+            </button>
+        </div>
       </div>
 
       {/* Buscador */}

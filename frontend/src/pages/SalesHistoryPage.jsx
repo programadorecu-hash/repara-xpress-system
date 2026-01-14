@@ -51,17 +51,43 @@ function SalesHistoryPage() {
     return sales.reduce((total, sale) => total + sale.total_amount, 0);
   }, [sales]);
 
+  // --- CALCULADORA INTELIGENTE DE MÉTODOS DE PAGO ---
   const paymentMethodSummary = useMemo(() => {
-    const summary = {};
+    const summary = {
+      EFECTIVO: 0,
+      TRANSFERENCIA: 0,
+      TARJETA: 0,
+      CREDIT_NOTE: 0,
+      OTROS: 0
+    };
+
     for (const sale of sales) {
-      const method = sale.payment_method;
-      const amount = sale.total_amount;
-      if (!summary[method]) summary[method] = 0;
-      summary[method] += amount;
+      // Si tiene detalles de pago (Venta Nueva o Mixta), usamos eso para precisión exacta
+      if (sale.payment_method_details && Array.isArray(sale.payment_method_details)) {
+        for (const payment of sale.payment_method_details) {
+          const method = payment.method || "OTROS";
+          const amount = parseFloat(payment.amount || 0);
+          
+          if (summary.hasOwnProperty(method)) {
+            summary[method] += amount;
+          } else {
+            summary.OTROS += amount;
+          }
+        }
+      } 
+      // Si es una venta antigua sin detalles, usamos el método principal
+      else {
+        const method = sale.payment_method || "OTROS";
+        if (summary.hasOwnProperty(method)) {
+          summary[method] += sale.total_amount;
+        } else {
+          summary.OTROS += sale.total_amount;
+        }
+      }
     }
     return summary;
   }, [sales]);
-
+  // --------------------------------------------------
   // --- Efectos ---
   useEffect(() => {
     fetchSales();
@@ -328,14 +354,34 @@ ${publicLink}`;
           <p className="text-2xl font-bold text-blue-900">{sales.length}</p>
         </div>
         <div className="bg-gray-50 p-4 rounded border border-gray-200">
-          <h3 className="text-xs font-bold text-gray-600 uppercase mb-2">Desglose</h3>
+          <h3 className="text-xs font-bold text-gray-600 uppercase mb-2">Desglose por Método</h3>
           <div className="text-sm space-y-1">
-            {Object.entries(paymentMethodSummary).map(([method, total]) => (
-              <div key={method} className="flex justify-between">
-                <span>{formatPaymentMethod(method)}:</span>
-                <span className="font-bold">${total.toFixed(2)}</span>
-              </div>
-            ))}
+            <div className="flex justify-between text-green-700">
+                <span>Efectivo Total:</span>
+                <span className="font-bold">${paymentMethodSummary.EFECTIVO.toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between text-blue-700">
+                <span>Transferencias:</span>
+                <span className="font-bold">${paymentMethodSummary.TRANSFERENCIA.toFixed(2)}</span>
+            </div>
+            {paymentMethodSummary.TARJETA > 0 && (
+                <div className="flex justify-between text-purple-700">
+                    <span>Tarjeta:</span>
+                    <span className="font-bold">${paymentMethodSummary.TARJETA.toFixed(2)}</span>
+                </div>
+            )}
+            {paymentMethodSummary.CREDIT_NOTE > 0 && (
+                <div className="flex justify-between text-orange-700">
+                    <span>Notas Crédito:</span>
+                    <span className="font-bold">${paymentMethodSummary.CREDIT_NOTE.toFixed(2)}</span>
+                </div>
+            )}
+             {paymentMethodSummary.OTROS > 0 && (
+                <div className="flex justify-between text-gray-600">
+                    <span>Otros:</span>
+                    <span className="font-bold">${paymentMethodSummary.OTROS.toFixed(2)}</span>
+                </div>
+            )}
           </div>
         </div>
       </div>

@@ -12,6 +12,8 @@ from slowapi import Limiter                      # Núcleo del limitador
 # --- AÑADIMOS ESTAS "HERRAMIENTAS DE RELOJERÍA" ---
 from datetime import date, datetime
 import pytz
+import pandas as pd # <--- LIBRERÍA DE EXCEL
+from io import BytesIO # <--- MEMORIA PARA EL ARCHIVO
 from apscheduler.schedulers.background import BackgroundScheduler # IMPORTAR PLANIFICADOR
 from .database import SessionLocal # IMPORTAR SESION
 # --- FIN DE HERRAMIENTAS ---
@@ -350,6 +352,104 @@ def read_products_zero_cost(
 ):
     return crud.get_products_zero_cost(db)
 # -------------------------------------------
+
+# --- NUEVO ENDPOINT: EXPORTAR INVENTARIO A EXCEL ---
+@app.get("/products/export/excel")
+def export_inventory_excel(
+    location_id: int | None = None,
+    category_id: int | None = None,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(security.get_current_user)
+):
+    """
+    Genera un archivo Excel con el inventario actual.
+    Permite filtrar por Sucursal (location_id) y Categoría (category_id).
+    """
+    from sqlalchemy.orm import joinedload
+    
+    # 1. Construimos la consulta base
+    query = db.query(models.Product).options(
+        joinedload(models.Product.category),
+        joinedload(models.Product.stock_entries).joinedload(models.Stock.location)
+    )
+
+    # 2. Filtro por Categoría
+    if category_id:
+        query = query.filter(models.Product.category_id == category_id)
+
+    # 3. Traemos TODOS los productos activos
+    products = query.filter(models.Product.is_active == True).all()
+
+    # 4. Buscamos la bodega de la sucursal seleccionada (si aplica)
+    target_bodega_id = None
+    target_location_name = "Inventario Global"
+    
+    if location_id:
+        # Buscamos la BODEGA de esta sucursal (porque el stock vive en bodegas, no oficinas)
+        bodega = crud.get_primary_bodega_for_location(db, location_id=location_id)
+        if bodega:
+            target_bodega_id = bodega.id
+            target_location_name = bodega.name
+        else:
+            # Fallback por si acaso es una bodega directa
+            loc = crud.get_location(db, location_id)
+            if loc: 
+                target_bodega_id = loc.id
+                target_location_name = loc.name
+
+    # 5. Preparamos la lista de datos
+    data_list = []
+    
+    for product in products:
+        # Calcular stock:
+        # - Si hay filtro de sucursal -> Solo sumamos el stock de ESA bodega
+        # - Si NO hay filtro -> Sumamos el stock de TODAS las bodegas
+        total_stock = 0
+        
+        for stock_entry in product.stock_entries:
+            if target_bodega_id:
+                if stock_entry.location_id == target_bodega_id:
+                    total_stock += stock_entry.quantity
+            else:
+                total_stock += stock_entry.quantity
+
+        # Si filtramos por sucursal y el producto no tiene stock ahí, lo saltamos (opcional)
+        # O podemos mostrarlo con 0. Mostrémoslo con 0 para que sepa que falta.
+        
+        cat_name = product.category.name if product.category else "Sin Categoría"
+        
+        item = {
+            "SKU": product.sku,
+            "Producto": product.name,
+            "Categoría": cat_name,
+            "Precio Venta": product.price_3,
+            "Costo Promedio": product.average_cost,
+            "Stock": total_stock,
+            "Valor Total (Costo)": product.average_cost * total_stock,
+            "Valor Total (Venta)": product.price_3 * total_stock,
+            "Ubicación Reporte": target_location_name
+        }
+        data_list.append(item)
+
+    # 6. Crear el DataFrame de Pandas
+    df = pd.DataFrame(data_list)
+
+    # 7. Guardar en memoria
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df.to_excel(writer, index=False, sheet_name="Inventario")
+    
+    output.seek(0)
+
+    # 8. Generar nombre del archivo
+    filename = f"Inventario_{date.today()}.xlsx"
+    
+    headers = {
+        'Content-Disposition': f'attachment; filename="{filename}"'
+    }
+
+    return StreamingResponse(output, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers=headers)
+# --- FIN EXPORTAR EXCEL ---
 
 @limiter.limit("10/minute")  # Subidas acotadas para evitar abuso/picos
 @app.post("/products/{product_id}/upload-image/", response_model=schemas.Product)
@@ -1462,6 +1562,63 @@ def delete_customer_endpoint(customer_id: int, db: Session = Depends(get_db), _r
     if not deleted:
         raise HTTPException(status_code=404, detail="Cliente no encontrado.")
     return deleted
+
+# --- NUEVO ENDPOINT: EXPORTAR CLIENTES A EXCEL (SOLO ADMIN) ---
+@app.get("/customers/export/excel")
+def export_customers_excel(
+    location_id: int | None = None,
+    db: Session = Depends(get_db),
+    # REGLA DE ORO: Solo el Admin puede descargar la base de clientes
+    current_user: models.User = Depends(security.get_current_user)
+):
+    """
+    Genera un reporte Excel con todos los clientes.
+    """
+    # 1. Validar permiso manualmente por si acaso
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Acceso denegado. Solo el Administrador puede descargar la base de clientes.")
+
+    from sqlalchemy.orm import joinedload
+
+    # 2. Consultar clientes (con sucursal)
+    query = db.query(models.Customer).options(joinedload(models.Customer.location))
+    
+    if location_id:
+        query = query.filter(models.Customer.location_id == location_id)
+    
+    customers = query.order_by(models.Customer.name).all()
+
+    # 3. Preparar datos para Excel
+    data_list = []
+    for c in customers:
+        loc_name = c.location.name if c.location else "Registro General"
+        
+        item = {
+            "Nombre Completo": c.name,
+            "Cédula/RUC": c.id_card,
+            "Teléfono": c.phone or "",
+            "Email": c.email or "",
+            "Dirección": c.address or "",
+            "Sucursal Origen": loc_name,
+            "Notas": c.notes or "",
+            "Fecha Registro": c.created_at.strftime("%Y-%m-%d") if c.created_at else ""
+        }
+        data_list.append(item)
+
+    # 4. Crear DataFrame
+    df = pd.DataFrame(data_list)
+
+    # 5. Guardar en memoria
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df.to_excel(writer, index=False, sheet_name="Directorio Clientes")
+    
+    output.seek(0)
+
+    filename = f"Clientes_{date.today()}.xlsx"
+    headers = {'Content-Disposition': f'attachment; filename="{filename}"'}
+    
+    return StreamingResponse(output, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers=headers)
 # --- FIN DE NUESTRO CÓDIGO ---
 
 # --- INICIO DE NUESTRO CÓDIGO (Endpoint Reembolsos) ---

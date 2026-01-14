@@ -23,3 +23,7 @@ pytz
 
 # PROGRAMADOR DE TAREAS (CRON JOBS)
 APScheduler==3.10.4
+
+# LIBRERÍAS PARA EXCEL (REPORTES)
+pandas
+openpyxl

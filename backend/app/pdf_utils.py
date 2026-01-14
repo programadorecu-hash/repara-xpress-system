@@ -841,10 +841,41 @@ def generate_sales_history_pdf(sales_data: list, company_settings: schemas.Compa
     y -= 5 * mm
 
     total_sum = 0.0
+    # --- ACUMULADORES PARA DESGLOSE ---
+    total_cash = 0.0
+    total_transfer = 0.0
+    total_card = 0.0
+    total_others = 0.0
+    # ----------------------------------
 
     # Cuerpo
     c.setFont("Helvetica", 8)
     for sale in sales_data:
+        # --- LÓGICA DE SUMA INTELIGENTE ---
+        # 1. Si tiene detalles JSON (Venta Mixta o Nueva)
+        if sale.payment_method_details:
+            details_list = sale.payment_method_details if isinstance(sale.payment_method_details, list) else []
+            # Si es dict, lo convertimos a lista ficticia
+            if isinstance(sale.payment_method_details, dict):
+                 # Soporte legacy simple
+                 details_list = [{"method": sale.payment_method, "amount": sale.total_amount}]
+
+            for p in details_list:
+                m = p.get("method", "OTROS")
+                amt = float(p.get("amount", 0))
+                
+                if m == "EFECTIVO": total_cash += amt
+                elif m == "TRANSFERENCIA": total_transfer += amt
+                elif m == "TARJETA": total_card += amt
+                else: total_others += amt
+        
+        # 2. Si es venta antigua simple
+        else:
+            if sale.payment_method == "EFECTIVO": total_cash += sale.total_amount
+            elif sale.payment_method == "TRANSFERENCIA": total_transfer += sale.total_amount
+            elif sale.payment_method == "TARJETA": total_card += sale.total_amount
+            else: total_others += sale.total_amount
+        # ----------------------------------
         if y < 20 * mm: # Nueva página si se acaba el espacio
             c.showPage()
             y = height - 20 * mm
@@ -896,11 +927,43 @@ def generate_sales_history_pdf(sales_data: list, company_settings: schemas.Compa
         # Espacio final entre filas (si no hubo detalles, el 'y' bajó 4mm, si hubo, bajó más)
         # Ajustamos para asegurar separación uniforme
         y -= 2 * mm
-    # Totales Finales
+    # --- CUADRO DE RESUMEN FINAL ---
+    y -= 5 * mm
     c.line(15 * mm, y, 195 * mm, y)
-    y -= 6 * mm
-    c.setFont("Helvetica-Bold", 10)
-    c.drawString(150 * mm, y, "TOTAL GENERAL:")
+    y -= 5 * mm
+
+    # Dibujamos el resumen a la derecha, alineado con la columna de montos
+    left_margin_summary = 130 * mm
+    
+    c.setFont("Helvetica", 9)
+    
+    # Efectivo
+    c.drawString(left_margin_summary, y, "Total Efectivo:")
+    c.drawRightString(195 * mm, y, f"${total_cash:.2f}")
+    y -= 4 * mm
+    
+    # Transferencia
+    c.drawString(left_margin_summary, y, "Total Transferencia:")
+    c.drawRightString(195 * mm, y, f"${total_transfer:.2f}")
+    y -= 4 * mm
+
+    # Tarjeta (solo si hay)
+    if total_card > 0:
+        c.drawString(left_margin_summary, y, "Total Tarjeta:")
+        c.drawRightString(195 * mm, y, f"${total_card:.2f}")
+        y -= 4 * mm
+
+    # Otros (solo si hay)
+    if total_others > 0:
+        c.drawString(left_margin_summary, y, "Otros / Notas Crédito:")
+        c.drawRightString(195 * mm, y, f"${total_others:.2f}")
+        y -= 4 * mm
+
+    c.line(left_margin_summary, y, 195 * mm, y) # Línea pequeña de suma
+    y -= 5 * mm
+    
+    c.setFont("Helvetica-Bold", 11)
+    c.drawString(left_margin_summary, y, "TOTAL GENERAL:")
     c.drawRightString(195 * mm, y, f"${total_sum:.2f}")
 
     c.showPage()
