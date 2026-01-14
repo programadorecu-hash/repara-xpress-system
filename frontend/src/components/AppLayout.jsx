@@ -97,7 +97,14 @@ function AppLayout() {
       </header>
 
       {/* El Header (menú lateral) */}
-      <Header isMenuOpen={isMenuOpen} onToggle={toggleMenu} /> 
+      {/* CAMBIO: Envolvemos el Header en un div que detecta el mouse */}
+      <div 
+        onMouseEnter={() => setIsMenuOpen(true)}
+        onMouseLeave={() => setIsMenuOpen(false)}
+        className="relative z-50" // Aseguramos que esté por encima para detectar el mouse
+      >
+        <Header isMenuOpen={isMenuOpen} onToggle={toggleMenu} /> 
+      </div>
 
       {/* Contenido Principal */}
       {/* CAMBIO: 

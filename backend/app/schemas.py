@@ -201,7 +201,7 @@ class SaleBase(BaseModel):
 class CashAccountBase(BaseModel):
     name: str
     account_type: str
-    location_id: int
+    location_id: int | None = None # Opcional para bancos globales
 
 class CashTransactionBase(BaseModel):
     amount: float
@@ -312,6 +312,8 @@ class PaymentDetail(BaseModel):
     method: str      # "EFECTIVO", "TRANSFERENCIA", etc.
     amount: float
     reference: str | None = None
+    # NUEVO: ID de la cuenta bancaria destino (solo para transferencias)
+    bank_account_id: int | None = None
 
 class SaleCreate(SaleBase):
     pin: str
@@ -539,7 +541,7 @@ class Sale(SaleBase):
 
 class CashAccount(CashAccountBase):
     id: int
-    location: LocationSimple
+    location: LocationSimple | None = None # Puede ser nulo si es global
     class Config:
         from_attributes = True
 

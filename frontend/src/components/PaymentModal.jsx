@@ -27,6 +27,23 @@ function PaymentModal({
     { method: "EFECTIVO", amount: totalAmount, reference: "" }
   ]);
   
+  // --- NUEVO: Estado para guardar cuentas bancarias ---
+  const [bankAccounts, setBankAccounts] = useState([]);
+
+  // Cargar cuentas bancarias al abrir el modal
+  useEffect(() => {
+      // Usamos el ID 1 como referencia para cargar cuentas globales. 
+      // El backend ahora devuelve cuentas sin location_id también.
+      api.get("/locations/1/cash-accounts/") 
+         .then(res => {
+             // Filtramos solo las de tipo BANCO
+             const banks = res.data.filter(acc => acc.account_type === 'BANCO');
+             setBankAccounts(banks);
+         })
+         .catch(console.error);
+  }, []);
+  // ----------------------------------------------------
+  
   const [pin, setPin] = useState("");
   const [warrantyTerms, setWarrantyTerms] = useState("");
   const [error, setError] = useState("");
@@ -142,7 +159,8 @@ function PaymentModal({
       payments: finalPayments.map(p => ({
           method: p.method,
           amount: parseFloat(p.amount) || 0,
-          reference: p.reference
+          reference: p.reference,
+          bank_account_id: p.bank_account_id ? parseInt(p.bank_account_id) : null // <--- NUEVO: Enviamos el banco
       })),
       customer_ci: initialCustomerCI,
       customer_name: initialCustomerName,
@@ -252,18 +270,39 @@ function PaymentModal({
                   />
                 </div>
 
-                {/* Referencia (50% ancho - MÁS ESPACIO) */}
+                {/* Referencia / Banco (50% ancho) */}
                 <div className="w-full sm:w-1/2 flex gap-2">
                     {payment.method === "CREDIT_NOTE" ? (
-                         <div className="flex-1 p-2.5 border border-purple-200 bg-purple-50 rounded-lg text-sm font-mono text-center text-purple-900 font-bold flex items-center justify-center overflow-hidden">
+                          <div className="flex-1 p-2.5 border border-purple-200 bg-purple-50 rounded-lg text-sm font-mono text-center text-purple-900 font-bold flex items-center justify-center overflow-hidden">
                             <span className="truncate">{payment.reference}</span>
-                         </div>
+                          </div>
+                    ) : payment.method === "TRANSFERENCIA" && bankAccounts.length > 0 ? (
+                        // --- SELECTOR DE BANCO ---
+                        <div className="flex-1 flex gap-1">
+                             <select
+                                value={payment.bank_account_id || ""}
+                                onChange={(e) => handlePaymentChange(index, 'bank_account_id', e.target.value)}
+                                className="w-1/2 p-2.5 border border-gray-300 rounded-lg text-xs font-bold text-blue-800 bg-blue-50 focus:ring-2 focus:ring-blue-500 outline-none"
+                             >
+                                <option value="">Elige Banco...</option>
+                                {bankAccounts.map(b => (
+                                    <option key={b.id} value={b.id}>{b.name.replace(" (GLOBAL)", "")}</option>
+                                ))}
+                             </select>
+                             <input 
+                                type="text"
+                                value={payment.reference || ""}
+                                onChange={(e) => handlePaymentChange(index, 'reference', e.target.value)}
+                                placeholder="# Comp."
+                                className="w-1/2 p-2.5 border border-gray-300 rounded-lg text-sm uppercase focus:ring-2 focus:ring-blue-500 outline-none"
+                            />
+                        </div>
                     ) : (payment.method !== "EFECTIVO" ? (
                         <input 
                             type="text"
-                            value={payment.reference}
+                            value={payment.reference || ""}
                             onChange={(e) => handlePaymentChange(index, 'reference', e.target.value)}
-                            placeholder="Referencia / Banco"
+                            placeholder="Referencia"
                             className="flex-1 min-w-0 p-2.5 border border-gray-300 rounded-lg text-sm uppercase focus:ring-2 focus:ring-blue-500 outline-none"
                         />
                     ) : (
@@ -279,8 +318,8 @@ function PaymentModal({
                       <HiOutlineTrash className="w-6 h-6" />
                     </button>
                 </div>
-              </div>
-            ))}
+            </div>
+          ))}
           </div>
 
           {error && (

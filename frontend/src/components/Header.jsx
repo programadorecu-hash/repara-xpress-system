@@ -35,7 +35,7 @@ import {
 // Componente de Enlace con Ícono
 function NavItem({ to, icon, label, isExpanded }) {
   const baseStyle =
-    "flex items-center space-x-3 py-2 px-3 rounded-lg text-surface/80 hover:bg-surface/10 transition-colors";
+    "flex items-center space-x-3 py-2 px-3 rounded-lg text-surface/80 hover:bg-surface/10 transition-all duration-300 group overflow-hidden whitespace-nowrap";
   const activeStyle = "bg-surface/20 text-surface font-semibold";
 
   return (
@@ -48,8 +48,12 @@ function NavItem({ to, icon, label, isExpanded }) {
       }
       title={!isExpanded ? label : undefined}
     >
-      <div className="text-xl">{icon}</div>
-      {isExpanded && <span>{label}</span>}
+      <div className="text-xl min-w-[20px]">{icon}</div>
+      
+      {/* CAMBIO: Contenedor para animar la aparición del texto */}
+      <div className={`transition-all duration-500 ease-in-out ${isExpanded ? "opacity-100 max-w-[200px] ml-2" : "opacity-0 max-w-0 ml-0"}`}>
+        <span>{label}</span>
+      </div>
     </NavLink>
   );
 }
@@ -98,20 +102,13 @@ function Header({ isMenuOpen, onToggle }) {
                         flex flex-col p-4 
                         bg-brand/90 md:bg-brand/50 text-surface 
                         backdrop-blur-md border-r border-white/10 shadow-2xl
-                        transition-transform duration-300 
-                        ${
-                          /* Lógica Responsiva: Si está cerrado, en móvil se esconde a la izquierda, en PC se queda quieto */ ""
-                        }
+                        /* CAMBIO: 'duration-500' (más lento) y 'ease-in-out' (curva suave) */
+                        transition-all duration-500 ease-in-out
                         ${
                           isMenuOpen
-                            ? "translate-x-0"
-                            : "-translate-x-full md:translate-x-0"
+                            ? "translate-x-0 w-64"
+                            : "-translate-x-full md:translate-x-0 md:w-20 w-64"
                         }
-                        
-                        ${
-                          /* Ancho: Si está abierto es ancho completo (o 64). Si cerrado en PC es chico (20) */ ""
-                        }
-                        ${isMenuOpen ? "w-64" : "w-64 md:w-20"}
                         `}
       >
         {/* Sección Superior: Logo */}
@@ -120,11 +117,9 @@ function Header({ isMenuOpen, onToggle }) {
             isMenuOpen ? "justify-between" : "justify-center"
           } items-center px-2 flex-shrink-0`}
         >
-          {isMenuOpen && (
-            <div className="text-white font-bold text-xl truncate px-2">
+          <div className={`text-white font-bold text-xl truncate px-2 transition-all duration-500 ease-in-out ${isMenuOpen ? "opacity-100 max-w-[200px]" : "opacity-0 max-w-0 hidden md:block"}`}>
               {companyName}
-            </div>
-          )}
+          </div>
 
           <button
             onClick={onToggle}
@@ -139,163 +134,86 @@ function Header({ isMenuOpen, onToggle }) {
         </div>
 
         {/* Nombre de la Sucursal */}
-        {isMenuOpen && activeShift && (
-          <div className="text-sm text-surface/80 font-semibold px-2 mt-2 flex-shrink-0">
+        {activeShift && (
+          <div className={`text-sm text-surface/80 font-semibold px-2 mt-2 flex-shrink-0 transition-all duration-500 ease-in-out overflow-hidden whitespace-nowrap ${isMenuOpen ? "opacity-100 max-h-10" : "opacity-0 max-h-0"}`}>
             Sucursal: {activeShift.location.name}
           </div>
         )}
-
-        {/* Sección Media: Navegación (con Scroll activado y estilizado por CSS global) */}
+        {/* Sección Media: Navegación Organizada */}
         <nav className="flex flex-col space-y-1 mt-8 flex-1 overflow-y-auto min-h-0">
-          <NavItem
-            to="/"
-            label="Inicio"
-            icon={<HiOutlineHome />}
-            isExpanded={isMenuOpen}
-          />
-          <NavItem
-            to="/pos"
-            label="Vender"
-            icon={<HiOutlineShoppingCart />}
-            isExpanded={isMenuOpen}
-          />
-          <NavItem
-            to="/historial-ventas"
-            label="Historial Ventas"
-            icon={<HiOutlineClock />}
-            isExpanded={isMenuOpen}
-          />
-          <NavItem
-            to="/ordenes"
-            label="Ordenes"
-            icon={<HiOutlineCog />}
-            isExpanded={isMenuOpen}
-          />
-          <NavItem
-            to="/clientes"
-            label="Clientes"
-            icon={<HiOutlineUserGroup />}
-            isExpanded={isMenuOpen}
-          />
-          <NavItem
-            to="/inventario"
-            label="Bodega"
-            icon={<HiOutlineArchive />}
-            isExpanded={isMenuOpen}
-          />
-
-          {canManageInventory && (
-            <NavItem
-              to="/proveedores"
-              label="Proveedores"
-              icon={<HiOutlineTruck />}
-              isExpanded={isMenuOpen}
-            />
-          )}
-          {canManageInventory && (
-            <NavItem
-              to="/compras"
-              label="Compras"
-              icon={<HiOutlineShoppingBag />}
-              isExpanded={isMenuOpen}
-            />
+          
+          {/* --- GRUPO: OPERATIVO --- */}
+          {/* Siempre visible porque es lo más usado */}
+          <NavItem to="/" label="Inicio" icon={<HiOutlineHome />} isExpanded={isMenuOpen} />
+          <NavItem to="/pos" label="Vender" icon={<HiOutlineShoppingCart />} isExpanded={isMenuOpen} />
+          <NavItem to="/ordenes" label="Ordenes" icon={<HiOutlineCog />} isExpanded={isMenuOpen} />
+          <NavItem to="/inventario" label="Inventario" icon={<HiOutlineArchive />} isExpanded={isMenuOpen} />
+          {user?.role === "admin" && (
+            <NavItem to="/auditoria" label="Movimientos de Inventario" icon={<HiOutlineDocumentReport />} isExpanded={isMenuOpen} />
           )}
 
-          {/* --- INICIO DE NUESTRO CÓDIGO (Botón de Gastos) --- */}
+          <div className="my-2 border-t border-white/10" /> {/* Separador */}
+          
+          {/* --- GRUPO: GESTIÓN COMERCIAL --- */}
+          {isMenuOpen && <div className="text-xs font-bold text-surface/50 uppercase px-3 mt-2 mb-1">Gestión</div>}
+          
+          <NavItem to="/historial-ventas" label="Historial de Ventas" icon={<HiOutlineClock />} isExpanded={isMenuOpen} />
           {canManageInventory && (
-            <NavItem
-              to="/gastos"
-              label="Gastos y Costos"
-              icon={<HiOutlineCurrencyDollar />}
-              isExpanded={isMenuOpen}
-            />
+             <NavItem to="/ventas-perdidas" label="Ventas Perdidas" icon={<HiOutlineExclamationCircle />} isExpanded={isMenuOpen} />
           )}
-          {/* --- FIN DE NUESTRO CÓDIGO --- */}
-
-          {/* --- INICIO DE NUESTRO CÓDIGO (Botón de Reporte Financiero) --- */}
-          {user?.role === "admin" && (
-            <NavItem
-              to="/reporte-financiero"
-              label="Utilidad Neta"
-              icon={<HiOutlineChartPie />}
-              isExpanded={isMenuOpen}
-            />
-          )}
-          {/* --- FIN DE NUESTRO CÓDIGO --- */}
-
-          {user?.role === "admin" && (
-            <NavItem
-              to="/personal"
-              label="Control Personal"
-              icon={<HiOutlineIdentification />}
-              isExpanded={isMenuOpen}
-            />
+          <NavItem to="/clientes" label="Clientes" icon={<HiOutlineUserGroup />} isExpanded={isMenuOpen} />
+          {canManageInventory && (
+             <NavItem to="/compras" label="Compras" icon={<HiOutlineShoppingBag />} isExpanded={isMenuOpen} />
           )}
           {canManageInventory && (
-            <NavItem
-              to="/ventas-perdidas"
-              label="Ventas Perdidas"
-              icon={<HiOutlineExclamationCircle />}
-              isExpanded={isMenuOpen}
-            />
+             <NavItem to="/proveedores" label="Proveedores" icon={<HiOutlineTruck />} isExpanded={isMenuOpen} />
           )}
-          {user?.role === "admin" && (
-            <NavItem
-              to="/auditoria"
-              label="Auditar Inventario"
-              icon={<HiOutlineDocumentReport />}
-              isExpanded={isMenuOpen}
-            />
+
+          <div className="my-2 border-t border-white/10" /> {/* Separador */}
+
+          {/* --- GRUPO: FINANZAS (Solo Admins/Gerentes) --- */}
+          {(canManageInventory || canManageCash) && (
+            <>
+              {isMenuOpen && <div className="text-xs font-bold text-surface/50 uppercase px-3 mt-2 mb-1">Finanzas</div>}
+              
+              {canManageInventory && (
+                <NavItem to="/gastos" label="Gastos y Costos" icon={<HiOutlineCurrencyDollar />} isExpanded={isMenuOpen} />
+              )}
+              {user?.role === "admin" && (
+                <NavItem to="/reporte-financiero" label="Utilidad Neta" icon={<HiOutlineChartPie />} isExpanded={isMenuOpen} />
+              )}
+              {canManageCash && (
+                <NavItem to="/caja" label="Cajas" icon={<HiOutlineInbox />} isExpanded={isMenuOpen} />
+              )}
+              {canManageCash && (
+                <NavItem to="/caja/transacciones" label="Movimientos de Caja" icon={<HiOutlineCash />} isExpanded={isMenuOpen} />
+              )}
+            </>
           )}
-          {canManageCash && (
-            <NavItem
-              to="/caja"
-              label="Caja"
-              icon={<HiOutlineInbox />}
-              isExpanded={isMenuOpen}
-            />
-          )}
-          {canManageCash && (
-            <NavItem
-              to="/caja/transacciones"
-              label="Movimientos de Caja"
-              icon={<HiOutlineCash />}
-              isExpanded={isMenuOpen}
-            />
-          )}
-          {user?.role === "admin" && (
-            <NavItem
-              to="/sucursales"
-              label="Sucursales"
-              icon={<HiOutlineOfficeBuilding />}
-              isExpanded={isMenuOpen}
-            />
-          )}
-          {user?.role === "admin" && (
-            <NavItem
-              to="/usuarios"
-              label="Usuarios"
-              icon={<HiOutlineUsers />}
-              isExpanded={isMenuOpen}
-            />
-          )}
+
+          <div className="my-2 border-t border-white/10" /> {/* Separador */}
+
+          {/* --- GRUPO: ADMINISTRACIÓN (Solo Admins) --- */}
           {(user?.role === "admin" || user?.role === "inventory_manager") && (
-            <NavItem
-              to="/configuracion/notificaciones"
-              label="Config. Alertas"
-              icon={<HiOutlineBell />}
-              isExpanded={isMenuOpen}
-            />
+             <>
+               {isMenuOpen && <div className="text-xs font-bold text-surface/50 uppercase px-3 mt-2 mb-1">Administración</div>}
+               
+               {user?.role === "admin" && (
+                 <NavItem to="/configuracion/empresa" label="Datos Empresa" icon={<HiOutlineOfficeBuilding />} isExpanded={isMenuOpen} />
+               )}
+               {user?.role === "admin" && (
+                 <NavItem to="/sucursales" label="Sucursales" icon={<HiOutlineOfficeBuilding />} isExpanded={isMenuOpen} />
+               )}
+               {user?.role === "admin" && (
+                 <NavItem to="/usuarios" label="Gerencia y Empleados" icon={<HiOutlineUsers />} isExpanded={isMenuOpen} />
+               )}
+               {user?.role === "admin" && (
+                 <NavItem to="/personal" label="Control de Personal" icon={<HiOutlineIdentification />} isExpanded={isMenuOpen} />
+               )}
+               <NavItem to="/configuracion/notificaciones" label="Alertas" icon={<HiOutlineBell />} isExpanded={isMenuOpen} />
+             </>
           )}
-          {/* Nuevo enlace para Configuración de Empresa (Solo Admins) */}
-          {user?.role === "admin" && (
-            <NavItem
-              to="/configuracion/empresa"
-              label="Datos Empresa"
-              icon={<HiOutlineOfficeBuilding />}
-              isExpanded={isMenuOpen}
-            />
-          )}
+
         </nav>
 
         {/* Sección Inferior: Botón Salir */}

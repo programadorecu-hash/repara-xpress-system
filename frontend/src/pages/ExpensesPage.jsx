@@ -10,7 +10,7 @@ import {
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 const ExpensesPage = () => {
-  const { token, user } = useContext(AuthContext);
+  const { token, user, activeShift } = useContext(AuthContext);
   
   // Estados Generales
   const [activeTab, setActiveTab] = useState('expenses'); 
@@ -19,9 +19,11 @@ const ExpensesPage = () => {
   
   // Estados para Gastos
   const [expenses, setExpenses] = useState([]);
+  const [accounts, setAccounts] = useState([]); // <--- NUEVO: Cuentas disponibles
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
+  const [selectedAccount, setSelectedAccount] = useState(''); // <--- NUEVO: Cuenta elegida
   const [selectedLocation, setSelectedLocation] = useState(''); // Sucursal elegida para el gasto
   const [expenseDate, setExpenseDate] = useState(new Date().toISOString().split('T')[0]);
   const [pin, setPin] = useState('');
@@ -37,10 +39,21 @@ const ExpensesPage = () => {
   const isAdmin = user?.role === 'admin';
 
   useEffect(() => {
-    fetchCategories();
-    fetchExpenses();
-    if (isAdmin) fetchLocations();
+    if (token) { // Solo si hay token para evitar llamadas fallidas
+        fetchCategories();
+        fetchExpenses();
+        if (isAdmin) fetchLocations();
+        
+        // --- CAMBIO: Forzamos la carga inicial de cuentas ---
+        fetchAccounts(); 
+        // ---------------------------------------------------
+    }
   }, [token, startDate, endDate]);
+
+  // Nuevo efecto para recargar cuentas si cambia la sucursal elegida
+  useEffect(() => {
+      fetchAccounts();
+  }, [selectedLocation]);
 
   // --- API CALLS ---
   const fetchCategories = async () => {
@@ -53,6 +66,55 @@ const ExpensesPage = () => {
       console.error("Error cargando categorías", error);
     }
   };
+
+  // --- FUNCIÓN CORREGIDA: Carga inteligente de cuentas ---
+  const fetchAccounts = async () => {
+    try {
+        // 1. Decidir qué ID de sucursal usar
+        let locationId = selectedLocation;
+
+        // 2. Si no seleccionaste nada manualmente, miramos tu credencial (Turno Activo)
+        // Usamos 'activeShift' que ya viene del contexto, sin hacer llamadas lentas a la API
+        if (!locationId && activeShift) {
+            // Intentamos obtener el ID de forma segura (soporta ambas estructuras de datos)
+            locationId = activeShift.location_id || activeShift.location?.id;
+            
+            // Si eres Admin, actualizamos el selector visual para que sepas dónde estás parado
+            if (isAdmin && locationId) {
+                setSelectedLocation(locationId); 
+            }
+        }
+
+        // Si después de todo no hay ubicación (ej. Admin sin turno y sin selección), limpiamos
+        if (!locationId) {
+            setAccounts([]);
+            setSelectedAccount('');
+            return;
+        }
+
+        // 3. Cargar las cuentas de esa sucursal
+        const res = await axios.get(`${API_URL}/locations/${locationId}/cash-accounts/`, {
+            headers: { Authorization: `Bearer ${token}` }
+        });
+        
+        let loadedAccounts = res.data;
+        
+        // 4. Si no es Admin, ocultamos los BANCOS para simplificar la vista
+        if (!isAdmin) {
+            loadedAccounts = loadedAccounts.filter(acc => acc.account_type !== 'BANCO');
+        }
+        
+        setAccounts(loadedAccounts);
+        
+        // 5. Auto-seleccionar la CAJA CHICA automáticamente
+        const defaultAcc = loadedAccounts.find(a => a.account_type === 'CAJA_CHICA') || loadedAccounts[0];
+        if (defaultAcc) setSelectedAccount(defaultAcc.id);
+        
+    } catch (error) {
+        console.error("Error cargando cuentas", error);
+    }
+  };
+  // --------------------
 
   const fetchLocations = async () => {
     try {
@@ -114,6 +176,7 @@ const ExpensesPage = () => {
         expense_date: new Date(expenseDate).toISOString(),
         category_id: parseInt(selectedCategory),
         location_id: parseInt(locationIdToUse),
+        account_id: parseInt(selectedAccount), // <--- NUEVO
         pin
       }, {
         headers: { Authorization: `Bearer ${token}` }
@@ -248,6 +311,18 @@ const ExpensesPage = () => {
                     </select>
                     <HiTag className="absolute left-2.5 top-3 text-gray-400" />
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Cuenta Origen</label>
+                <div className="relative">
+                    <select required className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white" value={selectedAccount} onChange={(e) => setSelectedAccount(e.target.value)}>
+                        {accounts.map(a => (
+                        <option key={a.id} value={a.id}>{a.name}</option>
+                        ))}
+                    </select>
+                </div>
+                <p className="text-xs text-gray-400 mt-1">El dinero se descontará de esta caja.</p>
               </div>
 
               <div>

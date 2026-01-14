@@ -307,7 +307,7 @@ function DashboardPage() {
             <ActionButton
               to="/inventario"
               icon={<HiOutlineArchive className="h-10 w-10" />}
-              label="BODEGA"
+              label="INVENTARIO"
               colorClass="bg-action-green hover:bg-teal-600"
             />
           </div>

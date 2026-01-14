@@ -72,18 +72,27 @@ function CashAccountsPage() {
   };
 
   const handleSubmit = async () => {
-    if (!location) {
-      setError('Necesitas un turno activo para crear cuentas de caja.');
+    // Si es BANCO, no requiere location (es Global). Si es otro tipo, sí requiere turno.
+    if (formState.account_type !== 'BANCO' && !location) {
+      setError('Necesitas un turno activo para crear cuentas de caja locales.');
       return;
     }
 
     setIsSubmitting(true);
     setError('');
     try {
-      await api.post('/cash-accounts/', {
-        ...formState,
-        location_id: location.id,
-      });
+      const payload = { ...formState };
+      
+      // Lógica de asignación de sucursal
+      if (formState.account_type === 'BANCO') {
+          payload.location_id = null; // Global
+          // Forzamos el nombre a incluir (GLOBAL) para claridad visual
+          if (!payload.name.includes("(GLOBAL)")) payload.name += " (GLOBAL)";
+      } else {
+          payload.location_id = location.id; // Local
+      }
+
+      await api.post('/cash-accounts/', payload);
       handleCloseModal();
       fetchAccounts();
     } catch (err) {

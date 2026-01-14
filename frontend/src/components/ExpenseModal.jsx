@@ -8,7 +8,7 @@ const emptyForm = { amount: '', description: '', category_id: '', account_id: ''
 
 // Aceptamos un nuevo prop: initialWorkOrderId (el ID de la orden si viene desde la tabla)
 function ExpenseModal({ isOpen, onClose, onExpenseSaved, initialWorkOrderId }) {
-  const { activeShift } = useContext(AuthContext); 
+  const { activeShift, user } = useContext(AuthContext); // <-- Traemos 'user' también
   const [formState, setFormState] = useState(emptyForm);
   const [categories, setCategories] = useState([]); 
   const [accounts, setAccounts] = useState([]); 
@@ -23,13 +23,23 @@ function ExpenseModal({ isOpen, onClose, onExpenseSaved, initialWorkOrderId }) {
       // 1. Cargar Categorías
       api.get('/expense-categories/').then(res => setCategories(res.data));
       
-      // 2. Cargar Cajas
+      // 2. Cargar Cajas (Y FILTRAR SI ES EMPLEADO)
       api.get(`/locations/${activeShift.location.id}/cash-accounts/`)
-         .then(res => {
-             setAccounts(res.data);
-             const defaultAcc = res.data.find(a => a.account_type === 'CAJA_CHICA') || res.data[0];
-             if (defaultAcc) setFormState(prev => ({ ...prev, account_id: defaultAcc.id }));
-         });
+          .then(res => {
+              let loadedAccounts = res.data;
+
+              // Si NO es jefe, ocultamos las cuentas tipo 'BANCO' (o las globales que no tengan location)
+              const isBoss = user?.role === 'admin' || user?.role === 'inventory_manager';
+              if (!isBoss) {
+                  loadedAccounts = loadedAccounts.filter(acc => acc.account_type !== 'BANCO');
+              }
+
+              setAccounts(loadedAccounts);
+              
+              // Preseleccionar Caja Chica si existe
+              const defaultAcc = loadedAccounts.find(a => a.account_type === 'CAJA_CHICA') || loadedAccounts[0];
+              if (defaultAcc) setFormState(prev => ({ ...prev, account_id: defaultAcc.id }));
+          });
 
       // 3. --- NUEVO: Cargar Órdenes Activas (Para asociar gastos) ---
       // Traemos las que están en taller (RECIBIDO, REPARANDO, etc)

@@ -1196,23 +1196,40 @@ def create_sale(db: Session, sale: schemas.SaleCreate, user_id: int, location_id
                 )
                 create_inventory_movement(db=db, movement=movement, user_id=user_id)
 
-        # 6. Procesar Pagos (Caja y Notas de Crédito)
+        # 6. Procesar Pagos (Caja, Bancos y Notas de Crédito)
         db_caja_ventas = db.query(models.CashAccount).filter(
             models.CashAccount.location_id == location_id,
             models.CashAccount.account_type == "CAJA_VENTAS"
         ).first()
 
         for payment in sale.payments:
+            # --- EFECTIVO -> Caja de Ventas Local ---
             if payment.method == "EFECTIVO":
                 if db_caja_ventas:
                     db_transaction = models.CashTransaction(
                         amount=payment.amount,
-                        description=f"Ingreso Venta #{db_sale.id} (Parte en Efectivo)",
+                        description=f"Ingreso Venta #{db_sale.id} (Efectivo)",
                         user_id=user_id,
                         account_id=db_caja_ventas.id
                     )
                     db.add(db_transaction)
+
+            # --- TRANSFERENCIA -> Cuenta Bancaria Seleccionada ---
+            elif payment.method == "TRANSFERENCIA":
+                # Si el usuario eligió un banco específico en el modal
+                if payment.bank_account_id:
+                    # Verificar que la cuenta exista
+                    target_bank = get_cash_account(db, payment.bank_account_id)
+                    if target_bank:
+                        db_transaction = models.CashTransaction(
+                            amount=payment.amount,
+                            description=f"Ingreso Venta #{db_sale.id} (Transf: {payment.reference or 'Sin Ref'})",
+                            user_id=user_id,
+                            account_id=target_bank.id
+                        )
+                        db.add(db_transaction)
             
+            # --- NOTA DE CRÉDITO ---
             elif payment.method == "CREDIT_NOTE":
                 note_code = payment.reference
                 if not note_code:
@@ -1388,7 +1405,15 @@ def create_cash_account(db: Session, account: schemas.CashAccountCreate):
     return db_account
 
 def get_cash_accounts_by_location(db: Session, location_id: int):
-    return db.query(models.CashAccount).filter(models.CashAccount.location_id == location_id).all()
+    """
+    Devuelve cuentas de la sucursal Y cuentas globales (Bancos).
+    """
+    return db.query(models.CashAccount).filter(
+        or_(
+            models.CashAccount.location_id == location_id,
+            models.CashAccount.location_id == None # Cuentas Globales
+        )
+    ).all()
 
 def get_cash_account(db: Session, account_id: int):
     return db.query(models.CashAccount).filter(models.CashAccount.id == account_id).first()
@@ -2102,11 +2127,47 @@ def create_expense(db: Session, expense: schemas.ExpenseCreate, user: models.Use
     """
     Registra un gasto y MUEVE EL DINERO DE LA CAJA.
     """
-    # 1. Seguridad
+    # 1. Seguridad Básica (PIN)
     if not user.hashed_pin or not security.verify_password(expense.pin, user.hashed_pin):
         raise ValueError("PIN incorrecto. No tiene permiso para registrar gastos.")
 
+    # --- SEGURIDAD BANCARIA (NUEVO) ---
+    if expense.account_id:
+        account = get_cash_account(db, expense.account_id)
+        if not account:
+            raise ValueError("La cuenta de caja seleccionada no existe.")
+
+        # Si la cuenta es GLOBAL (location_id es None) -> Es un BANCO
+        # Y el usuario NO es Admin ni Gerente...
+        if account.location_id is None and user.role not in ["admin", "inventory_manager"]:
+            raise ValueError("⛔ ACCESO DENEGADO: Solo Administradores pueden registrar egresos de Cuentas Bancarias Globales.")
+    # ----------------------------------
+
     # 2. Crear el Gasto (Papel)
+    expense_data = expense.model_dump(exclude={"pin"})
+    db_expense = models.Expense(
+        **expense_data,
+        user_id=user.id 
+    )
+    db.add(db_expense)
+    db.flush() # Para obtener el ID
+
+    # 3. MOVER EL DINERO (Crear CashTransaction)
+    if expense.account_id:
+        # (Ya validamos la cuenta arriba, así que procedemos directo)
+        
+        # Creamos el egreso físico del dinero
+        transaction = models.CashTransaction(
+            amount=expense.amount * -1, # Negativo = Salida
+            description=f"GASTO #{db_expense.id}: {expense.description}",
+            user_id=user.id,
+            account_id=expense.account_id
+        )
+        db.add(transaction)
+
+    db.commit()
+    db.refresh(db_expense)
+    return db_expense
     expense_data = expense.model_dump(exclude={"pin"})
     db_expense = models.Expense(
         **expense_data,
