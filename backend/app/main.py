@@ -237,16 +237,26 @@ def setup_first_admin(
 def create_new_user(
     user: schemas.UserCreate,
     db: Session = Depends(get_db),
+    current_user: models.User = Depends(security.get_current_user), # <--- NECESARIO
     _role_check: None = Depends(security.require_role(required_roles=["admin"]))
 ):
+    if not current_user.company_id:
+        raise HTTPException(status_code=400, detail="Error de permisos: Admin sin empresa.")
+
     db_user = crud.get_user_by_email(db, email=user.email)
     if db_user:
         raise HTTPException(status_code=400, detail="El email ya está registrado")
-    return crud.create_user(db=db, user=user)
+    # Creamos el usuario dentro de la misma empresa del admin
+    return crud.create_user(db=db, user=user, company_id=current_user.company_id)
 
 @app.get("/users/", response_model=List[schemas.User])
-def read_users(db: Session = Depends(get_db), _role_check: None = Depends(security.require_role(required_roles=["admin"]))):
-    return crud.get_users(db)
+def read_users(
+    db: Session = Depends(get_db), 
+    current_user: models.User = Depends(security.get_current_user), # <--- NECESARIO
+    _role_check: None = Depends(security.require_role(required_roles=["admin"]))
+):
+    if not current_user.company_id: return []
+    return crud.get_users(db, company_id=current_user.company_id)
 
 @app.patch("/users/{user_id}", response_model=schemas.User)
 def update_user_details(user_id: int, user_update: schemas.UserUpdate, db: Session = Depends(get_db), _role_check: None = Depends(security.require_role(required_roles=["admin"]))):
@@ -277,7 +287,13 @@ async def login_for_access_token(
     user = crud.get_user_by_email(db, email=form_data.username)
     if not user or not security.verify_password(form_data.password, user.hashed_password):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Email o contraseña incorrectos", headers={"WWW-Authenticate": "Bearer"})
-    access_token = security.create_access_token(data={"sub": user.email, "role": user.role})
+    
+    # --- MODIFICADO: Agregamos company_id al token (La "pulsera" ahora dice la habitación) ---
+    access_token = security.create_access_token(data={
+        "sub": user.email, 
+        "role": user.role,
+        "company_id": user.company_id  # <--- Esto permite al frontend saber quién es la empresa
+    })
     return {"access_token": access_token, "token_type": "bearer"}
 
 @app.get("/users/me/profile", response_model=schemas.UserProfile)
@@ -295,33 +311,57 @@ def read_current_user_profile(
 # --- ENDPOINTS PARA CATEGORÍAS ---
 # ===================================================================
 @app.post("/categories/", response_model=schemas.Category, status_code=status.HTTP_201_CREATED)
-def create_new_category(category: schemas.CategoryCreate, db: Session = Depends(get_db), _role_check: None = Depends(security.require_role(required_roles=["admin", "inventory_manager"]))):
-    return crud.create_category(db=db, category=category)
+def create_new_category(
+    category: schemas.CategoryCreate, 
+    db: Session = Depends(get_db), 
+    # Necesitamos el usuario para saber a qué empresa asignar la categoría
+    current_user: models.User = Depends(security.get_current_user),
+    _role_check: None = Depends(security.require_role(required_roles=["admin", "inventory_manager"]))
+):
+    if not current_user.company_id:
+        raise HTTPException(status_code=400, detail="El usuario no pertenece a ninguna empresa.")
+    return crud.create_category(db=db, category=category, company_id=current_user.company_id)
 
 @app.get("/categories/", response_model=List[schemas.Category])
-def read_categories(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    return crud.get_categories(db, skip=skip, limit=limit)
-
+def read_categories(
+    skip: int = 0, 
+    limit: int = 100, 
+    db: Session = Depends(get_db),
+    # Ahora leer categorías requiere estar logueado para filtrar por empresa
+    current_user: models.User = Depends(security.get_current_user)
+):
+    if not current_user.company_id:
+        return [] # Si no tiene empresa, no ve nada
+    return crud.get_categories(db, company_id=current_user.company_id, skip=skip, limit=limit)
 # ===================================================================
 # --- ENDPOINTS PARA PRODUCTOS ---
 # ===================================================================
 @app.post("/products/", response_model=schemas.Product, status_code=status.HTTP_201_CREATED)
-def create_new_product(product: schemas.ProductCreate, db: Session = Depends(get_db), _role_check: None = Depends(security.require_role(required_roles=["admin", "inventory_manager"]))):
-    return crud.create_product(db=db, product=product)
+def create_new_product(
+    product: schemas.ProductCreate, 
+    db: Session = Depends(get_db), 
+    current_user: models.User = Depends(security.get_current_user),
+    _role_check: None = Depends(security.require_role(required_roles=["admin", "inventory_manager"]))
+):
+    if not current_user.company_id:
+        raise HTTPException(status_code=400, detail="El usuario no pertenece a ninguna empresa.")
+    return crud.create_product(db=db, product=product, company_id=current_user.company_id)
 
 @app.get("/products/", response_model=List[schemas.Product])
-@limiter.limit("60/minute")  # Evita martillazos de búsqueda desde el frontend
+@limiter.limit("60/minute")
 def read_products(
     request: Request,
     skip: int = 0,
     limit: int = 100,
     search: str | None = None,
     location_id: int | None = None, 
-    db: Session = Depends(get_db)
-    # No necesitamos el usuario actual aquí, la info de ubicación viene como parámetro
+    db: Session = Depends(get_db),
+    # AHORA SÍ necesitamos el usuario actual para el filtro de empresa
+    current_user: models.User = Depends(security.get_current_user)
 ):
-    # Pasamos los nuevos parámetros a la función CRUD
-    return crud.get_products(db, skip=skip, limit=limit, search=search, location_id=location_id)
+    if not current_user.company_id:
+        return []
+    return crud.get_products(db, company_id=current_user.company_id, skip=skip, limit=limit, search=search, location_id=location_id)
 
 @app.get("/products/{product_id}", response_model=schemas.Product)
 def read_product(product_id: int, db: Session = Depends(get_db)):
@@ -625,12 +665,26 @@ def delete_work_order_image_endpoint(
 # --- ENDPOINTS PARA UBICACIONES ---
 # ===================================================================
 @app.post("/locations/", response_model=schemas.Location, status_code=status.HTTP_201_CREATED)
-def create_new_location(location: schemas.LocationCreate, db: Session = Depends(get_db), _role_check: None = Depends(security.require_role(required_roles=["admin"]))):
-    return crud.create_location(db=db, location=location)
+def create_new_location(
+    location: schemas.LocationCreate, 
+    db: Session = Depends(get_db), 
+    current_user: models.User = Depends(security.get_current_user),
+    _role_check: None = Depends(security.require_role(required_roles=["admin"]))
+):
+    if not current_user.company_id:
+        raise HTTPException(status_code=400, detail="Admin sin empresa.")
+    return crud.create_location(db=db, location=location, company_id=current_user.company_id)
 
 @app.get("/locations/", response_model=List[schemas.Location])
-def read_locations(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    return crud.get_locations(db, skip=skip, limit=limit)
+def read_locations(
+    skip: int = 0, 
+    limit: int = 100, 
+    db: Session = Depends(get_db),
+    # Ahora requiere usuario para saber qué sucursales mostrar
+    current_user: models.User = Depends(security.get_current_user)
+):
+    if not current_user.company_id: return []
+    return crud.get_locations(db, company_id=current_user.company_id, skip=skip, limit=limit)
 
 @app.get("/locations/{location_id}", response_model=schemas.Location)
 def read_location(location_id: int, db: Session = Depends(get_db)):
@@ -655,13 +709,17 @@ def delete_location_by_id(location_id: int, db: Session = Depends(get_db), _role
 
 # --- INICIO DE NUESTRO CÓDIGO (Ruta para el "Plomero") ---
 @app.get("/api/bodegas/", response_model=List[schemas.Location])
-def read_all_bodegas(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+def read_all_bodegas(
+    skip: int = 0, 
+    limit: int = 100, 
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(security.get_current_user)
+):
     """
-    Ruta especial que devuelve SÓLO las bodegas (locaciones con parent_id).
-    Usado por el formulario de ajuste de inventario.
+    Ruta especial que devuelve SÓLO las bodegas de mi empresa.
     """
-    # Llama a la nueva regla del archivista
-    return crud.get_bodegas(db, skip=skip, limit=limit)
+    if not current_user.company_id: return []
+    return crud.get_bodegas(db, company_id=current_user.company_id, skip=skip, limit=limit)
 # --- FIN DE NUESTRO CÓDIGO ---
 
 # ===================================================================
@@ -1170,12 +1228,26 @@ def search_ready_work_orders_internal(
 # --- ENDPOINTS PARA PROVEEDORES ---
 # ===================================================================
 @app.post("/suppliers/", response_model=schemas.Supplier, status_code=status.HTTP_201_CREATED)
-def create_new_supplier(supplier: schemas.SupplierCreate, db: Session = Depends(get_db), _role_check: None = Depends(security.require_role(required_roles=["admin", "inventory_manager"]))):
-    return crud.create_supplier(db=db, supplier=supplier)
+def create_new_supplier(
+    supplier: schemas.SupplierCreate, 
+    db: Session = Depends(get_db), 
+    current_user: models.User = Depends(security.get_current_user),
+    _role_check: None = Depends(security.require_role(required_roles=["admin", "inventory_manager"]))
+):
+    if not current_user.company_id:
+        raise HTTPException(status_code=400, detail="Usuario sin empresa.")
+    return crud.create_supplier(db=db, supplier=supplier, company_id=current_user.company_id)
 
 @app.get("/suppliers/", response_model=List[schemas.Supplier])
-def read_suppliers(skip: int = 0, limit: int = 100, db: Session = Depends(get_db), _role_check: None = Depends(security.require_role(required_roles=["admin", "inventory_manager"]))):
-    return crud.get_suppliers(db, skip=skip, limit=limit)
+def read_suppliers(
+    skip: int = 0, 
+    limit: int = 100, 
+    db: Session = Depends(get_db), 
+    current_user: models.User = Depends(security.get_current_user),
+    _role_check: None = Depends(security.require_role(required_roles=["admin", "inventory_manager"]))
+):
+    if not current_user.company_id: return []
+    return crud.get_suppliers(db, company_id=current_user.company_id, skip=skip, limit=limit)
 
 @app.get("/suppliers/{supplier_id}", response_model=schemas.Supplier)
 def read_single_supplier(supplier_id: int, db: Session = Depends(get_db), _role_check: None = Depends(security.require_role(required_roles=["admin", "inventory_manager"]))):
@@ -1359,13 +1431,23 @@ def get_sale_receipt(
 # --- ENDPOINTS PARA GESTIÓN DE CAJA (CUENTAS Y TRANSACCIONES) ---
 # ===================================================================
 @app.post("/cash-accounts/", response_model=schemas.CashAccount, status_code=status.HTTP_201_CREATED)
-def create_new_cash_account(account: schemas.CashAccountCreate, db: Session = Depends(get_db), _role_check: None = Depends(security.require_role(required_roles=["admin"]))):
-    return crud.create_cash_account(db=db, account=account)
+def create_new_cash_account(
+    account: schemas.CashAccountCreate, 
+    db: Session = Depends(get_db), 
+    current_user: models.User = Depends(security.get_current_user), # <---
+    _role_check: None = Depends(security.require_role(required_roles=["admin"]))
+):
+    if not current_user.company_id: raise HTTPException(status_code=400, detail="Admin sin empresa.")
+    return crud.create_cash_account(db=db, account=account, company_id=current_user.company_id)
 
 @app.get("/locations/{location_id}/cash-accounts/", response_model=List[schemas.CashAccount])
-def read_cash_accounts_for_location(location_id: int, db: Session = Depends(get_db), current_user: schemas.User = Depends(security.get_current_user)):
-    return crud.get_cash_accounts_by_location(db, location_id=location_id)
-
+def read_cash_accounts_for_location(
+    location_id: int, 
+    db: Session = Depends(get_db), 
+    current_user: schemas.User = Depends(security.get_current_user)
+):
+    if not current_user.company_id: return []
+    return crud.get_cash_accounts_by_location(db, location_id=location_id, company_id=current_user.company_id)
 @app.post("/cash-transactions/", response_model=schemas.CashTransaction, status_code=status.HTTP_201_CREATED)
 def create_new_cash_transaction(transaction: schemas.CashTransactionCreate, db: Session = Depends(get_db), current_user: schemas.User = Depends(security.get_current_user)):
     if not current_user.hashed_pin or not security.verify_password(transaction.pin, current_user.hashed_pin):
@@ -1534,20 +1616,30 @@ def update_rule(
 def create_new_customer(
     customer: schemas.CustomerCreate, 
     db: Session = Depends(get_db), 
-    current_user: schemas.User = Depends(security.get_current_user)
+    current_user: models.User = Depends(security.get_current_user)
 ):
-    if crud.get_customer_by_id_card(db, id_card=customer.id_card):
-        raise HTTPException(status_code=400, detail="Ya existe un cliente con esta Cédula/RUC.")
+    if not current_user.company_id:
+        raise HTTPException(status_code=400, detail="Usuario sin empresa.")
+
+    # Verificamos si existe YA en MI empresa
+    if crud.get_customer_by_id_card(db, id_card=customer.id_card, company_id=current_user.company_id):
+        raise HTTPException(status_code=400, detail="Ya existe un cliente con esta Cédula/RUC en su empresa.")
     
-    # Buscamos la sucursal activa del usuario para asignarla al cliente
     active_shift = crud.get_active_shift_for_user(db, user_id=current_user.id)
     location_id = active_shift.location_id if active_shift else None
 
-    return crud.create_customer(db=db, customer=customer, location_id=location_id)
+    return crud.create_customer(db=db, customer=customer, company_id=current_user.company_id, location_id=location_id)
 
 @app.get("/customers/", response_model=List[schemas.Customer])
-def read_customers(skip: int = 0, limit: int = 100, search: str | None = None, db: Session = Depends(get_db), current_user: schemas.User = Depends(security.get_current_user)):
-    return crud.get_customers(db, skip=skip, limit=limit, search=search)
+def read_customers(
+    skip: int = 0, 
+    limit: int = 100, 
+    search: str | None = None, 
+    db: Session = Depends(get_db), 
+    current_user: models.User = Depends(security.get_current_user)
+):
+    if not current_user.company_id: return []
+    return crud.get_customers(db, company_id=current_user.company_id, skip=skip, limit=limit, search=search)
 
 @app.put("/customers/{customer_id}", response_model=schemas.Customer)
 def update_customer_details(customer_id: int, customer: schemas.CustomerCreate, db: Session = Depends(get_db), current_user: schemas.User = Depends(security.get_current_user)):
@@ -1783,17 +1875,18 @@ def read_expense_categories(
     db: Session = Depends(get_db), 
     current_user: models.User = Depends(security.get_current_user)
 ):
-    """Lista los tipos de gastos disponibles (Luz, Agua, etc)."""
-    return crud.get_expense_categories(db)
+    if not current_user.company_id: return []
+    return crud.get_expense_categories(db, company_id=current_user.company_id)
 
 @app.post("/expense-categories/", response_model=schemas.ExpenseCategory, status_code=status.HTTP_201_CREATED)
 def create_expense_category_endpoint(
     category: schemas.ExpenseCategoryCreate, 
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db), 
+    current_user: models.User = Depends(security.get_current_user), # <---
     _role: None = Depends(security.require_role(["admin", "inventory_manager"]))
 ):
-    """Crea un nuevo tipo de gasto."""
-    return crud.create_expense_category(db, category)
+    if not current_user.company_id: raise HTTPException(status_code=400, detail="Usuario sin empresa.")
+    return crud.create_expense_category(db, category, company_id=current_user.company_id)
 
 @app.delete("/expense-categories/{category_id}")
 def delete_expense_category_endpoint(
@@ -1832,13 +1925,13 @@ def read_expenses_history(
     skip: int = 0,
     limit: int = 100,
     db: Session = Depends(get_db),
+    current_user: models.User = Depends(security.get_current_user), # <--- NECESARIO
     _role: None = Depends(security.require_role(["admin", "inventory_manager"]))
 ):
-    """
-    Reporte de gastos con filtros.
-    """
+    if not current_user.company_id: return []
     return crud.get_expenses(
         db, 
+        company_id=current_user.company_id, # <--- FILTRO
         skip=skip, 
         limit=limit, 
         start_date=start_date, 
@@ -1866,18 +1959,17 @@ def get_financial_report_endpoint(
     end_date: date,
     location_id: int | None = None,
     db: Session = Depends(get_db),
+    current_user: models.User = Depends(security.get_current_user), # <---
     _role: None = Depends(security.require_role(["admin", "inventory_manager"]))
 ):
-    """
-    Genera el Reporte de Utilidad Neta (Pérdidas y Ganancias).
-    """
+    if not current_user.company_id: raise HTTPException(status_code=400, detail="Usuario sin empresa.")
     return crud.generate_financial_report(
         db, 
+        company_id=current_user.company_id, # <--- FILTRO
         start_date=start_date, 
         end_date=end_date, 
         location_id=location_id
     )
-
 # ===================================================================
 # --- TAREA PROGRAMADA: CIERRE AUTOMÁTICO DE TURNOS (23:55) ---
 # ===================================================================

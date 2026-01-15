@@ -7,6 +7,20 @@ from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from .database import Base
 
+# --- NUEVA TABLA MAESTRA: EMPRESAS (INQUILINOS DEL EDIFICIO) ---
+class Company(Base):
+    __tablename__ = "companies"
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, unique=True, index=True, nullable=False) # Ej: "Fix It", "ReparaXpress"
+    plan_type = Column(String, default="FREE") # FREE, PRO, ENTERPRISE
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    # Relaciones: Una empresa tiene muchos usuarios y configuraciones
+    users = relationship("User", back_populates="company")
+    settings = relationship("CompanySettings", back_populates="company", uselist=False) 
+    # (Más adelante agregaremos productos, clientes, etc. aquí)
+
 class User(Base):
     __tablename__ = "users"
     id = Column(Integer, primary_key=True, index=True)
@@ -20,6 +34,14 @@ class User(Base):
     hashed_pin = Column(String, nullable=True)
     role = Column(String, nullable=False, default='viewer')
     is_active = Column(Boolean, default=True)
+
+    # --- NUEVO: VINCULACIÓN CON LA EMPRESA ---
+    # Cada usuario pertenece a una empresa específica.
+    # nullable=True por ahora para no romper usuarios viejos, luego lo haremos obligatorio.
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=True)
+    company = relationship("Company", back_populates="users")
+    # -----------------------------------------
+
     movements = relationship("InventoryMovement", back_populates="user")
     shifts = relationship("Shift", back_populates="user")
     work_orders = relationship("WorkOrder", back_populates="user")
@@ -33,6 +55,11 @@ class User(Base):
 class Location(Base):
     __tablename__ = "locations"
     id = Column(Integer, primary_key=True, index=True)
+    
+    # --- PROPIEDAD: EMPRESA ---
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=True)
+    # --------------------------
+
     name = Column(String, index=True, nullable=False)
     description = Column(String, nullable=True)
     address = Column(String, nullable=True)
@@ -52,7 +79,12 @@ class Location(Base):
 class Product(Base):
     __tablename__ = "products"
     id = Column(Integer, primary_key=True, index=True)
-    sku = Column(String, unique=True, index=True, nullable=False)
+    
+    # --- PROPIEDAD: EMPRESA ---
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=True)
+    # --------------------------
+
+    sku = Column(String, index=True, nullable=False) # Quitamos unique global temporalmente
     name = Column(String, index=True, nullable=False)
     description = Column(String, nullable=True)
     price_1 = Column(Float)
@@ -83,7 +115,12 @@ class Product(Base):
 class Category(Base):
     __tablename__ = "categories"
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, unique=True, index=True, nullable=False)
+    
+    # --- PROPIEDAD: EMPRESA ---
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=True)
+    # --------------------------
+
+    name = Column(String, index=True, nullable=False) # Quitamos unique global
     description = Column(String, nullable=True)
     products = relationship("Product", back_populates="category")
 
@@ -135,6 +172,11 @@ class LostSaleLog(Base):
 class WorkOrder(Base):
     __tablename__ = "work_orders"
     id = Column(Integer, primary_key=True, index=True)
+    
+    # --- PROPIEDAD: EMPRESA ---
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=True)
+    # --------------------------
+
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     status = Column(String, default="RECIBIDO", nullable=False)
     
@@ -230,6 +272,11 @@ class WorkOrderImage(Base):
 class Sale(Base):
     __tablename__ = "sales"
     id = Column(Integer, primary_key=True, index=True)
+    
+    # --- PROPIEDAD: EMPRESA ---
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=True)
+    # --------------------------
+
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     subtotal_amount = Column(Float, nullable=False, default=0.0)
     tax_amount = Column(Float, nullable=False, default=0.0)
@@ -283,7 +330,12 @@ class SaleItem(Base):
 class Supplier(Base):
     __tablename__ = "suppliers"
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, unique=True, index=True, nullable=False)
+    
+    # --- PROPIEDAD: EMPRESA ---
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=True)
+    # --------------------------
+
+    name = Column(String, index=True, nullable=False)
     contact_person = Column(String, nullable=True)
     email = Column(String, unique=True, index=True, nullable=True)
     phone = Column(String, nullable=True)
@@ -318,7 +370,11 @@ class CashAccount(Base):
     __tablename__ = "cash_accounts"
     id = Column(Integer, primary_key=True, index=True)
     
-    name = Column(String, index=True, nullable=False) 
+    # --- PROPIEDAD: EMPRESA ---
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=True)
+    # --------------------------
+
+    name = Column(String, index=True, nullable=False)
     
     account_type = Column(String, nullable=False)
     # AHORA ES OPCIONAL (nullable=True)
@@ -355,6 +411,11 @@ class ProductImage(Base):
 class NotificationRule(Base):
     __tablename__ = "notification_rules"
     id = Column(Integer, primary_key=True, index=True)
+    
+    # --- PROPIEDAD: EMPRESA ---
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=True)
+    # --------------------------
+
     name = Column(String, nullable=False)
     event_type = Column(String, nullable=False) # "CLOCK_IN" o "SCHEDULED"
     message = Column(String, nullable=False)
@@ -369,8 +430,13 @@ class NotificationRule(Base):
 class Customer(Base):
     __tablename__ = "customers"
     id = Column(Integer, primary_key=True, index=True)
-    # La cédula/RUC debe ser única para no duplicar clientes
-    id_card = Column(String, unique=True, index=True, nullable=False) 
+    
+    # --- PROPIEDAD: EMPRESA ---
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=True)
+    # --------------------------
+
+    # Quitamos unique global para que dos empresas puedan tener al mismo cliente por separado
+    id_card = Column(String, index=True, nullable=False)
     name = Column(String, index=True, nullable=False)
     email = Column(String, nullable=True)
     phone = Column(String, nullable=True)
@@ -411,6 +477,11 @@ class CreditNote(Base):
 class CompanySettings(Base):
     __tablename__ = "company_settings"
     id = Column(Integer, primary_key=True, index=True)
+
+    # --- NUEVO: Pertenece a una empresa específica ---
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=True)
+    company = relationship("Company", back_populates="settings")
+    # -------------------------------------------------
     
     # Datos generales
     name = Column(String, default="Mi Empresa")
@@ -444,11 +515,15 @@ class CompanySettings(Base):
 class ExpenseCategory(Base):
     """
     Define los tipos de gastos (ej: Servicios Básicos, Nómina, Arriendo).
-    Es como las pestañas separadoras de un archivador.
     """
     __tablename__ = "expense_categories"
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, unique=True, index=True, nullable=False) # Ej: "Luz", "Agua"
+    
+    # --- PROPIEDAD: EMPRESA ---
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=True)
+    # --------------------------
+
+    name = Column(String, index=True, nullable=False) # Quitamos unique global
     description = Column(String, nullable=True)
     
     # Relación: Una categoría tiene muchos gastos registrados
@@ -457,10 +532,13 @@ class ExpenseCategory(Base):
 class Expense(Base):
     """
     Registra cada gasto individual.
-    Ej: Pago de Luz de Enero ($25.00) en el Local Centro.
     """
     __tablename__ = "expenses"
     id = Column(Integer, primary_key=True, index=True)
+    
+    # --- PROPIEDAD: EMPRESA ---
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=True)
+    # --------------------------
     
     # Detalles del dinero
     amount = Column(Float, nullable=False) # Cuánto costó

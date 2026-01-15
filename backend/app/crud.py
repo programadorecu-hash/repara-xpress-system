@@ -33,11 +33,13 @@ def _compute_sale_totals(items: list[dict], iva_percentage: float) -> tuple[floa
 def get_category(db: Session, category_id: int):
     return db.query(models.Category).filter(models.Category.id == category_id).first()
 
-def get_categories(db: Session, skip: int = 0, limit: int = 100):
-    return db.query(models.Category).order_by(models.Category.name).offset(skip).limit(limit).all()
+def get_categories(db: Session, company_id: int, skip: int = 0, limit: int = 100):
+    # --- FILTRO MULTI-TENANCY: Solo categorías de mi empresa ---
+    return db.query(models.Category).filter(models.Category.company_id == company_id).order_by(models.Category.name).offset(skip).limit(limit).all()
 
-def create_category(db: Session, category: schemas.CategoryCreate):
-    db_category = models.Category(**category.model_dump())
+def create_category(db: Session, category: schemas.CategoryCreate, company_id: int):
+    # --- ASIGNACIÓN: La categoría nace perteneciendo a la empresa ---
+    db_category = models.Category(**category.model_dump(), company_id=company_id)
     db.add(db_category)
     db.commit()
     db.refresh(db_category)
@@ -49,12 +51,13 @@ def create_category(db: Session, category: schemas.CategoryCreate):
 def get_product(db: Session, product_id: int):
     return db.query(models.Product).options(joinedload(models.Product.category), joinedload(models.Product.supplier), joinedload(models.Product.images)).filter(models.Product.id == product_id).first()
 
-def get_products(db: Session, skip: int = 0, limit: int = 100, search: str | None = None, location_id: int | None = None):
+def get_products(db: Session, company_id: int, skip: int = 0, limit: int = 100, search: str | None = None, location_id: int | None = None):
     # --- Parte 1: Encontrar los productos que coinciden y su stock local ---
     base_query = db.query(
         models.Product,
         models.Category.name.label("category_name")
     ).outerjoin(models.Category, models.Product.category_id == models.Category.id)\
+     .filter(models.Product.company_id == company_id)\
      .options(joinedload(models.Product.images), joinedload(models.Product.supplier)) # Cargar imágenes y proveedor
     current_bodega_id = None
     if location_id:
@@ -153,8 +156,9 @@ def get_products(db: Session, skip: int = 0, limit: int = 100, search: str | Non
 
     return products_list
 
-def create_product(db: Session, product: schemas.ProductCreate):
-    db_product = models.Product(**product.model_dump())
+def create_product(db: Session, product: schemas.ProductCreate, company_id: int):
+    # --- ASIGNACIÓN: El producto nace con la marca de la empresa ---
+    db_product = models.Product(**product.model_dump(), company_id=company_id)
     db.add(db_product)
     db.commit()
     db.refresh(db_product)
@@ -251,43 +255,43 @@ def delete_work_order_image(db: Session, image_id: int):
 def get_location(db: Session, location_id: int):
     return db.query(models.Location).filter(models.Location.id == location_id).first()
 
-def get_locations(db: Session, skip: int = 0, limit: int = 100):
-    # --- INICIO DE NUESTRO CÓDIGO (Mostrar solo Sucursales, no Bodegas) ---
-    # Filtramos para que solo muestre locaciones SIN 'parent_id' (es decir, las oficinas)
+def get_locations(db: Session, company_id: int, skip: int = 0, limit: int = 100):
+    # --- INICIO DE NUESTRO CÓDIGO (Mostrar solo Sucursales de MI empresa) ---
     return db.query(models.Location)\
-        .filter(models.Location.parent_id == None)\
+        .filter(models.Location.parent_id == None, models.Location.company_id == company_id)\
         .order_by(models.Location.name)\
         .offset(skip).limit(limit).all()
     # --- FIN DE NUESTRO CÓDIGO ---
 
-def create_location(db: Session, location: schemas.LocationCreate):
-    # --- INICIO DE NUESTRO CÓDIGO (La "Magia 3-en-1") ---
+def create_location(db: Session, location: schemas.LocationCreate, company_id: int):
+    # --- INICIO DE NUESTRO CÓDIGO (La "Magia 3-en-1" Multi-inquilino) ---
     
     # 1. Creamos la "Oficina Principal" (La Sucursal)
     sucursal_data = location.model_dump()
     sucursal_data['parent_id'] = None 
     
-    db_sucursal = models.Location(**sucursal_data)
+    # Asignamos la sucursal a la empresa
+    db_sucursal = models.Location(**sucursal_data, company_id=company_id)
     db.add(db_sucursal)
     
-    # 2. Hacemos un "pre-guardado" para que la base de datos nos dé el ID
     db.flush() 
 
-    # 3. Creamos el "Cuarto de Almacenamiento" (La Bodega)
+    # 2. Creamos la Bodega (También pertenece a la empresa)
     db_bodega = models.Location(
         name=f"Bodega - {db_sucursal.name}", 
         description=f"Almacén en {db_sucursal.name}",
         address=db_sucursal.address, 
-        parent_id=db_sucursal.id 
+        parent_id=db_sucursal.id,
+        company_id=company_id # <--- Importante
     )
     db.add(db_bodega)
     
-    # 4. Creamos la "Caja Fuerte de Ventas" (CashAccount)
-    # ARREGLO ESTÉTICO: Nombre en mayúsculas
+    # 3. Creamos la Caja Fuerte (También pertenece a la empresa)
     db_caja_ventas = models.CashAccount(
         name=f"CAJA VENTAS - {db_sucursal.name.upper()}",
         account_type="CAJA_VENTAS", 
-        location_id=db_sucursal.id 
+        location_id=db_sucursal.id,
+        company_id=company_id # <--- Importante
     )
     db.add(db_caja_ventas)
 
@@ -334,14 +338,12 @@ def get_primary_bodega_for_location(db: Session, location_id: int):
     return db.query(models.Location).filter(models.Location.parent_id == location_id).first()
 
 # --- INICIO DE NUESTRO CÓDIGO (Lista solo de Bodegas) ---
-def get_bodegas(db: Session, skip: int = 0, limit: int = 100):
+def get_bodegas(db: Session, company_id: int, skip: int = 0, limit: int = 100):
     """
-    Devuelve una lista de TODAS las bodegas (cuartos de almacenamiento).
-    Filtra solo las locaciones que SÍ tienen un parent_id.
+    Devuelve una lista de las bodegas DE MI EMPRESA.
     """
-    # Esta es la regla del "plomero": "tráeme solo los cuartos con parent_id"
     return db.query(models.Location)\
-        .filter(models.Location.parent_id != None)\
+        .filter(models.Location.parent_id != None, models.Location.company_id == company_id)\
         .order_by(models.Location.name)\
         .offset(skip).limit(limit).all()
 # --- FIN DE NUESTRO CÓDIGO ---
@@ -448,20 +450,21 @@ def get_movements_by_product(db: Session, product_id: int):
 def get_user_by_email(db: Session, email: str):
     return db.query(models.User).filter(models.User.email == email).first()
 
-def get_users(db: Session, skip: int = 0, limit: int = 100):
-    return db.query(models.User).order_by(models.User.id).offset(skip).limit(limit).all()
+def get_users(db: Session, company_id: int, skip: int = 0, limit: int = 100):
+    # Solo mostrar empleados de mi empresa
+    return db.query(models.User).filter(models.User.company_id == company_id).order_by(models.User.id).offset(skip).limit(limit).all()
 
-def create_user(db: Session, user: schemas.UserCreate):
+def create_user(db: Session, user: schemas.UserCreate, company_id: int):
     # --- INICIO DE NUESTRO CÓDIGO (RRHH: Crear empleado/gerente) ---
     hashed_password = security.get_password_hash(user.password)
     
-    # Preparamos al usuario con los datos del formulario "Crear"
+    # Preparamos al usuario y le asignamos la EMPRESA del jefe
     db_user = models.User(
         email=user.email,
         hashed_password=hashed_password,
         role=user.role,
-        is_active=True  # Activamos el usuario por defecto
-        # (El PIN se deja en None a propósito, para que el usuario lo cree)
+        is_active=True,
+        company_id=company_id # <--- AQUÍ ESTÁ LA CLAVE
     )
     db.add(db_user)
     db.commit()
@@ -701,10 +704,12 @@ def get_work_orders(db: Session, user: models.User, skip: int = 0, limit: int = 
     return results
 
 def create_work_order(db: Session, work_order: schemas.WorkOrderCreate, user_id: int, location_id: int):
+    # Recuperamos al usuario para saber su COMPANY ID
+    user = db.query(models.User).get(user_id)
+    company_id = user.company_id
+
     # --- INICIO LÓGICA CLIENTE INTELIGENTE (UPSERT) ---
-    # Antes de crear la orden, verificamos si el cliente existe para actualizarlo o crearlo.
-    # Esto evita duplicados y mantiene la base de datos de clientes al día.
-    existing_customer = get_customer_by_id_card(db, id_card=work_order.customer_id_card)
+    existing_customer = get_customer_by_id_card(db, id_card=work_order.customer_id_card, company_id=company_id)
 
     if existing_customer:
         # Si el cliente YA EXISTE, actualizamos sus datos con la info fresca de esta orden.
@@ -722,7 +727,8 @@ def create_work_order(db: Session, work_order: schemas.WorkOrderCreate, user_id:
             phone=work_order.customer_phone,
             email=work_order.customer_email,
             address=work_order.customer_address,
-            location_id=location_id, # Registramos en qué sucursal apareció por primera vez
+            location_id=location_id,
+            company_id=company_id, # <--- ASIGNACIÓN IMPORTANTE
             notes="Cliente registrado automáticamente desde Orden de Trabajo"
         )
         db.add(new_customer)
@@ -730,7 +736,8 @@ def create_work_order(db: Session, work_order: schemas.WorkOrderCreate, user_id:
 
     # 1. Crear la Orden de Trabajo básica
     work_order_data = work_order.model_dump(exclude={"pin", "deposit_payment_method"})
-    db_work_order = models.WorkOrder(**work_order_data, user_id=user_id, location_id=location_id)
+    # Asignamos la company_id también a la Orden
+    db_work_order = models.WorkOrder(**work_order_data, user_id=user_id, location_id=location_id, company_id=company_id)
     db.add(db_work_order)
     db.flush() # Obtenemos el ID de la orden
 
@@ -907,11 +914,11 @@ def get_work_order_notes(db: Session, work_order_id: int, skip: int = 0, limit: 
 def get_supplier(db: Session, supplier_id: int):
     return db.query(models.Supplier).filter(models.Supplier.id == supplier_id).first()
 
-def get_suppliers(db: Session, skip: int = 0, limit: int = 100):
-    return db.query(models.Supplier).order_by(models.Supplier.name).offset(skip).limit(limit).all()
+def get_suppliers(db: Session, company_id: int, skip: int = 0, limit: int = 100):
+    return db.query(models.Supplier).filter(models.Supplier.company_id == company_id).order_by(models.Supplier.name).offset(skip).limit(limit).all()
 
-def create_supplier(db: Session, supplier: schemas.SupplierCreate):
-    db_supplier = models.Supplier(**supplier.model_dump())
+def create_supplier(db: Session, supplier: schemas.SupplierCreate, company_id: int):
+    db_supplier = models.Supplier(**supplier.model_dump(), company_id=company_id)
     db.add(db_supplier)
     db.commit()
     db.refresh(db_supplier)
@@ -1040,6 +1047,10 @@ def create_purchase_invoice(db: Session, invoice: schemas.PurchaseInvoiceCreate,
 # --- INICIO DE NUESTRO CÓDIGO (Venta con Pagos Mixtos y Costo Histórico) ---
 def create_sale(db: Session, sale: schemas.SaleCreate, user_id: int, location_id: int):
     try:
+        # Recuperamos al usuario para saber su COMPANY ID
+        user = db.query(models.User).get(user_id)
+        company_id = user.company_id
+
         bodega = get_primary_bodega_for_location(db, location_id=location_id)
         if not bodega:
             raise ValueError(f"La sucursal con ID {location_id} no tiene una bodega configurada.")
@@ -1048,7 +1059,7 @@ def create_sale(db: Session, sale: schemas.SaleCreate, user_id: int, location_id
             raise ValueError("La venta debe incluir al menos un ítem.")
         
         # --- INICIO LÓGICA CLIENTE INTELIGENTE ---
-        existing_customer = get_customer_by_id_card(db, id_card=sale.customer_ci)
+        existing_customer = get_customer_by_id_card(db, id_card=sale.customer_ci, company_id=company_id)
         
         if existing_customer:
             existing_customer.name = sale.customer_name
@@ -1062,7 +1073,8 @@ def create_sale(db: Session, sale: schemas.SaleCreate, user_id: int, location_id
                 phone=sale.customer_phone,
                 email=sale.customer_email,
                 address=sale.customer_address,
-                location_id=location_id, 
+                location_id=location_id,
+                company_id=company_id, # <--- ASIGNACIÓN
                 notes="Cliente registrado automáticamente desde Venta"
             )
             db.add(new_customer)
@@ -1177,6 +1189,7 @@ def create_sale(db: Session, sale: schemas.SaleCreate, user_id: int, location_id
 
             user_id=user_id,
             location_id=location_id,
+            company_id=company_id, # <--- ASIGNACIÓN
             work_order_id=sale.work_order_id,
             items=sale_items_to_create
         )
@@ -1392,23 +1405,24 @@ def get_sales(
 # ===================================================================
 # --- GESTIÓN DE CAJA ---
 # ===================================================================
-def create_cash_account(db: Session, account: schemas.CashAccountCreate):
+def create_cash_account(db: Session, account: schemas.CashAccountCreate, company_id: int):
     # Convertimos el nombre a MAYÚSCULAS antes de guardar
     account_data = account.model_dump()
-    # ARREGLO VISUAL: El nombre de la caja siempre en mayúsculas para consistencia
     account_data['name'] = account_data['name'].upper()
     
-    db_account = models.CashAccount(**account_data)
+    # Asignamos la cuenta a la empresa
+    db_account = models.CashAccount(**account_data, company_id=company_id)
     db.add(db_account)
     db.commit()
     db.refresh(db_account)
     return db_account
 
-def get_cash_accounts_by_location(db: Session, location_id: int):
+def get_cash_accounts_by_location(db: Session, location_id: int, company_id: int):
     """
-    Devuelve cuentas de la sucursal Y cuentas globales (Bancos).
+    Devuelve cuentas de la sucursal Y cuentas globales (Bancos) DE MI EMPRESA.
     """
     return db.query(models.CashAccount).filter(
+        models.CashAccount.company_id == company_id, # <--- FILTRO MAESTRO
         or_(
             models.CashAccount.location_id == location_id,
             models.CashAccount.location_id == None # Cuentas Globales
@@ -1755,12 +1769,16 @@ def check_active_notifications(db: Session, user_id: int, event_type: str):
 def get_customer(db: Session, customer_id: int):
     return db.query(models.Customer).filter(models.Customer.id == customer_id).first()
 
-def get_customer_by_id_card(db: Session, id_card: str):
-    return db.query(models.Customer).filter(models.Customer.id_card == id_card).first()
+def get_customer_by_id_card(db: Session, id_card: str, company_id: int):
+    # Ahora buscamos la cédula PERO solo dentro de mi empresa
+    return db.query(models.Customer).filter(
+        models.Customer.id_card == id_card, 
+        models.Customer.company_id == company_id
+    ).first()
 
-def get_customers(db: Session, skip: int = 0, limit: int = 100, search: str | None = None):
+def get_customers(db: Session, company_id: int, skip: int = 0, limit: int = 100, search: str | None = None):
     # Cargamos la relación 'location' para saber el nombre de la sucursal
-    query = db.query(models.Customer).options(joinedload(models.Customer.location))
+    query = db.query(models.Customer).filter(models.Customer.company_id == company_id).options(joinedload(models.Customer.location))
     if search:
         search_term = f"%{search.lower()}%"
         query = query.filter(
@@ -1771,10 +1789,10 @@ def get_customers(db: Session, skip: int = 0, limit: int = 100, search: str | No
         )
     return query.order_by(models.Customer.name).offset(skip).limit(limit).all()
 
-def create_customer(db: Session, customer: schemas.CustomerCreate, location_id: int | None = None):
-    # Añadimos el location_id al crear
+def create_customer(db: Session, customer: schemas.CustomerCreate, company_id: int, location_id: int | None = None):
+    # Añadimos el location_id y company_id al crear
     data = customer.model_dump()
-    db_customer = models.Customer(**data, location_id=location_id)
+    db_customer = models.Customer(**data, location_id=location_id, company_id=company_id)
     db.add(db_customer)
     db.commit()
     db.refresh(db_customer)
@@ -2102,14 +2120,17 @@ def get_cash_closure_report_data(db: Session, account_id: int, closure_id: int |
 # ===================================================================
 
 # 1. GESTIÓN DE CATEGORÍAS (Las etiquetas del archivador)
-def get_expense_categories(db: Session):
-    """Devuelve la lista de tipos de gastos (Luz, Agua, Nómina, etc.)"""
-    return db.query(models.ExpenseCategory).order_by(models.ExpenseCategory.name).all()
+def get_expense_categories(db: Session, company_id: int):
+    """Devuelve la lista de tipos de gastos DE MI EMPRESA."""
+    return db.query(models.ExpenseCategory).filter(models.ExpenseCategory.company_id == company_id).order_by(models.ExpenseCategory.name).all()
 
-def create_expense_category(db: Session, category: schemas.ExpenseCategoryCreate):
+def create_expense_category(db: Session, category: schemas.ExpenseCategoryCreate, company_id: int):
     """Crea una nueva etiqueta para clasificar gastos."""
-    db_category = models.ExpenseCategory(**category.model_dump())
+    db_category = models.ExpenseCategory(**category.model_dump(), company_id=company_id)
     db.add(db_category)
+    db.commit()
+    db.refresh(db_category)
+    return db_category
     db.commit()
     db.refresh(db_category)
     return db_category
@@ -2147,43 +2168,14 @@ def create_expense(db: Session, expense: schemas.ExpenseCreate, user: models.Use
     expense_data = expense.model_dump(exclude={"pin"})
     db_expense = models.Expense(
         **expense_data,
-        user_id=user.id 
+        user_id=user.id,
+        company_id=user.company_id # <--- El gasto se marca con la empresa del usuario
     )
     db.add(db_expense)
     db.flush() # Para obtener el ID
 
     # 3. MOVER EL DINERO (Crear CashTransaction)
     if expense.account_id:
-        # (Ya validamos la cuenta arriba, así que procedemos directo)
-        
-        # Creamos el egreso físico del dinero
-        transaction = models.CashTransaction(
-            amount=expense.amount * -1, # Negativo = Salida
-            description=f"GASTO #{db_expense.id}: {expense.description}",
-            user_id=user.id,
-            account_id=expense.account_id
-        )
-        db.add(transaction)
-
-    db.commit()
-    db.refresh(db_expense)
-    return db_expense
-    expense_data = expense.model_dump(exclude={"pin"})
-    db_expense = models.Expense(
-        **expense_data,
-        user_id=user.id 
-    )
-    db.add(db_expense)
-    db.flush() # Para obtener el ID
-
-    # 3. MOVER EL DINERO (Crear CashTransaction)
-    # Si se seleccionó una caja (ahora es obligatorio en el schema, pero validamos igual)
-    if expense.account_id:
-        # Buscamos la cuenta para asegurar que existe y pertenece a la sucursal
-        account = get_cash_account(db, expense.account_id)
-        if not account:
-            raise ValueError("La cuenta de caja seleccionada no existe.")
-        
         # Creamos el egreso físico del dinero
         transaction = models.CashTransaction(
             amount=expense.amount * -1, # Negativo = Salida
@@ -2199,6 +2191,7 @@ def create_expense(db: Session, expense: schemas.ExpenseCreate, user: models.Use
 
 def get_expenses(
     db: Session, 
+    company_id: int, # <--- Nuevo parámetro obligatorio
     skip: int = 0, 
     limit: int = 100,
     start_date: date | None = None,
@@ -2206,11 +2199,10 @@ def get_expenses(
     location_id: int | None = None
 ):
     """
-    Busca los gastos en el archivador.
-    Permite filtrar por fechas y por sucursal para los reportes.
+    Busca los gastos en el archivador DE MI EMPRESA.
     """
-    # Preparamos la consulta trayendo los nombres de Categoría, Usuario y Local
-    query = db.query(models.Expense).options(
+    # Preparamos la consulta y FILTRAMOS POR EMPRESA
+    query = db.query(models.Expense).filter(models.Expense.company_id == company_id).options(
         joinedload(models.Expense.category),
         joinedload(models.Expense.user),
         joinedload(models.Expense.location)
@@ -2243,22 +2235,23 @@ def delete_expense(db: Session, expense_id: int):
 # --- INICIO DE NUESTRO CÓDIGO (Lógica Financiera: El Reporte de Utilidad) ---
 def generate_financial_report(
     db: Session, 
+    company_id: int, # <--- Necesario para no sumar dinero ajeno
     start_date: date, 
     end_date: date, 
     location_id: int | None = None
 ):
     """
-    Calcula la Utilidad Neta en un rango de fechas.
-    Fórmula: (Ventas - Costo de Productos) - Gastos Operativos = Utilidad Neta
+    Calcula la Utilidad Neta en un rango de fechas DE MI EMPRESA.
     """
-    # Filtros base para fechas
-    # Usamos func.date para comparar solo la parte de la fecha, ignorando la hora
+    # Filtros base para fechas y EMPRESA
     date_filter_sales = and_(
+        models.Sale.company_id == company_id, # <--- Filtro de empresa
         func.date(models.Sale.created_at) >= start_date,
         func.date(models.Sale.created_at) <= end_date
     )
     
     date_filter_expenses = and_(
+        models.Expense.company_id == company_id, # <--- Filtro de empresa
         func.date(models.Expense.expense_date) >= start_date,
         func.date(models.Expense.expense_date) <= end_date
     )

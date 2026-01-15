@@ -65,6 +65,16 @@ def get_current_user(db: Session = Depends(get_db), token: str = Depends(oauth2_
             detail="El usuario está deshabilitado"
         )
 
+    # --- NUEVO: Validar si la Empresa está activa (SaaS) ---
+    # Si el usuario pertenece a una empresa, y esa empresa está desactivada (ej. falta de pago)
+    # SQLAlchemy carga user.company automáticamente cuando lo pedimos aquí.
+    if user.company_id and user.company and not user.company.is_active:
+         raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"La empresa '{user.company.name}' está desactivada. Contacte a soporte."
+        )
+    # ------------------------------------------------------
+
     # Devolvemos el usuario completo obtenido de la base de datos
     return user
 

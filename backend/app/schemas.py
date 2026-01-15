@@ -5,6 +5,23 @@ from datetime import datetime, date
 # ===================================================================
 # --- SCHEMAS BASE ---
 # ===================================================================
+
+# --- NUEVOS SCHEMAS PARA EMPRESAS ---
+class CompanyBase(BaseModel):
+    name: str
+    plan_type: str = "FREE"
+
+class CompanyCreate(CompanyBase):
+    pass
+
+class Company(CompanyBase):
+    id: int
+    is_active: bool
+    created_at: datetime
+    class Config:
+        from_attributes = True
+# ------------------------------------
+
 class CategoryBase(BaseModel):
     name: str
     description: str | None = None
@@ -58,6 +75,9 @@ class ShiftBase(BaseModel):
 class UserBase(BaseModel):
     email: str
     role: str
+    # --- NUEVO: ID de la empresa (Opcional al crear, el sistema lo asignará) ---
+    company_id: int | None = None 
+    # --------------------------------------------------------------------------
     # --- INICIO DE NUESTRO CÓDIGO (Nuevos campos de RRHH) ---
     is_active: bool = True # Para que la lista muestre el estado
     full_name: str | None = None
