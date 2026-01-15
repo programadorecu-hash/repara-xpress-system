@@ -444,6 +444,71 @@ def create_inventory_movement(db: Session, movement: schemas.InventoryMovementCr
 def get_movements_by_product(db: Session, product_id: int):
     return db.query(models.InventoryMovement).options(joinedload(models.InventoryMovement.product), joinedload(models.InventoryMovement.location), joinedload(models.InventoryMovement.user)).filter(models.InventoryMovement.product_id == product_id).order_by(models.InventoryMovement.timestamp.desc()).all()
 
+# --- NUEVO: MOTOR DE BÚSQUEDA GLOBAL (TRIVAGO DE REPUESTOS) ---
+def search_global_parts(db: Session, query: str, limit: int = 50):
+    """
+    Busca repuestos en TODAS las empresas marcadas como 'is_distributor'.
+    Retorna una lista comparativa de precios y disponibilidad.
+    """
+    search_term = f"%{query.lower()}%"
+    
+    # 1. Encontrar IDs de empresas distribuidoras
+    distributor_ids = db.query(models.Company.id).filter(
+        models.Company.is_distributor == True,
+        models.Company.is_active == True
+    ).all()
+    # Aplanamos la lista de IDs (ej: [1, 5, 8])
+    dist_ids = [d.id for d in distributor_ids]
+
+    if not dist_ids:
+        return []
+
+    # 2. Buscar productos que coincidan en esas empresas
+    products = db.query(models.Product).join(models.Company).options(
+        joinedload(models.Product.stock_entries), # Para ver si hay stock
+        joinedload(models.Product.company).joinedload(models.Company.settings) # Para datos de contacto
+    ).filter(
+        models.Product.company_id.in_(dist_ids),
+        models.Product.is_active == True,
+        # Búsqueda flexible en nombre o descripción
+        or_(
+            func.lower(models.Product.name).like(search_term),
+            func.lower(models.Product.description).like(search_term)
+        )
+    ).limit(limit).all()
+
+    # 3. Formatear los resultados para el público
+    results = []
+    for p in products:
+        # Calcular stock total (sumando todas sus bodegas)
+        total_stock = sum(s.quantity for s in p.stock_entries)
+        
+        # Estado del stock (Semáforo)
+        stock_status = "Agotado"
+        if total_stock > 10: stock_status = "Disponible"
+        elif total_stock > 0: stock_status = "Pocas Unidades"
+
+        # Datos de contacto de la empresa
+        company_settings = p.company.settings if p.company.settings else None
+        phone = company_settings.phone if company_settings else None
+        address = company_settings.address if company_settings else None
+
+        results.append(schemas.PublicProductSearchResult(
+            product_name=p.name,
+            price=p.price_3 if p.price_3 > 0 else p.price_1, # Preferimos precio técnico (3)
+            stock_status=stock_status,
+            company_name=p.company.name,
+            company_address=address,
+            company_phone=phone,
+            last_updated=datetime.now() # Ojo: Idealmente usar fecha real
+        ))
+    
+    # Ordenar por precio (del más barato al más caro) para que sea útil
+    results.sort(key=lambda x: x.price)
+    
+    return results
+# --------------------------------------------------------------
+
 # ===================================================================
 # --- USUARIOS Y SEGURIDAD ---
 # ===================================================================

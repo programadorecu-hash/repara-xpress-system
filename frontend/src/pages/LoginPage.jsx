@@ -3,13 +3,32 @@ import apiClient from "../services/api";
 import { useNavigate } from "react-router-dom";
 import { AuthContext } from "../context/AuthContext.jsx";
 
+import { useSearchParams } from "react-router-dom"; // Importar hook para leer URL
+
 function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
-
+  
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { login } = useContext(AuthContext);
+
+  // --- LÓGICA AUTO-DEMO ---
+  // Si la URL tiene ?demo=true, llenamos los campos automáticamente
+  React.useEffect(() => {
+    if (searchParams.get("demo") === "true") {
+      setEmail("demo");
+      setPassword("demo");
+      // Opcional: Podríamos hacer submit automático, pero mejor que el usuario de clic para que vea.
+    }
+  }, [searchParams]);
+
+  // Función para activar modo demo manualmente
+  const fillDemoCredentials = () => {
+    setEmail("demo");
+    setPassword("demo");
+  };
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -75,7 +94,7 @@ function LoginPage() {
             <input
               type="text"
               id="email"
-              className="w-full p-3 bg-gray-100 rounded-lg text-secondary border border-gray-300 focus:outline-none focus:border-detail uppercase" // Agregamos 'uppercase' visual
+              className="w-full p-3 bg-gray-100 rounded-lg text-secondary border border-gray-300 focus:outline-none focus:border-detail"
               value={email}
               onChange={(e) => setEmail(e.target.value)} // El backend buscará este texto en la columna email
               required
@@ -106,21 +125,44 @@ function LoginPage() {
           </div>
           <button
             type="submit"
-            className="w-full bg-accent hover:bg-teal-500 text-white font-bold py-3 rounded-lg transition duration-300"
+            className="w-full bg-accent hover:bg-teal-500 text-white font-bold py-3 rounded-lg transition duration-300 shadow-md"
           >
             Ingresar
           </button>
+
+          {/* Botón Acceso Rápido DEMO */}
+          <button
+            type="button"
+            onClick={fillDemoCredentials}
+            className="w-full mt-3 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold py-3 rounded-lg transition duration-300 border border-indigo-200"
+          >
+            🧪 Probar Demo (Acceso Rápido)
+          </button>
         </form>
 
-        {/* --- SECCIÓN NUEVA: Enlace al Registro --- */}
-        <div className="mt-6 text-center border-t border-gray-200 pt-4">
-          <p className="text-gray-600 mb-2">¿Quieres usar este sistema en tu negocio?</p>
+        {/* --- SECCIÓN PÚBLICA: LISTA DE PRECIOS --- */}
+        <div className="mt-8 pt-6 border-t border-gray-100">
+          
+          {/* Botón Gancho PRINCIPAL */}
           <button
-            onClick={() => navigate("/register")}
-            className="text-accent font-bold hover:underline hover:text-teal-700 transition-colors"
+            onClick={() => navigate("/catalogo-repuestos")}
+            className="w-full bg-gradient-to-r from-yellow-400 to-yellow-500 hover:from-yellow-500 hover:to-yellow-600 text-blue-900 font-extrabold py-4 px-6 rounded-xl shadow-lg transform hover:scale-105 transition-all duration-300 flex items-center justify-center space-x-2 group mb-6"
           >
-            Registrar mi Empresa Gratis
+            <span className="text-2xl">🔍</span>
+            <span className="uppercase tracking-wide">Lista de Precios Febrero 2026</span>
           </button>
+
+          {/* Enlace de Registro (Más discreto) */}
+          <div className="text-center">
+            <p className="text-sm text-gray-500 mb-2">¿Tienes un taller o eres distribuidor?</p>
+            <button
+              onClick={() => navigate("/register")}
+              className="text-accent font-bold hover:underline hover:text-teal-700 transition-colors text-sm"
+            >
+              Registra tu Empresa Gratis y Aparece Aquí
+            </button>
+          </div>
+          
         </div>
         {/* ----------------------------------------- */}
 

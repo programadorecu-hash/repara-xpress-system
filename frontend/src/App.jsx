@@ -38,7 +38,8 @@ import CompanySettingsPage from "./pages/CompanySettingsPage.jsx";
 import ExpensesPage from "./pages/ExpensesPage.jsx";
 import FinancialReportPage from "./pages/FinancialReportPage.jsx";
 import RegisterPage from "./pages/RegisterPage.jsx"; 
-import PasswordRecoveryPage from "./pages/PasswordRecoveryPage.jsx"; // <--- NUEVA IMPORTACIÓN
+import PasswordRecoveryPage from "./pages/PasswordRecoveryPage.jsx"; 
+import PublicCatalogPage from "./pages/PublicCatalogPage.jsx"; // <--- NUEVO
 
 // Esta es la "Guardia" que revisa si la caja fuerte está configurada
 function SetupGuard() {
@@ -49,8 +50,9 @@ function SetupGuard() {
   useEffect(() => {
     const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
-    // Si el usuario quiere ir a REGISTRARSE o RECUPERAR CLAVE, no lo molestamos
-    if (window.location.pathname === "/register" || window.location.pathname === "/recuperar-clave") {
+    // Permitimos acceso a las rutas públicas sin chequeo de setup
+    const publicRoutes = ["/register", "/recuperar-clave", "/catalogo-repuestos"];
+    if (publicRoutes.includes(window.location.pathname)) {
         setIsSetupComplete(true); 
         return;
     }
@@ -67,7 +69,7 @@ function SetupGuard() {
           }
         } else {
           // Bloqueamos acceso si no está configurado, EXCEPTO para las rutas públicas
-          const publicPaths = ["/register", "/recuperar-clave"];
+          const publicPaths = ["/register", "/recuperar-clave", "/catalogo-repuestos"];
           if (!publicPaths.includes(window.location.pathname)) {
              navigate("/setup");
           }
@@ -120,6 +122,9 @@ function SetupGuard() {
         <Route path="/register" element={<RegisterPage />} />
         {/* Agregamos la ruta pública de recuperación */}
         <Route path="/recuperar-clave" element={<PasswordRecoveryPage />} />
+        {/* --- NUEVO: RUTA DEL CATÁLOGO PÚBLICO --- */}
+        <Route path="/catalogo-repuestos" element={<PublicCatalogPage />} />
+        {/* ---------------------------------------- */}
 
         <Route path="/setup" element={<SetupPage />} />
         

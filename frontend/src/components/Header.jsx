@@ -58,7 +58,7 @@ function NavItem({ to, icon, label, isExpanded }) {
 
 // El Header/Menú Principal
 function Header({ isMenuOpen, onToggle, companyInfo, apiUrl }) {
-  const { user, activeShift, logout } = useContext(AuthContext);
+  const { token, user, activeShift, logout } = useContext(AuthContext); // <--- TOKEN AGREGADO
   const navigate = useNavigate();
 
   // Ya no cargamos datos aquí, usamos companyInfo que viene de AppLayout

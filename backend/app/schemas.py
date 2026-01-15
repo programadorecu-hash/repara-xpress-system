@@ -17,10 +17,25 @@ class CompanyCreate(CompanyBase):
 class Company(CompanyBase):
     id: int
     is_active: bool
+    is_distributor: bool # <--- Agregamos esto para lectura interna
     created_at: datetime
     class Config:
         from_attributes = True
 # ------------------------------------
+
+# --- NUEVO SCHEMA: RESULTADO DE BÚSQUEDA PÚBLICA (Trivago) ---
+class PublicProductSearchResult(BaseModel):
+    product_name: str
+    price: float # Precio de venta al público
+    stock_status: str # "Disponible", "Pocas Unidades", "Agotado"
+    company_name: str # Quién lo vende (Ej: "Importadora Xavacces")
+    company_address: str | None = None
+    company_phone: str | None = None # Para el botón de WhatsApp
+    last_updated: datetime
+
+    class Config:
+        from_attributes = True
+# -------------------------------------------------------------
 
 class CategoryBase(BaseModel):
     name: str

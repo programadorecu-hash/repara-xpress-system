@@ -14,6 +14,11 @@ class Company(Base):
     name = Column(String, unique=True, index=True, nullable=False) # Ej: "Fix It", "ReparaXpress"
     plan_type = Column(String, default="FREE") # FREE, PRO, ENTERPRISE
     is_active = Column(Boolean, default=True)
+    
+    # --- NUEVO: MARCA DE DISTRIBUIDOR (Para aparecer en el buscador público) ---
+    is_distributor = Column(Boolean, default=False) 
+    # --------------------------------------------------------------------------
+
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     # Relaciones: Una empresa tiene muchos usuarios y configuraciones

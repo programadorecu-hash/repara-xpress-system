@@ -92,11 +92,11 @@ function RegisterPage() {
 
           {/* Email del Dueño */}
           <div>
-            <label className="block text-gray-700 font-bold mb-1">Correo Electrónico (Admin)</label>
+            <label className="block text-gray-700 font-bold mb-1">Usuario o Correo (Admin)</label>
             <input
-              type="email"
+              type="text" 
               name="admin_email"
-              placeholder="tu@email.com"
+              placeholder="tu@email.com o demo"
               className="w-full p-3 border rounded-lg focus:outline-none focus:border-accent"
               value={formData.admin_email}
               onChange={handleChange}

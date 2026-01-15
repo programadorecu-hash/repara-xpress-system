@@ -143,8 +143,26 @@ def read_root():
     return {"message": "¡Bienvenido a la API de Repara Xpress Quito!"}
 
 # ===================================================================
-# --- ENDPOINTS PÚBLICOS (VISOR DE DOCUMENTOS) ---
+# --- ENDPOINTS PÚBLICOS (VISOR DE DOCUMENTOS Y BUSCADOR) ---
 # ===================================================================
+
+# --- NUEVO: BUSCADOR PÚBLICO DE REPUESTOS ---
+@limiter.limit("20/minute") # Límite para evitar scraping masivo
+@app.get("/public/search/parts", response_model=List[schemas.PublicProductSearchResult])
+def search_parts_public(
+    request: Request,  # <--- ¡ESTO FALTABA! El limitador lo necesita obligatoriamente
+    q: str, 
+    db: Session = Depends(get_db)
+):
+    """
+    Buscador global de repuestos en la red de mayoristas.
+    No requiere login.
+    """
+    if len(q) < 3:
+        raise HTTPException(status_code=400, detail="Escribe al menos 3 letras.")
+        
+    return crud.search_global_parts(db, query=q)
+# --------------------------------------------
 
 @app.get("/public/view/sale/{public_id}", response_class=StreamingResponse)
 def view_public_sale_receipt(public_id: str, db: Session = Depends(get_db)):

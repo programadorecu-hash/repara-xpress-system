@@ -90,8 +90,15 @@ function AppLayout() {
   };
 
   return (
-    <div className="flex h-dvh overflow-hidden text-secondary bg-gray-50">
+    <div className="flex h-dvh overflow-hidden text-secondary bg-gray-50 flex-col md:flex-row">
       
+      {/* --- CINTA DE MODO DEMO (Visible si el usuario es "demo") --- */}
+      {user?.email === "demo" && (
+        <div className="bg-red-600 text-white text-xs font-bold text-center py-1 absolute top-0 left-0 right-0 z-[60] shadow-md">
+          ⚠️ ESTAS EN MODO DEMO - Los datos son públicos y se borran cada 24h - NO USAR PARA VENTAS REALES ⚠️
+        </div>
+      )}
+
       {/* --- BARRA SUPERIOR MÓVIL (Solo visible en celulares) --- */}
       {/* Esto crea una franja blanca arriba con el logo centrado y el botón de menú */}
       <header className="md:hidden fixed top-0 left-0 right-0 h-16 bg-white/90 backdrop-blur-md border-b border-gray-200 z-30 flex items-center px-4 justify-between shadow-sm">
