@@ -3,9 +3,7 @@
 import React, { useContext } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { AuthContext } from "../context/AuthContext.jsx";
-// Importamos la función para leer datos
-import { getCompanySettings } from "../services/api";
-import { useEffect, useState } from "react";
+// (Eliminamos getCompanySettings, useEffect y useState porque los datos ahora vienen del padre)
 
 // Importamos los íconos
 import {
@@ -59,23 +57,11 @@ function NavItem({ to, icon, label, isExpanded }) {
 }
 
 // El Header/Menú Principal
-function Header({ isMenuOpen, onToggle }) {
-  const { token, user, activeShift, logout } = useContext(AuthContext);
+function Header({ isMenuOpen, onToggle, companyInfo, apiUrl }) {
+  const { user, activeShift, logout } = useContext(AuthContext);
   const navigate = useNavigate();
 
-  // Estado para guardar el nombre de la empresa
-  const [companyName, setCompanyName] = useState("Repara Xpress");
-
-  // Efecto para cargar el nombre real
-  useEffect(() => {
-    if (token) {
-      getCompanySettings()
-        .then((data) => {
-          if (data && data.name) setCompanyName(data.name);
-        })
-        .catch((err) => console.error("Error cargando nombre empresa", err));
-    }
-  }, [token]);
+  // Ya no cargamos datos aquí, usamos companyInfo que viene de AppLayout
 
   const canManageInventory =
     user?.role === "admin" || user?.role === "inventory_manager";
@@ -115,10 +101,29 @@ function Header({ isMenuOpen, onToggle }) {
         <div
           className={`flex ${
             isMenuOpen ? "justify-between" : "justify-center"
-          } items-center px-2 flex-shrink-0`}
+          } items-center px-2 flex-shrink-0 py-4`}
         >
-          <div className={`text-white font-bold text-xl truncate px-2 transition-all duration-500 ease-in-out ${isMenuOpen ? "opacity-100 max-w-[200px]" : "opacity-0 max-w-0 hidden md:block"}`}>
-              {companyName}
+          {/* Lógica de Visualización del Logo/Nombre */}
+          <div className={`transition-all duration-500 ease-in-out flex items-center ${isMenuOpen ? "opacity-100 max-w-[200px]" : "opacity-100 w-full justify-center"}`}>
+            
+            {companyInfo?.logo_url ? (
+              // CASO 1: TIENE LOGO
+              <img 
+                src={`${apiUrl}${companyInfo.logo_url}`} 
+                alt={companyInfo.name} 
+                className={`object-contain transition-all duration-500 ${isMenuOpen ? "h-12 w-auto" : "h-10 w-10 rounded-full bg-white p-1"}`} 
+              />
+            ) : (
+              // CASO 2: NO TIENE LOGO (Texto)
+              isMenuOpen ? (
+                <span className="text-white font-bold text-lg truncate">{companyInfo?.name}</span>
+              ) : (
+                // Si está cerrado y no hay logo, mostramos la inicial
+                <div className="h-10 w-10 bg-accent rounded-full flex items-center justify-center text-white font-bold text-xl">
+                  {companyInfo?.name?.charAt(0) || "R"}
+                </div>
+              )
+            )}
           </div>
 
           <button

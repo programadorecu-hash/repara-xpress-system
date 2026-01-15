@@ -2,15 +2,32 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { Outlet } from 'react-router-dom';
 import Header from './Header.jsx'; 
-import api from '../services/api';
+// CAMBIO: Importamos la función específica para obtener datos de la empresa
+import api, { getCompanySettings } from '../services/api';
 import { HiOutlineMenu } from "react-icons/hi"; // <-- IMPORTACIÓN NUEVA
 import { AuthContext } from '../context/AuthContext';
 import MandatoryNotificationModal from './MandatoryNotificationModal';
 
 function AppLayout() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const { user } = useContext(AuthContext); // Necesitamos saber si hay usuario
+  const { user } = useContext(AuthContext); 
   
+  // --- CAMBIO: Estado para la Identidad de la Empresa ---
+  const [companyInfo, setCompanyInfo] = useState({ name: "Cargando...", logo_url: null });
+  const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+
+  // Efecto para cargar los datos de la empresa (Nombre y Logo)
+  useEffect(() => {
+    if (user) {
+      getCompanySettings()
+        .then((data) => {
+          if (data) setCompanyInfo(data);
+        })
+        .catch((err) => console.error("Error cargando identidad empresa", err));
+    }
+  }, [user]);
+  // -----------------------------------------------------
+
   // Estado para las alertas programadas
   const [scheduledRules, setScheduledRules] = useState([]);
   // Memoria para no mostrar la misma alerta dos veces en el mismo minuto
@@ -88,9 +105,21 @@ function AppLayout() {
         </button>
 
         {/* Logo/Título (Centrado Absoluto) */}
-        <span className="absolute left-1/2 transform -translate-x-1/2 font-bold text-lg text-primary tracking-wide">
-          Repara Xpress
-        </span>
+        <div className="absolute left-1/2 transform -translate-x-1/2 flex items-center justify-center">
+          {companyInfo.logo_url ? (
+            // Si hay logo, mostramos la imagen
+            <img 
+              src={`${API_URL}${companyInfo.logo_url}`} 
+              alt="Logo" 
+              className="h-10 w-auto object-contain" 
+            />
+          ) : (
+            // Si no, mostramos el nombre en texto
+            <span className="font-bold text-lg text-primary tracking-wide truncate max-w-[200px]">
+              {companyInfo.name}
+            </span>
+          )}
+        </div>
 
         {/* Espacio vacío a la derecha (para equilibrar el botón de la izquierda) */}
         <div className="w-10"></div>
@@ -101,9 +130,15 @@ function AppLayout() {
       <div 
         onMouseEnter={() => setIsMenuOpen(true)}
         onMouseLeave={() => setIsMenuOpen(false)}
-        className="relative z-50" // Aseguramos que esté por encima para detectar el mouse
+        className="relative z-50" 
       >
-        <Header isMenuOpen={isMenuOpen} onToggle={toggleMenu} /> 
+        {/* Pasamos companyInfo y API_URL como propiedades al Header */}
+        <Header 
+          isMenuOpen={isMenuOpen} 
+          onToggle={toggleMenu} 
+          companyInfo={companyInfo} 
+          apiUrl={API_URL} 
+        /> 
       </div>
 
       {/* Contenido Principal */}

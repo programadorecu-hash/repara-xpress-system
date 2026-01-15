@@ -69,21 +69,32 @@ function LoginPage() {
           )}
           <div className="mb-4">
             <label className="block text-gray-500 mb-2" htmlFor="email">
-              Correo Electrónico
+              Usuario o Correo
             </label>
+            {/* CAMBIO: type="text" permite ingresar usuarios como 'ANDY202' sin que el navegador pida arroba (@) */}
             <input
-              type="email"
+              type="text"
               id="email"
-              className="w-full p-3 bg-gray-100 rounded-lg text-secondary border border-gray-300 focus:outline-none focus:border-detail"
+              className="w-full p-3 bg-gray-100 rounded-lg text-secondary border border-gray-300 focus:outline-none focus:border-detail uppercase" // Agregamos 'uppercase' visual
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(e) => setEmail(e.target.value)} // El backend buscará este texto en la columna email
               required
+              placeholder="Ej: pepito@gmail.com o ANDY202"
             />
           </div>
           <div className="mb-6">
-            <label className="block text-gray-500 mb-2" htmlFor="password">
-              Contraseña
-            </label>
+            <div className="flex justify-between items-center mb-2">
+              <label className="block text-gray-500" htmlFor="password">
+                Contraseña
+              </label>
+              <button
+                type="button"
+                onClick={() => navigate("/recuperar-clave")}
+                className="text-sm text-blue-600 hover:underline"
+              >
+                ¿Olvidaste tu contraseña?
+              </button>
+            </div>
             <input
               type="password"
               id="password"
@@ -100,6 +111,19 @@ function LoginPage() {
             Ingresar
           </button>
         </form>
+
+        {/* --- SECCIÓN NUEVA: Enlace al Registro --- */}
+        <div className="mt-6 text-center border-t border-gray-200 pt-4">
+          <p className="text-gray-600 mb-2">¿Quieres usar este sistema en tu negocio?</p>
+          <button
+            onClick={() => navigate("/register")}
+            className="text-accent font-bold hover:underline hover:text-teal-700 transition-colors"
+          >
+            Registrar mi Empresa Gratis
+          </button>
+        </div>
+        {/* ----------------------------------------- */}
+
       </div>
     </div>
   );

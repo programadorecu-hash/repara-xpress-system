@@ -27,6 +27,8 @@ from starlette.middleware.base import BaseHTTPMiddleware
 import shutil
 import os
 import uuid
+import random # <--- Importamos random para generar el código
+import string # <--- Importamos string para letras y números
 
 # --- Helpers para nombres de carpeta/archivo por producto ---
 import re
@@ -152,11 +154,11 @@ def view_public_sale_receipt(public_id: str, db: Session = Depends(get_db)):
     # 1. Buscamos la venta por su código secreto
     db_sale = crud.get_sale_by_public_id(db, public_id=public_id)
     if not db_sale:
-        # Si no existe (o el link está mal), devolvemos 404 texto plano
         return PlainTextResponse("El documento no existe o el enlace es inválido.", status_code=404)
 
-    # 2. Recuperamos configuración de empresa
-    company_settings = crud.get_company_settings(db)
+    # 2. Recuperamos configuración de LA EMPRESA QUE HIZO LA VENTA
+    # (Usamos el company_id guardado en la venta)
+    company_settings = crud.get_company_settings(db, company_id=db_sale.company_id)
 
     # 3. Generamos el PDF
     sale_schema = schemas.Sale.model_validate(db_sale)
@@ -179,7 +181,8 @@ def view_public_work_order(public_id: str, db: Session = Depends(get_db)):
     if not db_work_order:
         return PlainTextResponse("El documento no existe o el enlace es inválido.", status_code=404)
 
-    company_settings = crud.get_company_settings(db)
+    # Usamos la empresa dueña de la orden
+    company_settings = crud.get_company_settings(db, company_id=db_work_order.company_id)
 
     schema_work_order = schemas.WorkOrder.model_validate(db_work_order)
     schema_settings = schemas.CompanySettings.model_validate(company_settings)
@@ -194,8 +197,29 @@ def view_public_work_order(public_id: str, db: Session = Depends(get_db)):
 
 # --- INICIO DE NUESTRO CÓDIGO (ASISTENTE DE CONFIGURACIÓN) ---
 # ===================================================================
-# --- ENDPOINTS PARA CONFIGURACIÓN INICIAL ---
+# --- ENDPOINTS PARA REGISTRO Y CONFIGURACIÓN ---
 # ===================================================================
+
+# --- NUEVO: RUTA DE REGISTRO PÚBLICO (SaaS) ---
+@app.post("/register", response_model=schemas.User)
+def register_company_endpoint(
+    data: schemas.CompanyRegister,
+    db: Session = Depends(get_db)
+):
+    """
+    Permite registrar una nueva empresa y su administrador.
+    Crea automáticamente: Empresa + Admin + Sucursal + Bodega + Caja.
+    """
+    try:
+        return crud.register_new_company(db, data)
+    except ValueError as e:
+        # Errores de validación (correo duplicado, etc.)
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        # Errores inesperados
+        print(f"Error en registro: {e}")
+        raise HTTPException(status_code=500, detail="Error interno al registrar la empresa.")
+# ----------------------------------------------
 
 @app.get("/api/setup/status")
 def get_setup_status(db: Session = Depends(get_db)):
@@ -927,14 +951,13 @@ def print_withdrawal_receipt(
 ):
     """
     Ruta para descargar el PDF de 'Comprobante de Retiro'.
-    Sirve para proteger a la empresa demostrando que el cliente se llevó su equipo.
     """
     db_work_order = crud.get_work_order(db, work_order_id=work_order_id)
     if db_work_order is None:
         raise HTTPException(status_code=404, detail="Orden de trabajo no encontrada")
 
-    # Obtenemos los datos de la empresa (Nombre, RUC, etc.)
-    company_settings = crud.get_company_settings(db)
+    # Obtenemos los datos de la empresa dueña de la orden
+    company_settings = crud.get_company_settings(db, company_id=db_work_order.company_id)
 
     # Generamos el PDF usando el nuevo formato que creamos
     pdf_buffer = pdf_utils.generate_withdrawal_receipt_pdf(db_work_order, company_settings)
@@ -1151,8 +1174,8 @@ def print_work_order(
     if db_work_order is None:
         raise HTTPException(status_code=404, detail="Orden de trabajo no encontrada")
 
-    # 1. Recuperamos la configuración de la empresa
-    company_settings = crud.get_company_settings(db)
+    # 1. Recuperamos la configuración de la empresa dueña de la orden
+    company_settings = crud.get_company_settings(db, company_id=db_work_order.company_id)
 
     # 2. Convertimos a Schema
     schema_work_order = schemas.WorkOrder.model_validate(db_work_order)
@@ -1378,8 +1401,10 @@ def print_sales_history_report(
         location_id=location_id
     )
 
-    # 2. Datos de empresa
-    settings = crud.get_company_settings(db)
+    # 2. Datos de empresa (Usamos la del usuario actual que pide el reporte)
+    if not current_user.company_id:
+         raise HTTPException(status_code=400, detail="Usuario sin empresa asignada")
+    settings = crud.get_company_settings(db, company_id=current_user.company_id)
 
     # 3. Generar PDF
     filters = {
@@ -1411,8 +1436,8 @@ def get_sale_receipt(
     if db_sale is None:
         raise HTTPException(status_code=404, detail="Venta no encontrada")
 
-    # 1. Recuperamos la configuración de la empresa
-    company_settings = crud.get_company_settings(db)
+    # 1. Recuperamos la configuración de la empresa dueña de la venta
+    company_settings = crud.get_company_settings(db, company_id=db_sale.company_id)
 
     # 2. Convertimos a Schema
     sale_schema = schemas.Sale.model_validate(db_sale)
@@ -1488,6 +1513,72 @@ def get_cash_account_balance_endpoint(
         current_balance=balance
     )
 # --- FIN DE NUESTRO CÓDIGO ---
+
+# ===================================================================
+# --- ENDPOINTS DE RECUPERACIÓN DE CONTRASEÑA ---
+# ===================================================================
+
+@app.post("/password-recovery/request")
+def request_password_recovery(
+    request: schemas.PasswordRecoveryRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    1. Busca al usuario por email.
+    2. Genera un código de 6 dígitos.
+    3. Lo guarda en la BD.
+    4. SIMULA el envío de correo (lo imprime en consola).
+    """
+    # Buscamos al usuario (Admin o Empleado)
+    user = crud.get_user_by_email(db, email=request.email)
+    if not user:
+        # Por seguridad, no decimos si el email existe o no, pero aquí para dev:
+        # Retornamos éxito falso para no dar pistas a hackers, o un error genérico.
+        # En este caso, daremos un mensaje genérico.
+        return {"message": "Si el correo existe, se ha enviado un código."}
+
+    # Generar código de 6 dígitos
+    code = ''.join(random.choices(string.digits, k=6))
+    
+    # Guardar en la BD
+    user.recovery_code = code
+    db.commit()
+
+    # --- SIMULACIÓN DE ENVÍO DE CORREO ---
+    print("==========================================")
+    print(f"📧 EMAIL SIMULADO PARA: {request.email}")
+    print(f"🔑 CÓDIGO DE RECUPERACIÓN: {code}")
+    print("==========================================")
+    # ----------------------------------------
+
+    return {"message": "Código enviado. Revise su correo (o la consola del servidor)."}
+
+@app.post("/password-recovery/confirm")
+def confirm_password_recovery(
+    data: schemas.PasswordResetConfirm,
+    db: Session = Depends(get_db)
+):
+    """
+    1. Valida el código.
+    2. Si es correcto, cambia la contraseña.
+    3. Borra el código usado.
+    """
+    user = crud.get_user_by_email(db, email=data.email)
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado.")
+
+    # Validar código
+    if not user.recovery_code or user.recovery_code != data.recovery_code:
+        raise HTTPException(status_code=400, detail="Código inválido o expirado.")
+
+    # Cambiar contraseña
+    user.hashed_password = security.get_password_hash(data.new_password)
+    user.recovery_code = None # Quemamos el código para que no se use de nuevo
+    db.commit()
+
+    return {"message": "Contraseña actualizada correctamente. Ya puede iniciar sesión."}
+
+# -------------------------------------------------------------------
 
 # ===================================================================
 # --- ENDPOINTS PARA REPORTES  - DASHBOARDS - ETC ---
@@ -1736,23 +1827,29 @@ def refund_sale(
 # --- ENDPOINTS PARA IDENTIDAD DE EMPRESA ---
 # ===================================================================
 @app.get("/company/settings", response_model=schemas.CompanySettings)
-def read_company_settings(db: Session = Depends(get_db)):
-    """Devuelve la identidad de la empresa (Nombre, RUC, Logo, etc.)"""
-    return crud.get_company_settings(db)
+def read_company_settings(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(security.get_current_user) # <--- Necesario
+):
+    """Devuelve la identidad de MI empresa."""
+    if not current_user.company_id:
+        raise HTTPException(status_code=400, detail="Usuario sin empresa.")
+    return crud.get_company_settings(db, company_id=current_user.company_id)
 
 @app.put("/company/settings", response_model=schemas.CompanySettings)
 def update_company_settings(
     settings: schemas.CompanySettingsCreate, 
     db: Session = Depends(get_db),
-    # Solo administradores pueden cambiar el nombre de la empresa
+    current_user: models.User = Depends(security.get_current_user), # <--- Necesario
     _role: None = Depends(security.require_role(["admin"]))
 ):
-    return crud.update_company_settings(db, settings)
+    return crud.update_company_settings(db, settings, company_id=current_user.company_id)
 
 @app.post("/company/logo", response_model=schemas.CompanySettings)
 def upload_company_logo(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
+    current_user: models.User = Depends(security.get_current_user), # <--- Necesario
     _role: None = Depends(security.require_role(["admin"]))
 ):
     # 1. Validaciones básicas de imagen
@@ -1774,7 +1871,7 @@ def upload_company_logo(
         
     # 3. Actualizar BD
     logo_url = f"/uploads/company/{filename}"
-    return crud.update_company_logo(db, logo_url)
+    return crud.update_company_logo(db, logo_url, company_id=current_user.company_id)
 
 
 # ===================================================================
@@ -1804,7 +1901,8 @@ def print_credit_note(
     if not db_credit_note:
         raise HTTPException(status_code=404, detail="Nota de crédito no encontrada")
 
-    company_settings = crud.get_company_settings(db)
+    # La nota de crédito tiene un usuario creador, usamos su empresa
+    company_settings = crud.get_company_settings(db, company_id=db_credit_note.user.company_id)
     
     # Generamos PDF
     pdf_buffer = pdf_utils.generate_credit_note_pdf(db_credit_note, company_settings)
@@ -1832,7 +1930,8 @@ def get_cash_closure_report(
         # Llamamos a la lógica blindada
         data = crud.get_cash_closure_report_data(db, account_id=account_id, closure_id=closure_id)
         
-        settings = crud.get_company_settings(db)
+        # Usamos la empresa del usuario que cierra la caja
+        settings = crud.get_company_settings(db, company_id=current_user.company_id)
         location = crud.get_location(db, location_id=account.location_id)
         location_name = location.name if location else "Desconocida"
 

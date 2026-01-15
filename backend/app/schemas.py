@@ -287,6 +287,17 @@ class UserUpdate(BaseModel):
     # --- FIN DE NUESTRO CÓDIGO ---
 class UserPasswordReset(BaseModel):
     new_password: str
+
+# --- NUEVOS SCHEMAS PARA RECUPERACIÓN DE CONTRASEÑA ---
+class PasswordRecoveryRequest(BaseModel):
+    email: str
+
+class PasswordResetConfirm(BaseModel):
+    email: str
+    recovery_code: str
+    new_password: str
+# ------------------------------------------------------
+
 class LostSaleLogCreate(LostSaleLogBase):
     pass
 class WorkOrderCreate(WorkOrderBase):
@@ -638,13 +649,20 @@ class NotificationRule(NotificationRuleBase):
         from_attributes = True
 # --- FIN DE NUESTRO CÓDIGO ---
 
-    # --- (ASISTENTE DE CONFIGURACIÓN) ---
+    # --- (ASISTENTE DE CONFIGURACIÓN Y REGISTRO) ---
 class FirstAdminCreate(BaseModel):
     # Este es el "formulario" especial que usará la página de configuración
     email: str
     password: str
     pin: str # Pedimos el email, la contraseña y el PIN de una vez
-    # --- FIN DE NUESTRO CÓDIGO ---
+
+# --- NUEVO: Formulario para registrar una nueva empresa (Inquilino SaaS) ---
+class CompanyRegister(BaseModel):
+    company_name: str
+    admin_email: str
+    admin_password: str
+    admin_pin: str
+# --- FIN DE NUESTRO CÓDIGO ---
 
     # --- INICIO DE NUESTRO CÓDIGO (Schemas Reembolsos) ---
 # --- INICIO DE NUESTRO CÓDIGO (Schemas Reembolsos Mejorado) ---

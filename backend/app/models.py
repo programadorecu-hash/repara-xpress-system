@@ -32,6 +32,9 @@ class User(Base):
     # --- FIN DE NUESTRO CÓDIGO ---
     hashed_password = Column(String, nullable=False)
     hashed_pin = Column(String, nullable=True)
+    # --- NUEVO: Código de recuperación de contraseña ---
+    recovery_code = Column(String, nullable=True) 
+    # ---------------------------------------------------
     role = Column(String, nullable=False, default='viewer')
     is_active = Column(Boolean, default=True)
 

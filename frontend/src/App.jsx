@@ -37,6 +37,8 @@ import CustomersPage from "./pages/CustomersPage.jsx";
 import CompanySettingsPage from "./pages/CompanySettingsPage.jsx";
 import ExpensesPage from "./pages/ExpensesPage.jsx";
 import FinancialReportPage from "./pages/FinancialReportPage.jsx";
+import RegisterPage from "./pages/RegisterPage.jsx"; 
+import PasswordRecoveryPage from "./pages/PasswordRecoveryPage.jsx"; // <--- NUEVA IMPORTACIÓN
 
 // Esta es la "Guardia" que revisa si la caja fuerte está configurada
 function SetupGuard() {
@@ -46,6 +48,12 @@ function SetupGuard() {
 
   useEffect(() => {
     const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+
+    // Si el usuario quiere ir a REGISTRARSE o RECUPERAR CLAVE, no lo molestamos
+    if (window.location.pathname === "/register" || window.location.pathname === "/recuperar-clave") {
+        setIsSetupComplete(true); 
+        return;
+    }
 
     axios
       .get(`${API_URL}/api/setup/status`)
@@ -58,7 +66,11 @@ function SetupGuard() {
             navigate("/login"); 
           }
         } else {
-          navigate("/setup");
+          // Bloqueamos acceso si no está configurado, EXCEPTO para las rutas públicas
+          const publicPaths = ["/register", "/recuperar-clave"];
+          if (!publicPaths.includes(window.location.pathname)) {
+             navigate("/setup");
+          }
         }
       })
       .catch((error) => {
@@ -104,6 +116,11 @@ function SetupGuard() {
       <ToastContainer position="bottom-right" autoClose={3000} />
       
       <Routes>
+        {/* Agregamos la ruta pública de registro */}
+        <Route path="/register" element={<RegisterPage />} />
+        {/* Agregamos la ruta pública de recuperación */}
+        <Route path="/recuperar-clave" element={<PasswordRecoveryPage />} />
+
         <Route path="/setup" element={<SetupPage />} />
         
         <Route

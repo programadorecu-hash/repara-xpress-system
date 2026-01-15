@@ -8,7 +8,7 @@ import ModalForm from '../components/ModalForm.jsx';
 
 // Formulario vacío para un nuevo usuario
 const emptyForm = {
-  email: '',
+  email: '', // Aquí guardaremos el "Usuario" (ej: ANDY202 o correo real)
   password: '',
   role: 'warehouse_operator', // Por defecto creamos "Empleados"
 };
@@ -145,7 +145,7 @@ function UserManagementPage() {
 
   // Definir las columnas para la tabla
   const columns = [
-    { key: 'email', label: 'Email' },
+    { key: 'email', label: 'Usuario / Email' }, // Cambiamos la etiqueta visual
     { key: 'full_name', label: 'Nombre Completo' },
     { key: 'role', label: 'Rol' },
     {
@@ -216,13 +216,14 @@ function UserManagementPage() {
       >
         <div className="grid grid-cols-1 gap-4">
           <div>
-            <label className="block text-sm font-semibold text-gray-700">Email *</label>
+            <label className="block text-sm font-semibold text-gray-700">Usuario o Email *</label>
+            <p className="text-xs text-gray-500 mb-1">Puede ser un correo (ej: pepe@gmail.com) o un usuario local (ej: ANDY202).</p>
             <input
-              type="email"
+              type="text" // Cambiamos 'email' por 'text' para permitir nombres sin @
               name="email"
               value={createFormState.email}
               onChange={handleCreateFormChange}
-              className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2"
+              className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 uppercase" // Forzamos mayúsculas visualmente para orden
               required
             />
           </div>

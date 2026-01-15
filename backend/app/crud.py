@@ -556,6 +556,89 @@ def create_first_admin_user(db: Session, user_data: schemas.FirstAdminCreate):
     
     db.refresh(db_user)
     return db_user
+
+# --- NUEVA FUNCIÓN: REGISTRO COMPLETO DE EMPRESA (SaaS) ---
+def register_new_company(db: Session, data: schemas.CompanyRegister):
+    """
+    Crea TODO el ecosistema para un nuevo cliente:
+    1. La Empresa.
+    2. El Usuario Admin.
+    3. La Sucursal Principal y Bodega.
+    4. La Configuración por defecto.
+    """
+    # 1. Verificar duplicados (Email único globalmente en usuarios)
+    if get_user_by_email(db, data.admin_email):
+        raise ValueError("El correo electrónico ya está registrado.")
+    
+    # 2. Verificar nombre de empresa único
+    existing_company = db.query(models.Company).filter(models.Company.name == data.company_name).first()
+    if existing_company:
+        raise ValueError("El nombre de la empresa ya existe. Por favor elija otro.")
+
+    # 3. Crear la Empresa (El Inquilino)
+    new_company = models.Company(name=data.company_name, plan_type="FREE", is_active=True)
+    db.add(new_company)
+    db.flush() # Para obtener el ID de la empresa
+
+    # 4. Crear el Usuario Admin (El Dueño)
+    hashed_password = security.get_password_hash(data.admin_password)
+    hashed_pin = security.get_password_hash(data.admin_pin)
+    
+    new_admin = models.User(
+        email=data.admin_email,
+        hashed_password=hashed_password,
+        hashed_pin=hashed_pin,
+        role="admin",
+        is_active=True,
+        company_id=new_company.id # <--- VINCULADO A SU EMPRESA
+    )
+    db.add(new_admin)
+    db.flush() # Para obtener el ID del usuario
+
+    # 5. Crear Sucursal Principal (Oficina)
+    sucursal = models.Location(
+        name="Sucursal Principal",
+        description="Oficina creada automáticamente",
+        address="Dirección pendiente",
+        parent_id=None,
+        company_id=new_company.id
+    )
+    db.add(sucursal)
+    db.flush()
+
+    # 6. Crear Bodega Principal
+    bodega = models.Location(
+        name="Bodega Principal",
+        description="Almacén general",
+        address="Dirección pendiente",
+        parent_id=sucursal.id, # Vinculada a la sucursal
+        company_id=new_company.id
+    )
+    db.add(bodega)
+
+    # 7. Crear Caja de Ventas
+    caja = models.CashAccount(
+        name="CAJA PRINCIPAL",
+        account_type="CAJA_VENTAS",
+        location_id=sucursal.id,
+        company_id=new_company.id
+    )
+    db.add(caja)
+
+    # 8. Crear Configuración por Defecto (Identidad)
+    settings = models.CompanySettings(
+        company_id=new_company.id,
+        name=data.company_name,
+        ruc="9999999999001",
+        footer_message="Gracias por su preferencia"
+    )
+    db.add(settings)
+
+    # 9. Guardar todo
+    db.commit()
+    db.refresh(new_admin)
+    
+    return new_admin
     # --- FIN DE NUESTRO CÓDIGO ---
 
 # ===================================================================
@@ -1920,16 +2003,19 @@ def auto_close_all_open_shifts(db: Session):
 # ===================================================================
 # --- CONFIGURACIÓN DE EMPRESA (IDENTIDAD) ---
 # ===================================================================
-def get_company_settings(db: Session):
+def get_company_settings(db: Session, company_id: int):
     """
-    Obtiene la configuración de la empresa.
-    Si NO existe (primera vez), crea una por defecto.
+    Obtiene la configuración DE UNA EMPRESA ESPECÍFICA.
+    Si no existe para esa empresa, la crea automáticamente.
     """
-    settings = db.query(models.CompanySettings).first()
+    # Buscamos la configuración que tenga el company_id correcto
+    settings = db.query(models.CompanySettings).filter(models.CompanySettings.company_id == company_id).first()
+    
     if not settings:
-        # Creamos la identidad por defecto si está vacía
+        # Creamos la identidad por defecto para ESTA empresa
         settings = models.CompanySettings(
-            name="Repara Xpress (Default)",
+            company_id=company_id, # <--- ASIGNACIÓN IMPORTANTE
+            name="Mi Empresa (Configurar)",
             ruc="9999999999001",
             address="Dirección Principal",
             phone="0999999999",
@@ -1940,11 +2026,12 @@ def get_company_settings(db: Session):
         db.refresh(settings)
     return settings
 
-def update_company_settings(db: Session, settings: schemas.CompanySettingsCreate):
+def update_company_settings(db: Session, settings: schemas.CompanySettingsCreate, company_id: int):
     """
-    Actualiza los datos de la empresa.
+    Actualiza los datos de la empresa ESPECÍFICA.
     """
-    db_settings = get_company_settings(db) # Obtenemos la existente (o la default)
+    # Buscamos la configuración de ESTA empresa
+    db_settings = get_company_settings(db, company_id=company_id) 
     
     # Actualizamos campos
     update_data = settings.model_dump(exclude_unset=True)
@@ -1955,11 +2042,11 @@ def update_company_settings(db: Session, settings: schemas.CompanySettingsCreate
     db.refresh(db_settings)
     return db_settings
 
-def update_company_logo(db: Session, logo_url: str):
+def update_company_logo(db: Session, logo_url: str, company_id: int):
     """
-    Actualiza solo el logo.
+    Actualiza solo el logo de la empresa ESPECÍFICA.
     """
-    db_settings = get_company_settings(db)
+    db_settings = get_company_settings(db, company_id=company_id)
     db_settings.logo_url = logo_url
     db.commit()
     db.refresh(db_settings)
@@ -2128,9 +2215,6 @@ def create_expense_category(db: Session, category: schemas.ExpenseCategoryCreate
     """Crea una nueva etiqueta para clasificar gastos."""
     db_category = models.ExpenseCategory(**category.model_dump(), company_id=company_id)
     db.add(db_category)
-    db.commit()
-    db.refresh(db_category)
-    return db_category
     db.commit()
     db.refresh(db_category)
     return db_category
@@ -2337,3 +2421,13 @@ def get_inventory_movement_by_id(db: Session, movement_id: int):
         joinedload(models.InventoryMovement.user)
     ).filter(models.InventoryMovement.id == movement_id).first()
 # -----------------------------------------------------------------------
+
+def get_top_sellers(db: Session, company_id: int, start_date: date, end_date: date):
+    return db.query(
+        models.User, 
+        func.sum(models.Sale.total_amount).label("total_sales")
+    ).join(models.Sale).filter(
+        models.Sale.company_id == company_id,
+        func.date(models.Sale.created_at) >= start_date,
+        func.date(models.Sale.created_at) <= end_date
+    ).group_by(models.User.id).order_by(desc("total_sales")).limit(5).all()
