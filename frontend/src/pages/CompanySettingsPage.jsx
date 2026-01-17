@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { getCompanySettings, updateCompanySettings, uploadCompanyLogo } from '../services/api';
-import { HiOutlineOfficeBuilding, HiOutlineUpload, HiOutlineSave } from 'react-icons/hi';
+import apiClient from '../services/api'; // <--- Importamos apiClient para las llamadas extra
+import { HiOutlineOfficeBuilding, HiOutlineUpload, HiOutlineSave, HiOutlineGlobeAlt } from 'react-icons/hi';
 
 function CompanySettingsPage() {
   const [settings, setSettings] = useState({
@@ -17,6 +18,11 @@ function CompanySettingsPage() {
     whatsapp_work_order_message: '' // <--- Nuevo campo
     // ------------------------------------------
   });
+  
+  // --- Estado para el Switch de Distribuidor ---
+  const [isDistributor, setIsDistributor] = useState(false);
+  // --------------------------------------------
+
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [msg, setMsg] = useState({ type: '', text: '' });
@@ -36,6 +42,12 @@ function CompanySettingsPage() {
     try {
       const data = await getCompanySettings();
       setSettings(data);
+      
+      // --- Cargar estado de distribuidor ---
+      const distResponse = await apiClient.get('/company/distributor-status');
+      setIsDistributor(distResponse.data.is_distributor);
+      // -------------------------------------
+      
     } catch (error) {
       console.error("Error cargando configuración:", error);
       setMsg({ type: 'error', text: 'No se pudo cargar la información de la empresa.' });
@@ -67,6 +79,28 @@ function CompanySettingsPage() {
       setIsSaving(false);
     }
   };
+
+  // --- Función para activar/desactivar modo distribuidor ---
+  const toggleDistributor = async () => {
+    const newState = !isDistributor;
+    setIsSaving(true);
+    try {
+      await apiClient.put('/company/distributor-status', { is_distributor: newState });
+      setIsDistributor(newState);
+      setMsg({ 
+        type: 'success', 
+        text: newState 
+          ? '¡Ahora eres visible en el catálogo público!' 
+          : 'Has ocultado tus productos del catálogo público.' 
+      });
+    } catch (error) {
+      console.error("Error cambiando estado:", error);
+      setMsg({ type: 'error', text: 'Error al cambiar el estado.' });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+  // --------------------------------------------------------
 
   const handleLogoUpload = async (e) => {
     const file = e.target.files[0];
@@ -259,6 +293,42 @@ function CompanySettingsPage() {
                       <p className="text-xs text-gray-500 mt-1">El sistema añadirá automáticamente el número de orden y estado debajo de este mensaje.</p>
                     </div>
 
+                  </div>
+                </div>
+
+                {/* --- NUEVA SECCIÓN: PERFIL PÚBLICO (DISTRIBUIDOR) --- */}
+                <div className="md:col-span-2 mt-6 pt-6 border-t border-gray-200">
+                  <h3 className="text-md font-bold text-gray-800 mb-3 flex items-center gap-2">
+                    <HiOutlineGlobeAlt className="w-5 h-5 text-blue-600" />
+                    Catálogo Público
+                  </h3>
+                  
+                  <div className="bg-blue-50 border border-blue-100 rounded-lg p-4 flex items-center justify-between">
+                    <div>
+                      <p className="font-semibold text-blue-900">
+                        {isDistributor ? '✅ Tu empresa es visible públicamente' : '🔒 Tu empresa es privada'}
+                      </p>
+                      <p className="text-sm text-blue-700 mt-1">
+                        {isDistributor 
+                          ? 'Tus repuestos aparecen en el buscador global para otros técnicos.' 
+                          : 'Activa esta opción si quieres vender repuestos a otros técnicos o al público en la web.'}
+                      </p>
+                    </div>
+                    
+                    <button
+                      type="button"
+                      onClick={toggleDistributor}
+                      disabled={isSaving}
+                      className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
+                        isDistributor ? 'bg-blue-600' : 'bg-gray-300'
+                      }`}
+                    >
+                      <span
+                        className={`inline-block h-6 w-6 transform rounded-full bg-white transition-transform ${
+                          isDistributor ? 'translate-x-7' : 'translate-x-1'
+                        }`}
+                      />
+                    </button>
                   </div>
                 </div>
                 {/* ------------------------------------------- */}

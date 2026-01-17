@@ -24,7 +24,8 @@ class Company(Base):
     # Relaciones: Una empresa tiene muchos usuarios y configuraciones
     users = relationship("User", back_populates="company")
     settings = relationship("CompanySettings", back_populates="company", uselist=False) 
-    # (Más adelante agregaremos productos, clientes, etc. aquí)
+    # Relación inversa: Una empresa tiene muchos productos
+    products = relationship("Product", back_populates="company")
 
 class User(Base):
     __tablename__ = "users"
@@ -88,36 +89,39 @@ class Product(Base):
     __tablename__ = "products"
     id = Column(Integer, primary_key=True, index=True)
     
-    # --- PROPIEDAD: EMPRESA ---
+    # Vinculación con Empresa
     company_id = Column(Integer, ForeignKey("companies.id"), nullable=True)
-    # --------------------------
 
-    sku = Column(String, index=True, nullable=False) # Quitamos unique global temporalmente
+    # Datos principales
+    sku = Column(String, index=True, nullable=False)
     name = Column(String, index=True, nullable=False)
     description = Column(String, nullable=True)
     price_1 = Column(Float)
     price_2 = Column(Float)
     price_3 = Column(Float)
     
-    # --- NUEVO: Costo Promedio (Precio de Compra) ---
+    # Costos y Estado
     average_cost = Column(Float, default=0.0, nullable=False) 
-    # ------------------------------------------------
-
     is_active = Column(Boolean, default=True)
-    # --- ESTA LINEA ES PARA UNA SOLA FOTO, LA DEJO AQUÍ POR SI LAS MOSCAS image_url = Column(String, nullable=True)
+    is_public = Column(Boolean, default=False) 
+    
+    # Relaciones (Foreign Keys)
     category_id = Column(Integer, ForeignKey("categories.id"), nullable=True)
+    supplier_id = Column(Integer, ForeignKey("suppliers.id"), nullable=True)
 
+    # Relaciones (ORM)
     category = relationship("Category", back_populates="products")
     stock_entries = relationship("Stock", back_populates="product")
     movements = relationship("InventoryMovement", back_populates="product")
     sale_items = relationship("SaleItem", back_populates="product")
     purchase_invoice_items = relationship("PurchaseInvoiceItem", back_populates="product")
-
     images = relationship("ProductImage", back_populates="product")
-
-    # --- NUEVA RELACIÓN CON PROVEEDOR ---
-    supplier_id = Column(Integer, ForeignKey("suppliers.id"), nullable=True)
     supplier = relationship("Supplier", back_populates="products")
+    company = relationship("Company", back_populates="products")
+
+    # REGLA DE INTEGRIDAD: El SKU debe ser único DENTRO de cada empresa.
+    # Esto evita duplicados accidentales, pero permite que dos empresas distintas usen el mismo SKU.
+    __table_args__ = (UniqueConstraint('sku', 'company_id', name='_sku_company_uc'),)
     # ------------------------------------
 
 class Category(Base):
@@ -439,27 +443,28 @@ class Customer(Base):
     __tablename__ = "customers"
     id = Column(Integer, primary_key=True, index=True)
     
-    # --- PROPIEDAD: EMPRESA ---
+    # Vinculación con Empresa
     company_id = Column(Integer, ForeignKey("companies.id"), nullable=True)
-    # --------------------------
 
-    # Quitamos unique global para que dos empresas puedan tener al mismo cliente por separado
+    # Datos del Cliente
     id_card = Column(String, index=True, nullable=False)
     name = Column(String, index=True, nullable=False)
     email = Column(String, nullable=True)
     phone = Column(String, nullable=True)
     address = Column(String, nullable=True)
     
-    # Campo extra para notas internas (ej: "Cliente conflictivo", "Paga tarde")
+    # Notas internas (ej: "Cliente conflictivo")
     notes = Column(String, nullable=True) 
     
-    # Fecha de registro
+    # Auditoría y Origen
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-
-    # --- NUEVO: Sucursal de Origen ---
     location_id = Column(Integer, ForeignKey("locations.id"), nullable=True)
+    
+    # Relaciones
     location = relationship("Location")
-# --- FIN DE NUESTRO CÓDIGO ---
+
+    # REGLA DE INTEGRIDAD: La cédula debe ser única DENTRO de cada empresa.
+    __table_args__ = (UniqueConstraint('id_card', 'company_id', name='_id_card_company_uc'),)
 
 # --- INICIO DE NUESTRO CÓDIGO (Tabla Notas de Crédito) ---
 class CreditNote(Base):

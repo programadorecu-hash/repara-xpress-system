@@ -21,7 +21,25 @@ class Company(CompanyBase):
     created_at: datetime
     class Config:
         from_attributes = True
-# ------------------------------------
+
+# --- NUEVO SCHEMA: ACTUALIZAR ESTADO DISTRIBUIDOR ---
+class CompanyDistributorUpdate(BaseModel):
+    is_distributor: bool
+# ----------------------------------------------------
+
+# --- NUEVO SCHEMA: RESULTADO DE BÚSQUEDA PÚBLICA (Trivago) ---
+class PublicProductSearchResult(BaseModel):
+    product_name: str
+    price: float # Precio de venta al público
+    stock_status: str # "Disponible", "Pocas Unidades", "Agotado"
+    company_name: str # Quién lo vende (Ej: "Importadora Xavacces")
+    company_address: str | None = None
+    company_phone: str | None = None # Para el botón de WhatsApp
+    last_updated: datetime
+
+    class Config:
+        from_attributes = True
+# -------------------------------------------------------------
 
 # --- NUEVO SCHEMA: RESULTADO DE BÚSQUEDA PÚBLICA (Trivago) ---
 class PublicProductSearchResult(BaseModel):
@@ -51,6 +69,11 @@ class ProductBase(BaseModel):
     # Hacemos explícito que este campo es parte del formulario base
     average_cost: float = 0.0 
     is_active: bool = True
+    
+    # --- CORRECCIÓN ERROR 500: Aceptamos None para productos viejos ---
+    is_public: bool | None = False 
+    # ------------------------------------------------------------------
+
     category_id: int | None = None
     supplier_id: int | None = None # <--- NUEVO CAMPO
     

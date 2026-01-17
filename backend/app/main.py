@@ -150,6 +150,28 @@ def read_root():
 @limiter.limit("20/minute") # Límite para evitar scraping masivo
 @app.get("/public/search/parts", response_model=List[schemas.PublicProductSearchResult])
 def search_parts_public(
+    request: Request,  # <--- El limitador necesita 'request'
+    q: str, 
+    db: Session = Depends(get_db)
+):
+    """
+    Buscador global de repuestos en la red de mayoristas.
+    No requiere login.
+    """
+    if len(q) < 3:
+        raise HTTPException(status_code=400, detail="Escribe al menos 3 letras.")
+        
+    return crud.search_global_parts(db, query=q)
+# --------------------------------------------
+
+# ===================================================================
+# --- ENDPOINTS PÚBLICOS (VISOR DE DOCUMENTOS Y BUSCADOR) ---
+# ===================================================================
+
+# --- NUEVO: BUSCADOR PÚBLICO DE REPUESTOS ---
+@limiter.limit("20/minute") # Límite para evitar scraping masivo
+@app.get("/public/search/parts", response_model=List[schemas.PublicProductSearchResult])
+def search_parts_public(
     request: Request,  # <--- ¡ESTO FALTABA! El limitador lo necesita obligatoriamente
     q: str, 
     db: Session = Depends(get_db)
@@ -387,7 +409,13 @@ def create_new_product(
 ):
     if not current_user.company_id:
         raise HTTPException(status_code=400, detail="El usuario no pertenece a ninguna empresa.")
-    return crud.create_product(db=db, product=product, company_id=current_user.company_id)
+    
+    try:
+        # Intentamos crear el producto. Si el SKU está repetido, el CRUD lanzará un ValueError.
+        return crud.create_product(db=db, product=product, company_id=current_user.company_id)
+    except ValueError as e:
+        # Capturamos el grito del guardia y lo mostramos como Error 400 (Bad Request)
+        raise HTTPException(status_code=400, detail=str(e))
 
 @app.get("/products/", response_model=List[schemas.Product])
 @limiter.limit("60/minute")
@@ -1730,14 +1758,15 @@ def create_new_customer(
     if not current_user.company_id:
         raise HTTPException(status_code=400, detail="Usuario sin empresa.")
 
-    # Verificamos si existe YA en MI empresa
-    if crud.get_customer_by_id_card(db, id_card=customer.id_card, company_id=current_user.company_id):
-        raise HTTPException(status_code=400, detail="Ya existe un cliente con esta Cédula/RUC en su empresa.")
-    
     active_shift = crud.get_active_shift_for_user(db, user_id=current_user.id)
     location_id = active_shift.location_id if active_shift else None
 
-    return crud.create_customer(db=db, customer=customer, company_id=current_user.company_id, location_id=location_id)
+    try:
+        # Intentamos crear el cliente. Si la cédula existe, el CRUD lanzará ValueError.
+        return crud.create_customer(db=db, customer=customer, company_id=current_user.company_id, location_id=location_id)
+    except ValueError as e:
+        # Devolvemos el mensaje de error ("El cliente ya existe...") al frontend
+        raise HTTPException(status_code=400, detail=str(e))
 
 @app.get("/customers/", response_model=List[schemas.Customer])
 def read_customers(
@@ -1862,6 +1891,38 @@ def update_company_settings(
     _role: None = Depends(security.require_role(["admin"]))
 ):
     return crud.update_company_settings(db, settings, company_id=current_user.company_id)
+
+@app.put("/company/distributor-status")
+def update_distributor_status_endpoint(
+    status_update: schemas.CompanyDistributorUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(security.get_current_user),
+    _role: None = Depends(security.require_role(["admin"]))
+):
+    """
+    Activa o desactiva la visibilidad pública de la empresa.
+    """
+    if not current_user.company_id:
+        raise HTTPException(status_code=400, detail="Usuario sin empresa.")
+        
+    crud.update_company_distributor_status(
+        db, 
+        company_id=current_user.company_id, 
+        is_distributor=status_update.is_distributor
+    )
+    return {"message": "Estado actualizado correctamente"}
+
+# --- NUEVO: Endpoint para saber si soy distribuidor (estado actual) ---
+@app.get("/company/distributor-status")
+def get_distributor_status_endpoint(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(security.get_current_user)
+):
+    if not current_user.company_id: return {"is_distributor": False}
+    
+    company = db.query(models.Company).filter(models.Company.id == current_user.company_id).first()
+    return {"is_distributor": company.is_distributor if company else False}
+# --------------------------------------------------------------------
 
 @app.post("/company/logo", response_model=schemas.CompanySettings)
 def upload_company_logo(

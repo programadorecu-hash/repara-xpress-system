@@ -31,9 +31,22 @@ def get_password_hash(password):
 
 # --- Funciones de Token JWT ---
 def create_access_token(data: dict):
+    """
+    Crea una 'llave digital' (Token) con fecha de caducidad.
+    data: Diccionario con info del usuario (email, rol, company_id).
+    """
     to_encode = data.copy()
+    
+    # 1. Definimos cuándo caduca la llave
     expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire})
+    
+    # 2. Convertimos todo a texto si es necesario (seguridad extra)
+    # Por ejemplo, aseguramos que company_id sea un número o string válido
+    if "company_id" in to_encode and to_encode["company_id"] is not None:
+        to_encode["company_id"] = str(to_encode["company_id"])
+
+    # 3. Sellamos la llave con nuestra firma secreta
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
@@ -41,20 +54,28 @@ def create_access_token(data: dict):
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 def get_current_user(db: Session = Depends(get_db), token: str = Depends(oauth2_scheme)):
+    # Error estándar para intrusos
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="No se pudieron validar las credenciales",
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:
+        # 1. Intentamos leer la 'pulsera' (Token)
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        
+        # 2. Buscamos el nombre del dueño (email)
         email: str = payload.get("sub")
+        
+        # 3. Validamos que la pulsera tenga dueño
         if email is None:
             raise credentials_exception
-        # Opcional: podrías añadir un schema para el payload del token para validarlo.
+            
     except JWTError:
+        # Si la firma es falsa o expiró, lanzamos alerta
         raise credentials_exception
 
+    # 4. Buscamos al dueño en el registro real (Base de Datos)
     user = crud.get_user_by_email(db, email=email)
     if user is None:
         raise credentials_exception

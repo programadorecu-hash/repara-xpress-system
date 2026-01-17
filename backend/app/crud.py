@@ -157,7 +157,17 @@ def get_products(db: Session, company_id: int, skip: int = 0, limit: int = 100, 
     return products_list
 
 def create_product(db: Session, product: schemas.ProductCreate, company_id: int):
-    # --- ASIGNACIÓN: El producto nace con la marca de la empresa ---
+    # 1. Validar Integridad: Verificar si el SKU ya existe en ESTA empresa
+    existing_product = db.query(models.Product).filter(
+        models.Product.sku == product.sku,
+        models.Product.company_id == company_id
+    ).first()
+    
+    if existing_product:
+        # Si existe, detenemos todo y avisamos amablemente
+        raise ValueError(f"El código SKU '{product.sku}' ya existe en su inventario.")
+
+    # 2. Si no existe, creamos el producto vinculado a la empresa
     db_product = models.Product(**product.model_dump(), company_id=company_id)
     db.add(db_product)
     db.commit()
@@ -264,44 +274,36 @@ def get_locations(db: Session, company_id: int, skip: int = 0, limit: int = 100)
     # --- FIN DE NUESTRO CÓDIGO ---
 
 def create_location(db: Session, location: schemas.LocationCreate, company_id: int):
-    # --- INICIO DE NUESTRO CÓDIGO (La "Magia 3-en-1" Multi-inquilino) ---
-    
-    # 1. Creamos la "Oficina Principal" (La Sucursal)
+    # 1. Crear la Sucursal (Oficina)
     sucursal_data = location.model_dump()
     sucursal_data['parent_id'] = None 
-    
-    # Asignamos la sucursal a la empresa
     db_sucursal = models.Location(**sucursal_data, company_id=company_id)
     db.add(db_sucursal)
-    
-    db.flush() 
+    db.flush() # Obtenemos el ID para usarlo abajo
 
-    # 2. Creamos la Bodega (También pertenece a la empresa)
+    # 2. Crear la Bodega automática asociada
     db_bodega = models.Location(
         name=f"Bodega - {db_sucursal.name}", 
         description=f"Almacén en {db_sucursal.name}",
         address=db_sucursal.address, 
         parent_id=db_sucursal.id,
-        company_id=company_id # <--- Importante
+        company_id=company_id
     )
     db.add(db_bodega)
     
-    # 3. Creamos la Caja Fuerte (También pertenece a la empresa)
+    # 3. Crear la Caja de Ventas automática
     db_caja_ventas = models.CashAccount(
         name=f"CAJA VENTAS - {db_sucursal.name.upper()}",
         account_type="CAJA_VENTAS", 
         location_id=db_sucursal.id,
-        company_id=company_id # <--- Importante
+        company_id=company_id
     )
     db.add(db_caja_ventas)
 
-    # 5. Guardamos todo (Oficina, Bodega y Caja Fuerte)
+    # 4. Guardar todo
     db.commit()
-    
-    # 6. Devolvemos la "Oficina Principal" al usuario
     db.refresh(db_sucursal)
     return db_sucursal
-    # --- FIN DE NUESTRO CÓDIGO ---
 
 def update_location(db: Session, location_id: int, location: schemas.LocationCreate):
     # --- INICIO DE NUESTRO CÓDIGO (Actualizar Sucursal y Bodega) ---
@@ -452,7 +454,7 @@ def search_global_parts(db: Session, query: str, limit: int = 50):
     """
     search_term = f"%{query.lower()}%"
     
-    # 1. Encontrar IDs de empresas distribuidoras
+    # 1. Encontrar IDs de empresas distribuidoras activas
     distributor_ids = db.query(models.Company.id).filter(
         models.Company.is_distributor == True,
         models.Company.is_active == True
@@ -470,10 +472,12 @@ def search_global_parts(db: Session, query: str, limit: int = 50):
     ).filter(
         models.Product.company_id.in_(dist_ids),
         models.Product.is_active == True,
+        models.Product.is_public == True, # <--- FILTRO VITAL: Solo mostrar si está marcado como público
         # Búsqueda flexible en nombre o descripción
         or_(
             func.lower(models.Product.name).like(search_term),
-            func.lower(models.Product.description).like(search_term)
+            func.lower(models.Product.description).like(search_term),
+            func.lower(models.Product.sku).like(search_term)
         )
     ).limit(limit).all()
 
@@ -485,7 +489,7 @@ def search_global_parts(db: Session, query: str, limit: int = 50):
         
         # Estado del stock (Semáforo)
         stock_status = "Agotado"
-        if total_stock > 10: stock_status = "Disponible"
+        if total_stock > 5: stock_status = "Disponible"
         elif total_stock > 0: stock_status = "Pocas Unidades"
 
         # Datos de contacto de la empresa
@@ -495,12 +499,14 @@ def search_global_parts(db: Session, query: str, limit: int = 50):
 
         results.append(schemas.PublicProductSearchResult(
             product_name=p.name,
-            price=p.price_3 if p.price_3 > 0 else p.price_1, # Preferimos precio técnico (3)
+            # REGLA DE ORO: En la web pública se muestra el PRECIO DISTRIBUIDOR (Price 1).
+            # Si no tiene precio distribuidor (0), usamos el Price 3 (PVP) como fallback.
+            price=p.price_1 if p.price_1 > 0 else p.price_3, 
             stock_status=stock_status,
             company_name=p.company.name,
             company_address=address,
             company_phone=phone,
-            last_updated=datetime.now() # Ojo: Idealmente usar fecha real
+            last_updated=datetime.now() # Fecha referencia
         ))
     
     # Ordenar por precio (del más barato al más caro) para que sea útil
@@ -508,6 +514,7 @@ def search_global_parts(db: Session, query: str, limit: int = 50):
     
     return results
 # --------------------------------------------------------------
+
 
 # ===================================================================
 # --- USUARIOS Y SEGURIDAD ---
@@ -1938,7 +1945,12 @@ def get_customers(db: Session, company_id: int, skip: int = 0, limit: int = 100,
     return query.order_by(models.Customer.name).offset(skip).limit(limit).all()
 
 def create_customer(db: Session, customer: schemas.CustomerCreate, company_id: int, location_id: int | None = None):
-    # Añadimos el location_id y company_id al crear
+    # 1. Validar Integridad: Verificar si la Cédula ya existe en ESTA empresa
+    existing = get_customer_by_id_card(db, id_card=customer.id_card, company_id=company_id)
+    if existing:
+        raise ValueError(f"El cliente con Cédula/RUC {customer.id_card} ya está registrado.")
+
+    # 2. Crear el cliente vinculado a la empresa y sucursal
     data = customer.model_dump()
     db_customer = models.Customer(**data, location_id=location_id, company_id=company_id)
     db.add(db_customer)
@@ -2106,6 +2118,31 @@ def update_company_settings(db: Session, settings: schemas.CompanySettingsCreate
     db.commit()
     db.refresh(db_settings)
     return db_settings
+
+# --- FUNCIÓN RECUPERADA ---
+def update_company_distributor_status(db: Session, company_id: int, is_distributor: bool):
+    """
+    Enciende o apaga el letrero de 'Distribuidor' y actualiza MASIVAMENTE los productos.
+    """
+    # 1. Actualizar la Empresa
+    company = db.query(models.Company).filter(models.Company.id == company_id).first()
+    if company:
+        company.is_distributor = is_distributor
+        
+        # 2. ACTUALIZACIÓN MASIVA (El Interruptor Maestro)
+        # Si is_distributor es True -> Pone is_public = True a TODOS los productos.
+        # Si is_distributor es False -> Pone is_public = False a TODOS los productos.
+        db.query(models.Product).filter(
+            models.Product.company_id == company_id
+        ).update(
+            {models.Product.is_public: is_distributor}, 
+            synchronize_session=False # OptimizaciÃ³n para actualizaciones masivas
+        )
+
+        db.commit()
+        db.refresh(company)
+    return company
+# --------------------------
 
 def update_company_logo(db: Session, logo_url: str, company_id: int):
     """

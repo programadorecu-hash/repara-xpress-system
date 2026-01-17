@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import api from "../services/api";
 // Importamos íconos modernos para la interfaz de fotos
-import { HiOutlineCamera, HiOutlinePhotograph, HiOutlineCloudUpload, HiOutlineTrash } from "react-icons/hi";
+import { HiOutlineCamera, HiOutlinePhotograph, HiOutlineCloudUpload, HiOutlineTrash, HiOutlineGlobeAlt } from "react-icons/hi";
 import { useContext } from "react";
 import { AuthContext } from "../context/AuthContext";
 
@@ -32,8 +32,9 @@ function ProductForm({ productToEdit, onSave, onClose }) {
     average_cost: 0, // <-- Añadimos el estado para el costo
     category_id: null,
     is_active: true,
+    is_public: false, // <--- NUEVO ESTADO POR DEFECTO
     images: [],
-  }); 
+  });
 
   // Estados para la gestión de categorías y proveedores.
   const [categories, setCategories] = useState([]);
@@ -45,6 +46,9 @@ function ProductForm({ productToEdit, onSave, onClose }) {
   
   const [isCreatingSupplier, setIsCreatingSupplier] = useState(false); // <--- NUEVO
   const [newSupplierName, setNewSupplierName] = useState("");        // <--- NUEVO
+
+  // Estado para saber si la empresa es Distribuidora (para el default inteligente)
+  const [isDistributor, setIsDistributor] = useState(false);
 
   // Estados para la gestión de subida de imágenes.
   const [selectedFile, setSelectedFile] = useState(null);
@@ -70,6 +74,8 @@ function ProductForm({ productToEdit, onSave, onClose }) {
       average_cost: 0,
       category_id: product.category_id, // Mantenemos la categoría anterior para agilizar
       is_active: true,
+      // Mantenemos la lógica inteligente al resetear:
+      is_public: isDistributor, 
       images: [],
     });
     setSelectedFile(null); // Limpiamos selección de archivo
@@ -97,12 +103,32 @@ function ProductForm({ productToEdit, onSave, onClose }) {
     // Cargar Proveedores
     api.get("/suppliers/").then((response) => setSuppliers(response.data));
 
+    // --- LÓGICA INTELIGENTE: Consultar si soy Distribuidor ---
+    api.get("/company/distributor-status").then((response) => {
+      const imDistributor = response.data.is_distributor;
+      setIsDistributor(imDistributor); // Guardamos el dato para resets futuros
+
+      // SOLO si es un producto NUEVO, aplicamos la regla automática
+      if (!productToEdit) {
+        setProduct((prev) => ({
+          ...prev,
+          // Si soy distribuidor -> is_public = true (Visible por defecto)
+          // Si soy taller -> is_public = false (Privado por defecto)
+          is_public: imDistributor, 
+        }));
+      }
+    });
+    // ---------------------------------------------------------
+
     if (productToEdit) {
       setProduct({
         ...productToEdit,
         category_id: productToEdit.category?.id || null,
-        supplier_id: productToEdit.supplier?.id || null, // <--- CARGAR PROVEEDOR
+        supplier_id: productToEdit.supplier?.id || null, 
         images: productToEdit.images || [],
+        // --- ARREGLO ERROR REACT: Asegurar que sea booleano (true/false) ---
+        is_public: !!productToEdit.is_public, 
+        // -------------------------------------------------------------------
       });
     }
   }, [productToEdit]);
@@ -428,7 +454,7 @@ function ProductForm({ productToEdit, onSave, onClose }) {
 
           {/* Fila de Precios de Venta (REORDENADA LÓGICAMENTE) */}
           <div className={`grid grid-cols-1 ${isBlitzMode ? 'md:grid-cols-1' : 'md:grid-cols-3'} gap-4`}>
-            {/* PRECIO 3: Ahora es el PVP (El más alto usualmente) */}
+            {/* PRECIO 3: Precio Final PVP (El más alto) */}
             <div>
               <label className="font-bold text-gray-700 text-sm">Precio Final (PVP)</label>
               <div className="relative">
@@ -436,7 +462,7 @@ function ProductForm({ productToEdit, onSave, onClose }) {
                 <input
                   type="number"
                   step="0.01"
-                  name="price_3" // Mantenemos el nombre técnico price_3 para PVP
+                  name="price_3"
                   // [ARREGLO] Si es 0, mostramos vacío para que puedas escribir
                   value={product.price_3 === 0 ? "" : product.price_3}
                   onChange={handleChange}
@@ -466,9 +492,9 @@ function ProductForm({ productToEdit, onSave, onClose }) {
                     </div>
                     </div>
 
-                    {/* PRECIO 1: Mayorista/Frecuente (El más bajo) */}
+                    {/* PRECIO 1: PRECIO DISTRIBUIDOR (El que sale en la web pública) */}
                     <div>
-                    <label className="font-semibold text-gray-600 text-sm">Cliente Frecuente</label>
+                    <label className="font-bold text-blue-600 text-sm">Precio para Distribuidor (Web)</label>
                     <div className="relative">
                         <span className="absolute left-3 top-2 text-gray-400">$</span>
                         <input
@@ -636,15 +662,41 @@ function ProductForm({ productToEdit, onSave, onClose }) {
               </div>
             </div>
           )}
-          <div className="flex items-center">
-            <input
-              type="checkbox"
-              name="is_active"
-              checked={product.is_active}
-              onChange={handleChange}
-              className="h-4 w-4 rounded"
-            />
-            <label className="ml-2 font-semibold">Activo para la venta</label>
+          <div className="flex flex-col sm:flex-row sm:items-center gap-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
+            {/* Checkbox Activo (Interno) */}
+            <div className="flex items-center">
+              <input
+                type="checkbox"
+                name="is_active"
+                checked={product.is_active}
+                onChange={handleChange}
+                className="h-5 w-5 text-blue-600 rounded focus:ring-blue-500 border-gray-300"
+              />
+              <label className="ml-2 font-semibold text-gray-700">Activo (Interno)</label>
+            </div>
+
+            {/* Checkbox Público (Externo) */}
+            <div className="flex items-center">
+              <div className="relative flex items-start">
+                <div className="flex h-5 items-center">
+                  <input
+                    id="is_public"
+                    name="is_public"
+                    type="checkbox"
+                    checked={product.is_public}
+                    onChange={handleChange}
+                    className="h-5 w-5 text-green-600 rounded focus:ring-green-500 border-gray-300"
+                  />
+                </div>
+                <div className="ml-2 text-sm">
+                  <label htmlFor="is_public" className="font-bold text-gray-800 flex items-center gap-1 cursor-pointer">
+                    <HiOutlineGlobeAlt className="w-5 h-5 text-green-600" />
+                    Publicar en Catálogo Web
+                  </label>
+                  <p className="text-gray-500 text-xs">Visible para otros técnicos en el buscador.</p>
+                </div>
+              </div>
+            </div>
           </div>
           {/* --- FIN DEL CÓDIGO RESTAURADO --- */}
 
