@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import api, { deliverWorkOrderUnrepaired, deleteWorkOrderImage } from "../services/api";
 import PatternLockModal from "./PatternLockModal"; // <--- IMPORTANTE
+import { HiOutlineSearch } from "react-icons/hi"; // <--- Importamos la lupa
 
 // --- COMPONENTE DE SLOT DE FOTO (MEJORADO: CON ZOOM) ---
 const PhotoSlot = ({ index, image, orderId, onUpload, onView }) => {
@@ -256,7 +257,57 @@ function WorkOrderForm({ orderId, onClose, onSave }) {
   const [unrepairedData, setUnrepairedData] = useState({ fee: 2.00, reason: "Cliente retiró sin reparar", pin: "" });
   // Estado para el modal de patrón
   const [showPatternModal, setShowPatternModal] = useState(false);
-  
+
+  // --- LÓGICA DE BÚSQUEDA INTELIGENTE DE CLIENTE ---
+  const [customerCandidates, setCustomerCandidates] = useState([]);
+  const [showCustomerModal, setShowCustomerModal] = useState(false);
+
+  const handleSearchCustomer = async (queryType) => {
+    // Definimos qué texto buscar según el botón presionado
+    const query = queryType === 'ci' ? order.customer_id_card : order.customer_name;
+    
+    if (!query || query.trim().length < 3) {
+      alert("Por favor escribe al menos 3 caracteres para buscar.");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const response = await api.get('/customers/', { params: { search: query } });
+      const results = response.data;
+
+      if (results.length === 0) {
+        alert("No se encontró ningún cliente registrado con esos datos.");
+      } else if (results.length === 1) {
+        // Solo 1 resultado: Llenado automático
+        selectCustomer(results[0]);
+      } else {
+        // Varios resultados: Mostrar lista para elegir
+        setCustomerCandidates(results);
+        setShowCustomerModal(true);
+      }
+    } catch (error) {
+      console.error("Error buscando cliente:", error);
+      alert("Ocurrió un error al buscar.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const selectCustomer = (customer) => {
+    // Rellenamos SOLO los datos del cliente
+    setOrder(prev => ({
+      ...prev,
+      customer_name: customer.name,
+      customer_id_card: customer.id_card,
+      customer_phone: customer.phone || "",
+      customer_address: customer.address || "",
+      customer_email: customer.email || ""
+    }));
+    setShowCustomerModal(false);
+  };
+  // ------------------------------------------------
+
   const handleUnrepairedSubmit = async () => {
     try {
       setLoading(true);
@@ -477,20 +528,58 @@ function WorkOrderForm({ orderId, onClose, onSave }) {
           <fieldset className="border p-4 rounded-lg">
             <legend className="text-lg font-semibold px-2 text-gray-700">Datos del Cliente</legend>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <input type="text" name="customer_name" value={order.customer_name} onChange={handleChange} placeholder="Nombre y Apellido" className="p-2 border rounded" required disabled={!!orderId} autoComplete="off" />
               
-              {/* ARREGLO UX: Bloqueo de autocompletado en cédula */}
-              <input 
-                type="text" 
-                name="customer_id_card" 
-                value={order.customer_id_card} 
-                onChange={handleChange} 
-                placeholder="Cédula" 
-                className="p-2 border rounded" 
-                required 
-                disabled={!!orderId} 
-                autoComplete="new-password" // Truco anti-autofill
-              />
+              {/* CAMPO NOMBRE (CON BUSCADOR) */}
+              <div className="relative">
+                <input 
+                  type="text" 
+                  name="customer_name" 
+                  value={order.customer_name} 
+                  onChange={handleChange} 
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleSearchCustomer('name'); } }}
+                  placeholder="Nombre y Apellido" 
+                  className="w-full p-2 border rounded pr-10" 
+                  required 
+                  disabled={!!orderId} 
+                  autoComplete="off" 
+                />
+                {!orderId && (
+                  <button
+                    type="button"
+                    onClick={() => handleSearchCustomer('name')}
+                    className="absolute right-1 top-1 p-1 bg-blue-100 text-blue-600 rounded hover:bg-blue-200 transition"
+                    title="Buscar por Nombre"
+                  >
+                    <HiOutlineSearch className="w-5 h-5" />
+                  </button>
+                )}
+              </div>
+              
+              {/* CAMPO CÉDULA (CON BUSCADOR) */}
+              <div className="relative">
+                <input 
+                  type="text" 
+                  name="customer_id_card" 
+                  value={order.customer_id_card} 
+                  onChange={handleChange} 
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleSearchCustomer('ci'); } }}
+                  placeholder="Cédula" 
+                  className="w-full p-2 border rounded pr-10" 
+                  required 
+                  disabled={!!orderId} 
+                  autoComplete="new-password" 
+                />
+                {!orderId && (
+                  <button
+                    type="button"
+                    onClick={() => handleSearchCustomer('ci')}
+                    className="absolute right-1 top-1 p-1 bg-blue-100 text-blue-600 rounded hover:bg-blue-200 transition"
+                    title="Buscar por Cédula"
+                  >
+                    <HiOutlineSearch className="w-5 h-5" />
+                  </button>
+                )}
+              </div>
               
               <input type="text" name="customer_phone" value={order.customer_phone} onChange={handleChange} placeholder="Teléfono" className="p-2 border rounded" required autoComplete="off" />
             </div>
@@ -699,6 +788,44 @@ function WorkOrderForm({ orderId, onClose, onSave }) {
           initialPattern={order.device_unlock_pattern}
           onSave={(patternString) => setOrder(prev => ({ ...prev, device_unlock_pattern: patternString }))}
         />
+
+        {/* --- MODAL DE SELECCIÓN DE CLIENTES (BÚSQUEDA) --- */}
+        {showCustomerModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 z-[70] flex items-center justify-center p-4" onClick={(e) => e.stopPropagation()}>
+            <div className="bg-white rounded-lg shadow-xl w-full max-w-md overflow-hidden">
+              <div className="bg-gray-100 px-4 py-3 border-b flex justify-between items-center">
+                <h3 className="font-bold text-gray-700">Seleccionar Cliente</h3>
+                <button onClick={() => setShowCustomerModal(false)} className="text-gray-500 hover:text-gray-700 font-bold text-xl">&times;</button>
+              </div>
+              <div className="p-4 max-h-80 overflow-y-auto">
+                <p className="text-sm text-gray-600 mb-3">Encontramos varios clientes. Por favor elige uno:</p>
+                <ul className="space-y-2">
+                  {customerCandidates.map((c) => (
+                    <li 
+                      key={c.id} 
+                      onClick={() => selectCustomer(c)}
+                      className="p-3 border rounded hover:bg-blue-50 cursor-pointer transition flex justify-between items-center"
+                    >
+                      <div>
+                        <p className="font-bold text-sm text-gray-800">{c.name}</p>
+                        <p className="text-xs text-gray-500">CI: {c.id_card}</p>
+                      </div>
+                      <span className="text-blue-600 text-sm font-semibold">Seleccionar &rarr;</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <div className="bg-gray-50 px-4 py-3 text-right">
+                <button 
+                  onClick={() => setShowCustomerModal(false)}
+                  className="px-4 py-2 bg-gray-300 text-gray-700 rounded hover:bg-gray-400 text-sm font-bold"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
         
         </div> {/* --- FIN DEL CONTENEDOR CON SCROLL --- */}
       </div>

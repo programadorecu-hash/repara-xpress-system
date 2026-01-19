@@ -5,25 +5,50 @@ import PaymentModal from "../components/PaymentModal.jsx";
 import { HiOutlineSearch, HiOutlineChatAlt2 } from "react-icons/hi"; // <-- IMPORTAR ICONO WHATSAPP
 
 function POSPage() {
-  // --- FUNCIÓN PARA BUSCAR CLIENTE ---
-  const searchCustomerByCI = async () => {
-    if (!customerCI) return;
+  // --- ESTADOS PARA BÚSQUEDA DE CLIENTE (NUEVO) ---
+  const [customerCandidates, setCustomerCandidates] = useState([]); // Lista de clientes encontrados
+  const [showCustomerModal, setShowCustomerModal] = useState(false); // ¿Mostramos la lista?
+
+  // --- FUNCIÓN INTELIGENTE PARA BUSCAR CLIENTE ---
+  const handleSearchCustomer = async (queryType) => {
+    // Si queryType es 'ci', buscamos lo que hay en la caja de Cédula.
+    // Si es 'name', buscamos lo que hay en la caja de Nombre.
+    const query = queryType === 'ci' ? customerCI : customerName;
+    
+    if (!query || query.trim().length < 3) {
+      alert("Por favor escribe al menos 3 caracteres para buscar.");
+      return;
+    }
+
     try {
-      // Usamos el endpoint de búsqueda
-      const response = await api.get('/customers/', { params: { search: customerCI } });
-      const found = response.data.find(c => c.id_card === customerCI);
-      
-      if (found) {
-        setCustomerName(found.name);
-        setCustomerPhone(found.phone || "");
-        setCustomerAddress(found.address || "");
-        setCustomerEmail(found.email || "");
-        // Feedback visual sutil (borde verde temporal o algo)
-        console.log("Cliente encontrado");
+      // Llamamos al sistema para que busque coincidencias
+      const response = await api.get('/customers/', { params: { search: query } });
+      const results = response.data;
+
+      if (results.length === 0) {
+        alert("No se encontró ningún cliente registrado con esos datos.");
+      } else if (results.length === 1) {
+        // ¡Bingo! Solo hay uno, lo seleccionamos automáticamente
+        selectCustomer(results[0]);
+      } else {
+        // Hay varios (ej: varios "Juan"), guardamos la lista y abrimos la ventana para elegir
+        setCustomerCandidates(results);
+        setShowCustomerModal(true);
       }
     } catch (error) {
       console.error("Error buscando cliente:", error);
+      alert("Ocurrió un error al buscar.");
     }
+  };
+
+  // Función auxiliar para rellenar los campos cuando elegimos un cliente
+  const selectCustomer = (customer) => {
+    setCustomerCI(customer.id_card);
+    setCustomerName(customer.name);
+    setCustomerPhone(customer.phone || "");
+    setCustomerAddress(customer.address || "");
+    setCustomerEmail(customer.email || "");
+    setShowCustomerModal(false); // Cerramos la lista
   };
   const [searchTerm, setSearchTerm] = useState(""); // Para la búsqueda
   const [searchResults, setSearchResults] = useState([]); // Resultados de búsqueda
@@ -891,6 +916,7 @@ ${publicLink}`;
               Datos del Cliente
             </h3>
             <div className="space-y-2">
+              {/* CAMPO CÉDULA */}
               <div>
                 <label
                   htmlFor="customerCI"
@@ -898,32 +924,33 @@ ${publicLink}`;
                 >
                   Cédula / RUC*
                 </label>
-                {/* Input de Cédula con Botón de Búsqueda */}
-            <div className="relative">
-              <input
-                id="customerCI"
-                type="text"
-                value={customerCI}
-                onChange={(e) => setCustomerCI(e.target.value.toUpperCase())}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault(); 
-                    searchCustomerByCI();
-                  }
-                }}
-                className="w-full p-2 pr-10 border rounded-md text-sm uppercase font-bold text-gray-800"
-                placeholder="Cédula / RUC"
-              />
-              <button
-                type="button"
-                onClick={searchCustomerByCI}
-                className="absolute right-1 top-1 p-1 bg-blue-100 text-blue-600 rounded hover:bg-blue-200 transition"
-                title="Buscar Cliente"
-              >
-                <HiOutlineSearch className="w-5 h-5" />
-              </button>
-            </div>
+                <div className="relative">
+                  <input
+                    id="customerCI"
+                    type="text"
+                    value={customerCI}
+                    onChange={(e) => setCustomerCI(e.target.value.toUpperCase())}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault(); 
+                        handleSearchCustomer('ci'); // Usamos la nueva función
+                      }
+                    }}
+                    className="w-full p-2 pr-10 border rounded-md text-sm uppercase font-bold text-gray-800"
+                    placeholder="Cédula / RUC"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => handleSearchCustomer('ci')} // Usamos la nueva función
+                    className="absolute right-1 top-1 p-1 bg-blue-100 text-blue-600 rounded hover:bg-blue-200 transition"
+                    title="Buscar por Cédula"
+                  >
+                    <HiOutlineSearch className="w-5 h-5" />
+                  </button>
+                </div>
               </div>
+
+              {/* CAMPO NOMBRE CON BÚSQUEDA */}
               <div>
                 <label
                   htmlFor="customerName"
@@ -931,18 +958,34 @@ ${publicLink}`;
                 >
                   Nombre y Apellido*
                 </label>
-                <input
-                  id="customerName"
-                  type="text"
-                  value={customerName}
-                  // Nombre siempre en mayúsculas
-                  onChange={(e) => setCustomerName(e.target.value.toUpperCase())}
-                  className="w-full p-1.5 border rounded-md text-sm"
-                  required
-                  placeholder="Nombre Completo"
-                  pattern="[A-Za-zñÑáéíóúÁÉÍÓÚ\s]+" // <-- LETRAS Y ESPACIOS
-                  title="Ingrese solo letras y espacios."
-                />
+                <div className="relative">
+                  <input
+                    id="customerName"
+                    type="text"
+                    value={customerName}
+                    // Nombre siempre en mayúsculas
+                    onChange={(e) => setCustomerName(e.target.value.toUpperCase())}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault(); 
+                        handleSearchCustomer('name'); // Búsqueda por nombre al dar Enter
+                      }
+                    }}
+                    className="w-full p-2 pr-10 border rounded-md text-sm"
+                    required
+                    placeholder="Nombre Completo"
+                    pattern="[A-Za-zñÑáéíóúÁÉÍÓÚ\s]+"
+                    title="Ingrese solo letras y espacios."
+                  />
+                  <button
+                    type="button"
+                    onClick={() => handleSearchCustomer('name')} // Botón buscar por nombre
+                    className="absolute right-1 top-1 p-1 bg-blue-100 text-blue-600 rounded hover:bg-blue-200 transition"
+                    title="Buscar por Nombre"
+                  >
+                    <HiOutlineSearch className="w-5 h-5" />
+                  </button>
+                </div>
               </div>
               <div>
                 <label
@@ -1219,6 +1262,45 @@ ${publicLink}`;
           // --- FIN LÍNEAS AÑADIDAS ---
         />
       )}
+
+      {/* --- MODAL DE SELECCIÓN DE CLIENTES (CUANDO HAY VARIOS) --- */}
+      {showCustomerModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-[70] flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-md overflow-hidden">
+            <div className="bg-gray-100 px-4 py-3 border-b flex justify-between items-center">
+              <h3 className="font-bold text-gray-700">Seleccionar Cliente</h3>
+              <button onClick={() => setShowCustomerModal(false)} className="text-gray-500 hover:text-gray-700 font-bold text-xl">&times;</button>
+            </div>
+            <div className="p-4 max-h-80 overflow-y-auto">
+              <p className="text-sm text-gray-600 mb-3">Encontramos varios clientes. Por favor elige uno:</p>
+              <ul className="space-y-2">
+                {customerCandidates.map((c) => (
+                  <li 
+                    key={c.id} 
+                    onClick={() => selectCustomer(c)}
+                    className="p-3 border rounded hover:bg-blue-50 cursor-pointer transition flex justify-between items-center"
+                  >
+                    <div>
+                      <p className="font-bold text-sm text-gray-800">{c.name}</p>
+                      <p className="text-xs text-gray-500">CI: {c.id_card}</p>
+                    </div>
+                    <span className="text-blue-600 text-sm font-semibold">Seleccionar &rarr;</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div className="bg-gray-50 px-4 py-3 text-right">
+              <button 
+                onClick={() => setShowCustomerModal(false)}
+                className="px-4 py-2 bg-gray-300 text-gray-700 rounded hover:bg-gray-400 text-sm font-bold"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </> // --- CORRECCIÓN: Cierre del Fragment ---
   );
 }

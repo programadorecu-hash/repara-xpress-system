@@ -1,6 +1,6 @@
 // frontend/src/components/AppLayout.jsx
 import React, { useState, useEffect, useContext } from 'react';
-import { Outlet } from 'react-router-dom';
+import { Outlet, Link } from 'react-router-dom';
 import Header from './Header.jsx'; 
 // CAMBIO: Importamos la función específica para obtener datos de la empresa
 import api, { getCompanySettings } from '../services/api';
@@ -111,8 +111,12 @@ function AppLayout() {
           <HiOutlineMenu className="w-7 h-7" />
         </button>
 
-        {/* Logo/Título (Centrado Absoluto) */}
-        <div className="absolute left-1/2 transform -translate-x-1/2 flex items-center justify-center">
+        {/* Logo/Título (Centrado Absoluto y Clickable) */}
+        <Link 
+          to="/" 
+          className="absolute left-1/2 transform -translate-x-1/2 flex items-center justify-center active:opacity-70 transition-opacity"
+          title="Ir al Inicio"
+        >
           {companyInfo.logo_url ? (
             // Si hay logo, mostramos la imagen
             <img 
@@ -126,7 +130,7 @@ function AppLayout() {
               {companyInfo.name}
             </span>
           )}
-        </div>
+        </Link>
 
         {/* Espacio vacío a la derecha (para equilibrar el botón de la izquierda) */}
         <div className="w-10"></div>

@@ -32,8 +32,11 @@ import {
 
 // Componente de Enlace con Ícono
 function NavItem({ to, icon, label, isExpanded }) {
+  // 1. Quitamos 'space-x-3' para manejar el margen manualmente y evitar "saltos"
+  // 2. Mantenemos 'whitespace-nowrap' para que el texto sea rígido
   const baseStyle =
-    "flex items-center space-x-3 py-2 px-3 rounded-lg text-surface/80 hover:bg-surface/10 transition-all duration-300 group overflow-hidden whitespace-nowrap";
+    "flex items-center py-2 px-3 rounded-lg text-surface/80 hover:bg-surface/10 transition-all duration-300 group overflow-hidden whitespace-nowrap";
+  
   const activeStyle = "bg-surface/20 text-surface font-semibold";
 
   return (
@@ -41,16 +44,26 @@ function NavItem({ to, icon, label, isExpanded }) {
       to={to}
       className={({ isActive }) =>
         `${baseStyle} ${isActive ? activeStyle : ""} ${
-          !isExpanded ? "justify-center" : ""
+          !isExpanded ? "justify-center" : "justify-start"
         }`
       }
       title={!isExpanded ? label : undefined}
     >
-      <div className="text-xl min-w-[20px]">{icon}</div>
+      {/* ICONO: 'flex-shrink-0' es VITAL para que no se aplaste al cerrar el menú */}
+      <div className="text-xl min-w-[24px] flex-shrink-0 flex justify-center">{icon}</div>
       
-      {/* CAMBIO: Contenedor para animar la aparición del texto */}
-      <div className={`transition-all duration-500 ease-in-out ${isExpanded ? "opacity-100 max-w-[200px] ml-2" : "opacity-0 max-w-0 ml-0"}`}>
-        <span>{label}</span>
+      {/* TEXTO: Animación suave sincronizada con el menú (duration-500) */}
+      <div 
+        className={`
+          overflow-hidden whitespace-nowrap
+          transition-all duration-500 ease-in-out
+          ${isExpanded 
+            ? "max-w-[200px] opacity-100 ml-3"  // ml-3 da el espacio cuando está abierto
+            : "max-w-0 opacity-0 ml-0"          // ml-0 quita el espacio cuando está cerrado
+          }
+        `}
+      >
+        {label}
       </div>
     </NavLink>
   );
@@ -104,38 +117,44 @@ function Header({ isMenuOpen, onToggle, companyInfo, apiUrl }) {
           } items-center px-2 flex-shrink-0 py-4`}
         >
           {/* Lógica de Visualización del Logo/Nombre */}
-          <div className={`transition-all duration-500 ease-in-out flex items-center ${isMenuOpen ? "opacity-100 max-w-[200px]" : "opacity-100 w-full justify-center"}`}>
+          {/* CAMBIO: Ahora es un Link que lleva al Inicio */}
+          <NavLink 
+            to="/" 
+            className={`transition-all duration-500 ease-in-out flex flex-col items-center hover:opacity-90 ${isMenuOpen ? "opacity-100 max-w-[200px]" : "opacity-100 w-full justify-center"}`}
+            title="Ir al Inicio"
+          >
             
             {companyInfo?.logo_url ? (
               // CASO 1: TIENE LOGO
               <img 
                 src={`${apiUrl}${companyInfo.logo_url}`} 
                 alt={companyInfo.name} 
-                className={`object-contain transition-all duration-500 ${isMenuOpen ? "h-12 w-auto" : "h-10 w-10 rounded-full bg-white p-1"}`} 
+                // CORRECCIÓN: Forzamos rounded-full SIEMPRE, object-cover y borde
+                className={`object-cover bg-white transition-all duration-500 rounded-full border-2 border-white/20 ${isMenuOpen ? "h-16 w-16 p-1" : "h-10 w-10 p-0.5"}`} 
               />
             ) : (
-              // CASO 2: NO TIENE LOGO (Texto)
-              isMenuOpen ? (
-                <span className="text-white font-bold text-lg truncate">{companyInfo?.name}</span>
-              ) : (
-                // Si está cerrado y no hay logo, mostramos la inicial
-                <div className="h-10 w-10 bg-accent rounded-full flex items-center justify-center text-white font-bold text-xl">
-                  {companyInfo?.name?.charAt(0) || "R"}
-                </div>
-              )
+              // CASO 2: NO TIENE LOGO (Solo Inicial)
+              <div className={`bg-accent rounded-full flex items-center justify-center text-white font-bold transition-all duration-500 border-2 border-white/20 ${isMenuOpen ? "h-14 w-14 text-2xl" : "h-10 w-10 text-xl"}`}>
+                {companyInfo?.name?.charAt(0) || "R"}
+              </div>
             )}
-          </div>
 
-          <button
-            onClick={onToggle}
-            className="text-surface/80 hover:text-surface p-2 rounded-lg hover:bg-surface/10"
-          >
-            {isMenuOpen ? (
-              <HiOutlineX className="w-6 h-6" />
-            ) : (
-              <HiOutlineMenu className="w-6 h-6" />
-            )}
-          </button>
+            {/* NOMBRE DE LA EMPRESA: Animación fluida sin saltos de línea */}
+            <div 
+              className={`
+                overflow-hidden whitespace-nowrap text-center
+                transition-all duration-500 ease-in-out
+                ${isMenuOpen 
+                  ? "max-h-[50px] opacity-100 mt-2" // Abierto: Altura, opacidad y margen
+                  : "max-h-0 opacity-0 mt-0"        // Cerrado: Todo a cero (incluido el margen)
+                }
+              `}
+            >
+               <span className="text-white font-bold text-sm block">{companyInfo?.name || "Cargando..."}</span>
+            </div>
+          </NavLink>
+
+          
         </div>
 
         {/* Nombre de la Sucursal */}
@@ -236,12 +255,29 @@ function Header({ isMenuOpen, onToggle, companyInfo, apiUrl }) {
 
               <button
                 onClick={handleLogout}
-                className={`w-full flex items-center space-x-3 py-2 px-3 rounded-lg text-surface/80 hover:bg-red-500/50 hover:text-white font-bold transition-colors ${
-                  !isMenuOpen ? "justify-center" : ""
+                className={`w-full flex items-center py-2 px-3 rounded-lg text-surface/80 hover:bg-red-500/50 hover:text-white font-bold transition-colors ${
+                  !isMenuOpen ? "justify-center" : "justify-start"
                 }`}
+                title={!isMenuOpen ? "Cerrar Sesión" : undefined}
               >
-                <HiOutlineLogout className="w-6 h-6" />
-                {isMenuOpen && <span>FIN DEL TURNO</span>}
+                {/* ICONO: Flex-shrink-0 para que no se aplaste */}
+                <div className="text-xl min-w-[24px] flex-shrink-0 flex justify-center">
+                  <HiOutlineLogout className="w-6 h-6" />
+                </div>
+                
+                {/* TEXTO: Animación suave igual que los items del menú */}
+                <div 
+                  className={`
+                    overflow-hidden whitespace-nowrap
+                    transition-all duration-500 ease-in-out
+                    ${isMenuOpen 
+                      ? "max-w-[200px] opacity-100 ml-3" 
+                      : "max-w-0 opacity-0 ml-0"
+                    }
+                  `}
+                >
+                  FIN DEL TURNO
+                </div>
               </button>
             </div>
           )}
