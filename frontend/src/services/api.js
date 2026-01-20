@@ -125,9 +125,10 @@ export async function getTransfer(id) {
   return data;
 }
 
-export async function createTransfer({ destination_location_id, note, items, pin }) {
+export async function createTransfer({ source_location_id, destination_location_id, note, items, pin }) {
   // Crea un nuevo envío
   const { data } = await apiClient.post('/transfers/', {
+    source_location_id, // <--- AHORA SÍ LO ENVIAMOS
     destination_location_id,
     note,
     items, // Array de { product_id, quantity }
@@ -136,14 +137,22 @@ export async function createTransfer({ destination_location_id, note, items, pin
   return data;
 }
 
-export async function receiveTransfer(id, { status, pin, note }) {
+export async function receiveTransfer(id, { status, pin, note, items }) {
   // Acepta o Rechaza un envío
-  // status debe ser "ACEPTADO" o "RECHAZADO"
+  // status: "ACEPTADO", "ACEPTADO_PARCIAL", "RECHAZADO"
+  // items: Lista de objetos { item_id, received_quantity, note }
   const { data } = await apiClient.post(`/transfers/${id}/receive`, {
     status,
     pin,
-    note
+    note,
+    items // <--- Enviamos el checklist
   });
   return data;
 }
 // ===== FIN API =====
+
+export async function getTransferManifestUrl(id) {
+  // En lugar de bajar los datos, construimos la URL directa al PDF
+  // Esto permite abrirlo en una nueva pestaña o iframe para impresión nativa
+  return `${apiClient.defaults.baseURL}/transfers/${id}/print-manifest`;
+}

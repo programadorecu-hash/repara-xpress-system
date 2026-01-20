@@ -843,22 +843,37 @@ class TransferItemCreate(TransferItemBase):
 
 class TransferItem(TransferItemBase):
     id: int
-    product_name: str | None = None # Para mostrar el nombre en el frontend
+    product_name: str | None = None
+    # --- NUEVO: Campos de recepción en la lectura ---
+    received_quantity: int | None = None
+    reception_note: str | None = None
+    # ------------------------------------------------
     class Config:
         from_attributes = True
+
+# --- NUEVO: Item para la acción de RECIBIR (El Check-list) ---
+class TransferItemReceive(BaseModel):
+    item_id: int # El ID de la fila en transfer_items
+    received_quantity: int
+    note: str | None = None
+# -------------------------------------------------------------
 
 # 2. La creación del envío (Lo que envía el frontend)
 class TransferCreate(BaseModel):
     destination_location_id: int
+    source_location_id: int | None = None
     note: str | None = None
     items: List[TransferItemCreate]
-    pin: str # Autorización del que envía
+    pin: str 
 
-# 3. La acción de recibir (Aceptar o Rechazar)
+# 3. La acción de recibir (Aceptar o Rechazar) - ¡AHORA DETALLADA!
 class TransferReceive(BaseModel):
-    status: str # "ACEPTADO" o "RECHAZADO"
-    pin: str # Autorización del que recibe
-    note: str | None = None # Razón del rechazo o comentario
+    status: str # "ACEPTADO", "ACEPTADO_PARCIAL", "RECHAZADO"
+    pin: str 
+    note: str | None = None 
+    # --- NUEVO: Lista de cotejo ---
+    items: List[TransferItemReceive] | None = None 
+    # ------------------------------
 
 # 4. Lectura completa (Para mostrar en pantalla)
 class TransferRead(BaseModel):
@@ -868,7 +883,12 @@ class TransferRead(BaseModel):
     created_at: datetime
     updated_at: datetime | None = None
     
-    # Mostramos nombres simples
+    # --- IDs para lógica de negocio ---
+    source_location_id: int 
+    destination_location_id: int
+    # ----------------------------------
+
+    # Nombres para mostrar en pantalla
     source_location_name: str | None = None
     destination_location_name: str | None = None
     created_by_name: str | None = None

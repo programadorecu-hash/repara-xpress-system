@@ -971,3 +971,122 @@ def generate_sales_history_pdf(sales_data: list, company_settings: schemas.Compa
     buffer.seek(0)
     return buffer
 # --- FIN DE NUESTRO CÓDIGO ---
+
+# --- INICIO: Generador de Manifiesto de Envío (Formato Térmico) ---
+def generate_transfer_manifest_pdf(transfer: schemas.TransferRead, company_settings: schemas.CompanySettings):
+    """
+    Genera un MANIFIESTO DE CARGA en formato térmico (58mm).
+    """
+    buffer = BytesIO()
+    # Calculamos altura dinámica
+    base_height = 180 * mm
+    extra_height = len(transfer.items) * 10 * mm
+    width, height = 58 * mm, base_height + extra_height 
+    
+    c = canvas.Canvas(buffer, pagesize=(width, height))
+    styles = getSampleStyleSheet()
+
+    # Estilos (reutilizamos la lógica visual de los otros recibos)
+    style_title = ParagraphStyle(name='title', parent=styles['Normal'], alignment=TA_CENTER, fontName='Helvetica-Bold', fontSize=10, leading=12)
+    style_centered = ParagraphStyle(name='centered', parent=styles['Normal'], alignment=TA_CENTER, fontSize=8, leading=10)
+    style_normal = ParagraphStyle(name='normal', parent=styles['Normal'], fontSize=7, leading=9)
+    style_bold = ParagraphStyle(name='bold', parent=styles['Normal'], fontName='Helvetica-Bold', fontSize=8, leading=10)
+
+    y = height - (5 * mm)
+
+    def draw_paragraph(text, style):
+        nonlocal y
+        p = Paragraph(text, style)
+        w, h = p.wrap(width - 6*mm, height)
+        p.drawOn(c, 3*mm, y - h)
+        y -= h + (1.5 * mm)
+
+    def draw_line():
+        nonlocal y
+        y -= 1 * mm
+        c.setLineWidth(0.5)
+        c.setDash(1, 2)
+        c.line(2 * mm, y, width - (2 * mm), y)
+        c.setDash([])
+        y -= 2 * mm
+
+    # --- CONTENIDO ---
+
+    # Cabecera Empresa
+    draw_paragraph(company_settings.name.upper(), style_title)
+    draw_paragraph(f"RUC: {company_settings.ruc}", style_centered)
+    
+    y -= 2 * mm
+    draw_paragraph("MANIFIESTO DE CARGA", style_title)
+    draw_paragraph("(Guía Interna)", style_centered)
+
+    # Datos del Envío
+    draw_paragraph(f"<b>N° Guía:</b> {transfer.id}", style_centered)
+    
+    # Formatear fecha
+    if isinstance(transfer.created_at, str):
+         # Si pydantic lo serializó a string, lo usamos directo o lo parseamos
+         date_str = transfer.created_at.split('T')[0] 
+    else:
+         date_str = transfer.created_at.strftime("%d/%m/%Y %H:%M")
+
+    draw_paragraph(f"<b>Fecha:</b> {date_str}", style_centered)
+    
+    draw_line()
+
+    # Logística
+    draw_paragraph("<b>ORIGEN (Remitente):</b>", style_bold)
+    draw_paragraph(f"{transfer.source_location_name}", style_normal)
+    draw_paragraph(f"Resp: {transfer.created_by_name}", style_normal)
+    
+    y -= 2 * mm
+    
+    draw_paragraph("<b>DESTINO (Receptor):</b>", style_bold)
+    draw_paragraph(f"{transfer.destination_location_name}", style_normal)
+    
+    if transfer.note:
+        draw_paragraph(f"Nota: {transfer.note}", style_normal)
+
+    draw_line()
+
+    # Detalle de Items
+    draw_paragraph("<b>DETALLE DE LA CARGA</b>", style_bold)
+    y -= 1 * mm
+    
+    # Encabezados tabla pequeña
+    c.setFont("Helvetica-Bold", 7)
+    c.drawString(3*mm, y, "CANT")
+    c.drawString(15*mm, y, "DESCRIPCIÓN")
+    y -= 3 * mm
+
+    for item in transfer.items:
+        # Cantidad
+        c.setFont("Helvetica-Bold", 8)
+        c.drawString(3*mm, y, str(item.quantity))
+        
+        # Descripción (con wrap manual simple)
+        c.setFont("Helvetica", 7)
+        desc = item.product_name[:25] # Cortamos si es muy largo para una línea
+        c.drawString(15*mm, y, desc)
+        
+        # Casilla de verificación visual
+        c.rect(width - 8*mm, y, 4*mm, 4*mm)
+        
+        y -= 5 * mm
+
+    draw_line()
+    
+    # Firmas
+    y -= 10 * mm
+    c.line(10 * mm, y, width - 10 * mm, y)
+    draw_paragraph("Firma Despacho", style_centered)
+
+    y -= 10 * mm
+    c.line(10 * mm, y, width - 10 * mm, y)
+    draw_paragraph("Firma Recepción", style_centered)
+
+    c.showPage()
+    c.save()
+    buffer.seek(0)
+    return buffer
+# --- FIN DE NUESTRO CÓDIGO ---

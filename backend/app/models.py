@@ -585,6 +585,7 @@ class Expense(Base):
     work_order = relationship("WorkOrder", back_populates="expenses")
 
 # --- INICIO DE NUESTRO CÓDIGO (Módulo de Transferencias entre Sucursales) ---
+# --- INICIO DE NUESTRO CÓDIGO (Módulo de Transferencias entre Sucursales) ---
 class Transfer(Base):
     """
     Representa una 'Guía de Remisión' interna.
@@ -622,6 +623,29 @@ class Transfer(Base):
     
     items = relationship("TransferItem", back_populates="transfer")
 
+    # --- PROPIEDADES MÁGICAS (TRADUCTORES PARA EL REPORTE) ---
+    @property
+    def source_location_name(self):
+        return self.source_location.name if self.source_location else "Desconocido"
+
+    @property
+    def destination_location_name(self):
+        return self.destination_location.name if self.destination_location else "Desconocido"
+
+    @property
+    def created_by_name(self):
+        # Intentamos mostrar Nombre Completo, si no hay, mostramos Email
+        if self.created_by:
+            return self.created_by.full_name or self.created_by.email
+        return "Sistema"
+
+    @property
+    def received_by_name(self):
+        if self.received_by:
+            return self.received_by.full_name or self.received_by.email
+        return "Pendiente"
+    # ---------------------------------------------------------
+
 class TransferItem(Base):
     """
     Detalle de qué productos van en la transferencia.
@@ -632,8 +656,18 @@ class TransferItem(Base):
     
     transfer_id = Column(Integer, ForeignKey("transfers.id"), nullable=False)
     product_id = Column(Integer, ForeignKey("products.id"), nullable=False)
-    quantity = Column(Integer, nullable=False)
+    quantity = Column(Integer, nullable=False) # Lo que se envió
+
+    # --- NUEVO: Auditoría de Recepción ---
+    received_quantity = Column(Integer, nullable=True) # Lo que realmente llegó
+    reception_note = Column(String, nullable=True) # "Llegó roto", "Falta 1", etc.
+    # -------------------------------------
 
     transfer = relationship("Transfer", back_populates="items")
     product = relationship("Product")
-# --- FIN DE NUESTRO CÓDIGO ---
+
+    # --- PROPIEDAD MÁGICA: NOMBRE DEL PRODUCTO ---
+    @property
+    def product_name(self):
+        return self.product.name if self.product else f"Producto ID {self.product_id}"
+    # ---------------------------------------------

@@ -2179,19 +2179,34 @@ def list_transfers(
 ):
     if not current_user.company_id: return []
     
-    # Filtro automático:
-    # - Si es Admin, ve todo.
-    # - Si es Empleado, ve solo lo que sale de SU bodega o llega a SU bodega.
     loc_id = None
+    should_restrict = False # Bandera de restricción
+
+    # Si NO es jefe, activamos la restricción
     if current_user.role not in ["admin", "inventory_manager"]:
+        should_restrict = True
+        
+        # Buscamos dónde está trabajando ahora mismo
         active_shift = crud.get_active_shift_for_user(db, current_user.id)
         if active_shift:
-            # Buscamos la bodega asociada a su oficina actual
+            # 1. Intentamos buscar la "Bodega Hija"
             bodega = crud.get_primary_bodega_for_location(db, active_shift.location_id)
             if bodega:
                 loc_id = bodega.id
-
-    return crud.get_transfers(db, company_id=current_user.company_id, skip=skip, limit=limit, status=status, location_id=loc_id)
+            else:
+                # 2. Si no hay hija, la sucursal actual ES la bodega
+                loc_id = active_shift.location_id 
+    
+    # Llamamos al CRUD con la orden de "forzar filtro" si es empleado
+    return crud.get_transfers(
+        db, 
+        company_id=current_user.company_id, 
+        skip=skip, 
+        limit=limit, 
+        status=status, 
+        location_id=loc_id,
+        force_filter=should_restrict # <--- AQUÍ ESTÁ LA SEGURIDAD
+    )
 
 @app.get("/transfers/{transfer_id}", response_model=schemas.TransferRead)
 def get_transfer_detail(
@@ -2220,6 +2235,43 @@ def receive_transfer_endpoint(
         return crud.receive_transfer(db, transfer_id, receive_data, current_user)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    
+
+# --- NUEVO: Imprimir Manifiesto de Transferencia ---
+@app.get("/transfers/{transfer_id}/print-manifest", response_class=StreamingResponse)
+def print_transfer_manifest(
+    transfer_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(security.get_current_user)
+):
+    """
+    Genera el PDF térmico del manifiesto de carga.
+    """
+    # 1. Obtener la transferencia (usamos crud.get_transfer para tener nombres)
+    transfer = crud.get_transfer(db, transfer_id)
+    if not transfer:
+        raise HTTPException(status_code=404, detail="Envío no encontrado")
+    
+    # 2. Seguridad: Validar empresa
+    if transfer.company_id != current_user.company_id:
+        raise HTTPException(status_code=403, detail="No tienes acceso.")
+
+    # 3. Obtener configuración de empresa
+    company_settings = crud.get_company_settings(db, company_id=transfer.company_id)
+
+    # 4. Generar PDF
+    # Convertimos a Schema para que el PDF Utils lo entienda bien
+    transfer_schema = schemas.TransferRead.model_validate(transfer)
+    settings_schema = schemas.CompanySettings.model_validate(company_settings)
+
+    pdf_buffer = pdf_utils.generate_transfer_manifest_pdf(transfer_schema, settings_schema)
+
+    headers = {
+        'Content-Disposition': f'inline; filename="manifiesto_{transfer_id}.pdf"'
+    }
+    return StreamingResponse(pdf_buffer, media_type="application/pdf", headers=headers)
+# ---------------------------------------------------
+
 # ===================================================================
 # --- TAREA PROGRAMADA: CIERRE AUTOMÁTICO DE TURNOS (23:55) ---
 # ===================================================================
