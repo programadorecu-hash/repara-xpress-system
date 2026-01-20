@@ -338,7 +338,23 @@ def delete_location(db: Session, location_id: int):
     return db_location
 
 def get_primary_bodega_for_location(db: Session, location_id: int):
-    return db.query(models.Location).filter(models.Location.parent_id == location_id).first()
+    """
+    Busca la bodega asociada a una sucursal de forma inteligente.
+    Prioridad 1: Un hijo con la palabra 'BODEGA' en su nombre.
+    Prioridad 2: El primer hijo que encuentre.
+    """
+    children = db.query(models.Location).filter(models.Location.parent_id == location_id).all()
+    
+    # 1. Buscamos explícitamente al hijo que se llame 'Bodega'
+    for child in children:
+        if "BODEGA" in child.name.upper():
+            return child
+            
+    # 2. Si no hay uno llamado Bodega, devolvemos el primero (comportamiento antiguo)
+    if children:
+        return children[0]
+        
+    return None
 
 # --- INICIO DE NUESTRO CÓDIGO (Lista solo de Bodegas) ---
 def get_bodegas(db: Session, company_id: int, skip: int = 0, limit: int = 100):
@@ -1701,7 +1717,10 @@ def get_dashboard_summary(db: Session, location_id: int, target_date: date):
 
     # --- NUEVO: Obtener la meta de la sucursal ---
     current_location = get_location(db, location_id)
-    goal = current_location.daily_goal if current_location else 0.0
+    # BLINDAJE: Si daily_goal es None en la base de datos, usamos 0.0
+    goal = 0.0
+    if current_location and current_location.daily_goal is not None:
+        goal = float(current_location.daily_goal)
     # ---------------------------------------------
 
     return {
@@ -2543,3 +2562,192 @@ def get_top_sellers(db: Session, company_id: int, start_date: date, end_date: da
         func.date(models.Sale.created_at) >= start_date,
         func.date(models.Sale.created_at) <= end_date
     ).group_by(models.User.id).order_by(desc("total_sales")).limit(5).all()
+
+# ===================================================================
+# --- TRANSFERENCIAS ENTRE SUCURSALES (MOVIMIENTO DE MERCADERÍA) ---
+# ===================================================================
+
+def get_transfers(
+    db: Session,
+    company_id: int,
+    skip: int = 0,
+    limit: int = 100,
+    status: str | None = None,
+    location_id: int | None = None
+):
+    """
+    Lista los envíos de mercadería.
+    - Si pasamos location_id, muestra envíos que SALEN o LLEGAN a esa bodega.
+    """
+    query = db.query(models.Transfer).filter(models.Transfer.company_id == company_id)
+
+    if status:
+        query = query.filter(models.Transfer.status == status)
+    
+    if location_id:
+        # Filtro Inteligente: Muestra si soy el Remitente O el Destinatario
+        query = query.filter(
+            or_(
+                models.Transfer.source_location_id == location_id,
+                models.Transfer.destination_location_id == location_id
+            )
+        )
+
+    return query.order_by(models.Transfer.created_at.desc()).offset(skip).limit(limit).all()
+
+def get_transfer(db: Session, transfer_id: int):
+    """Obtiene el detalle completo de un envío (con productos y nombres)."""
+    return db.query(models.Transfer).options(
+        joinedload(models.Transfer.items).joinedload(models.TransferItem.product),
+        joinedload(models.Transfer.source_location),
+        joinedload(models.Transfer.destination_location),
+        joinedload(models.Transfer.created_by),
+        joinedload(models.Transfer.received_by)
+    ).filter(models.Transfer.id == transfer_id).first()
+
+def create_transfer(db: Session, transfer_in: schemas.TransferCreate, user: models.User, location_id: int):
+    """
+    Crea un envío y RESTA el stock de la bodega de origen.
+    """
+    # 1. Validar PIN del que envía
+    if not user.hashed_pin or not security.verify_password(transfer_in.pin, user.hashed_pin):
+        raise ValueError("PIN incorrecto.")
+
+    # 2. Determinar Bodega de Origen
+    # Usamos la función inteligente que acabamos de mejorar arriba
+    source_bodega = get_primary_bodega_for_location(db, location_id)
+    
+    # Si no tiene bodega hija, verificamos si la ubicación actual YA ES la bodega
+    if not source_bodega:
+        current_loc = get_location(db, location_id)
+        if current_loc:
+             source_bodega = current_loc
+        else:
+             raise ValueError(f"No se pudo determinar el origen de stock para la ubicación {location_id}.")
+
+    # 3. Determinar Bodega de Destino
+    dest_bodega = get_primary_bodega_for_location(db, transfer_in.destination_location_id)
+    
+    if not dest_bodega:
+        # Si el destino no tiene hijos, tal vez es una bodega directa
+        dest_loc = get_location(db, transfer_in.destination_location_id)
+        if dest_loc: 
+             dest_bodega = dest_loc
+        else:
+             raise ValueError("La sucursal de destino no es válida.")
+
+    if source_bodega.id == dest_bodega.id:
+        raise ValueError("El origen y el destino no pueden ser iguales.")
+
+    # 4. Crear la 'Guía de Remisión' (Cabecera)
+    db_transfer = models.Transfer(
+        company_id=user.company_id,
+        source_location_id=source_bodega.id,
+        destination_location_id=dest_bodega.id,
+        status="PENDIENTE",
+        note=transfer_in.note,
+        created_by_id=user.id
+    )
+    db.add(db_transfer)
+    db.flush() 
+
+    # 5. Procesar cada producto (Items)
+    for item in transfer_in.items:
+        # A. Verificar si hay stock suficiente en la BODEGA DE ORIGEN
+        stock_entry = db.query(models.Stock).filter(
+            models.Stock.product_id == item.product_id,
+            models.Stock.location_id == source_bodega.id
+        ).with_for_update().first() 
+
+        current_qty = stock_entry.quantity if stock_entry else 0
+        
+        if current_qty < item.quantity:
+            product = get_product(db, item.product_id)
+            # Mensaje de error detallado: Dice EXACTAMENTE dónde buscó y cuánto encontró
+            raise ValueError(f"Stock insuficiente de '{product.name}' en '{source_bodega.name}'. Hay {current_qty}, intentas enviar {item.quantity}.")
+
+        # B. Registrar el item en la guía
+        db_item = models.TransferItem(
+            transfer_id=db_transfer.id,
+            product_id=item.product_id,
+            quantity=item.quantity
+        )
+        db.add(db_item)
+
+        # C. RESTAR del Inventario Origen
+        movement = schemas.InventoryMovementCreate(
+            product_id=item.product_id,
+            location_id=source_bodega.id,
+            quantity_change=-item.quantity, 
+            movement_type="TRANSFERENCIA_SALIDA",
+            reference_id=f"ENVIO-{db_transfer.id}",
+            pin=transfer_in.pin
+        )
+        create_inventory_movement(db, movement, user.id)
+
+    db.commit()
+    db.refresh(db_transfer)
+    return db_transfer
+
+def receive_transfer(db: Session, transfer_id: int, receive_data: schemas.TransferReceive, user: models.User):
+    """
+    Acepta o Rechaza un envío.
+    - Si ACEPTA: Suma stock al destino.
+    - Si RECHAZA: Devuelve stock al origen.
+    """
+    # 1. Validar PIN del que recibe
+    if not user.hashed_pin or not security.verify_password(receive_data.pin, user.hashed_pin):
+        raise ValueError("PIN incorrecto.")
+
+    # 2. Buscar el envío
+    transfer = get_transfer(db, transfer_id)
+    if not transfer:
+        raise ValueError("Envío no encontrado.")
+    
+    if transfer.status != "PENDIENTE":
+        raise ValueError(f"Este envío ya fue procesado ({transfer.status}).")
+
+    # 3. Procesar Acción
+    if receive_data.status == "ACEPTADO":
+        # --- ACEPTAR: La mercadería entra a mi bodega ---
+        for item in transfer.items:
+            movement = schemas.InventoryMovementCreate(
+                product_id=item.product_id,
+                location_id=transfer.destination_location_id,
+                quantity_change=item.quantity, # Positivo = Entrada
+                movement_type="TRANSFERENCIA_ENTRADA",
+                reference_id=f"RECIBO-{transfer.id}",
+                pin=receive_data.pin
+            )
+            create_inventory_movement(db, movement, user.id)
+        
+        transfer.status = "ACEPTADO"
+    
+    elif receive_data.status == "RECHAZADO":
+        # --- RECHAZAR: La mercadería regresa a su casa (Origen) ---
+        for item in transfer.items:
+            movement = schemas.InventoryMovementCreate(
+                product_id=item.product_id,
+                location_id=transfer.source_location_id, # Vuelve al origen
+                quantity_change=item.quantity, # Positivo = Reingreso
+                movement_type="TRANSFERENCIA_DEVUELTA",
+                reference_id=f"RECHAZO-{transfer.id}",
+                pin=receive_data.pin
+            )
+            create_inventory_movement(db, movement, user.id)
+        
+        transfer.status = "RECHAZADO"
+        
+    else:
+        raise ValueError("Estado inválido. Debe ser ACEPTADO o RECHAZADO.")
+
+    # 4. Guardar firma y fecha
+    if receive_data.note:
+        transfer.note = (transfer.note or "") + f" | Respuesta: {receive_data.note}"
+
+    transfer.received_by_id = user.id
+    transfer.updated_at = func.now()
+    
+    db.commit()
+    db.refresh(transfer)
+    return transfer

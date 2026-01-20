@@ -40,6 +40,7 @@ import FinancialReportPage from "./pages/FinancialReportPage.jsx";
 import RegisterPage from "./pages/RegisterPage.jsx"; 
 import PasswordRecoveryPage from "./pages/PasswordRecoveryPage.jsx"; 
 import PublicCatalogPage from "./pages/PublicCatalogPage.jsx"; // <--- NUEVO
+import TransfersPage from "./pages/TransfersPage.jsx"; // <--- NUEVA PÁGINA DE TRANSFERENCIAS
 
 // Esta es la "Guardia" que revisa si la caja fuerte está configurada
 function SetupGuard() {
@@ -207,6 +208,16 @@ function SetupGuard() {
             element={
               <ProtectedRoute requiredRoles={["admin", "inventory_manager"]}>
                 <PurchaseInvoicesPage />
+              </ProtectedRoute>
+            }
+          />
+          
+          {/* --- RUTA DE TRANSFERENCIAS --- */}
+          <Route
+            path="transferencias"
+            element={
+              <ProtectedRoute>
+                <TransfersPage />
               </ProtectedRoute>
             }
           />

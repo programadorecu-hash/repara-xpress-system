@@ -94,4 +94,56 @@ export async function uploadCompanyLogo(file) {
   const { data } = await apiClient.post('/company/logo', formData);
   return data;
 }
+
+// ===== API: Funciones Básicas Faltantes (Productos y Ubicaciones) =====
+export async function getLocations() {
+  const { data } = await apiClient.get('/locations/');
+  return data;
+}
+
+export async function getProducts({ skip = 0, limit = 100, search, location_id } = {}) {
+  const { data } = await apiClient.get('/products/', {
+    params: { skip, limit, search, location_id }
+  });
+  return data;
+}
+// ======================================================================
+
+// ===== API: Transferencias (Envíos entre Sucursales) =====
+
+export async function getTransfers({ status, skip = 0, limit = 50 } = {}) {
+  // Obtiene la lista de envíos. El backend ya filtra por usuario/sucursal.
+  const { data } = await apiClient.get('/transfers/', {
+    params: { status, skip, limit }
+  });
+  return data;
+}
+
+export async function getTransfer(id) {
+  // Obtiene el detalle de un envío específico
+  const { data } = await apiClient.get(`/transfers/${id}`);
+  return data;
+}
+
+export async function createTransfer({ destination_location_id, note, items, pin }) {
+  // Crea un nuevo envío
+  const { data } = await apiClient.post('/transfers/', {
+    destination_location_id,
+    note,
+    items, // Array de { product_id, quantity }
+    pin
+  });
+  return data;
+}
+
+export async function receiveTransfer(id, { status, pin, note }) {
+  // Acepta o Rechaza un envío
+  // status debe ser "ACEPTADO" o "RECHAZADO"
+  const { data } = await apiClient.post(`/transfers/${id}/receive`, {
+    status,
+    pin,
+    note
+  });
+  return data;
+}
 // ===== FIN API =====

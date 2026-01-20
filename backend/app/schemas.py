@@ -830,6 +830,56 @@ class FinancialReport(BaseModel):
 # --- FIN DE NUESTRO CÓDIGO ---
 
 # ===================================================================
+# --- SCHEMAS PARA TRANSFERENCIAS (MOVIMIENTOS DE BODEGA) ---
+# ===================================================================
+
+# 1. El item individual (producto y cantidad)
+class TransferItemBase(BaseModel):
+    product_id: int
+    quantity: int
+
+class TransferItemCreate(TransferItemBase):
+    pass
+
+class TransferItem(TransferItemBase):
+    id: int
+    product_name: str | None = None # Para mostrar el nombre en el frontend
+    class Config:
+        from_attributes = True
+
+# 2. La creación del envío (Lo que envía el frontend)
+class TransferCreate(BaseModel):
+    destination_location_id: int
+    note: str | None = None
+    items: List[TransferItemCreate]
+    pin: str # Autorización del que envía
+
+# 3. La acción de recibir (Aceptar o Rechazar)
+class TransferReceive(BaseModel):
+    status: str # "ACEPTADO" o "RECHAZADO"
+    pin: str # Autorización del que recibe
+    note: str | None = None # Razón del rechazo o comentario
+
+# 4. Lectura completa (Para mostrar en pantalla)
+class TransferRead(BaseModel):
+    id: int
+    status: str
+    note: str | None = None
+    created_at: datetime
+    updated_at: datetime | None = None
+    
+    # Mostramos nombres simples
+    source_location_name: str | None = None
+    destination_location_name: str | None = None
+    created_by_name: str | None = None
+    received_by_name: str | None = None
+    
+    items: List[TransferItem] = []
+
+    class Config:
+        from_attributes = True
+
+# ===================================================================
 # --- RECONSTRUCCIÓN DE MODELOS ---
 # ===================================================================
 Location.model_rebuild()
@@ -838,4 +888,5 @@ PurchaseInvoiceBase.model_rebuild()
 PurchaseInvoiceRead.model_rebuild()
 SaleBase.model_rebuild()
 WorkOrder.model_rebuild()
+TransferRead.model_rebuild() # Agregamos esto para que Pydantic lea las relaciones
 

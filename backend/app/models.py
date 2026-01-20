@@ -583,3 +583,57 @@ class Expense(Base):
     # Relaciones inversas nuevas
     account = relationship("CashAccount", back_populates="expenses")
     work_order = relationship("WorkOrder", back_populates="expenses")
+
+# --- INICIO DE NUESTRO CÓDIGO (Módulo de Transferencias entre Sucursales) ---
+class Transfer(Base):
+    """
+    Representa una 'Guía de Remisión' interna.
+    Registra el movimiento de mercadería de una sucursal A a una sucursal B.
+    """
+    __tablename__ = "transfers"
+    id = Column(Integer, primary_key=True, index=True)
+
+    # --- PROPIEDAD: EMPRESA ---
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=True)
+    # --------------------------
+
+    # Origen y Destino
+    source_location_id = Column(Integer, ForeignKey("locations.id"), nullable=False)
+    destination_location_id = Column(Integer, ForeignKey("locations.id"), nullable=False)
+
+    # Estado del envío: "PENDIENTE", "ACEPTADO", "RECHAZADO"
+    status = Column(String, default="PENDIENTE", nullable=False)
+    
+    # Nota opcional (ej: "Envío urgente de pantallas")
+    note = Column(String, nullable=True)
+
+    # Auditoría (Quién y Cuándo)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now()) # Fecha de recepción/rechazo
+    
+    created_by_id = Column(Integer, ForeignKey("users.id"), nullable=False) # Quien envió
+    received_by_id = Column(Integer, ForeignKey("users.id"), nullable=True) # Quien recibió (se llena al aceptar)
+
+    # Relaciones
+    source_location = relationship("Location", foreign_keys=[source_location_id])
+    destination_location = relationship("Location", foreign_keys=[destination_location_id])
+    created_by = relationship("User", foreign_keys=[created_by_id])
+    received_by = relationship("User", foreign_keys=[received_by_id])
+    
+    items = relationship("TransferItem", back_populates="transfer")
+
+class TransferItem(Base):
+    """
+    Detalle de qué productos van en la transferencia.
+    Ej: 5 Pantallas iPhone X
+    """
+    __tablename__ = "transfer_items"
+    id = Column(Integer, primary_key=True, index=True)
+    
+    transfer_id = Column(Integer, ForeignKey("transfers.id"), nullable=False)
+    product_id = Column(Integer, ForeignKey("products.id"), nullable=False)
+    quantity = Column(Integer, nullable=False)
+
+    transfer = relationship("Transfer", back_populates="items")
+    product = relationship("Product")
+# --- FIN DE NUESTRO CÓDIGO ---

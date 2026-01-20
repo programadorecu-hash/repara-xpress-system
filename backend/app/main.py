@@ -2148,6 +2148,78 @@ def get_financial_report_endpoint(
         end_date=end_date, 
         location_id=location_id
     )
+
+# ===================================================================
+# --- ENDPOINTS PARA TRANSFERENCIAS (ENVÍOS ENTRE SUCURSALES) ---
+# ===================================================================
+
+@app.post("/transfers/", response_model=schemas.TransferRead)
+def create_transfer_endpoint(
+    transfer: schemas.TransferCreate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(security.get_current_user)
+):
+    # Validar que el usuario tenga un turno activo para saber DESDE DÓNDE envía
+    active_shift = crud.get_active_shift_for_user(db, current_user.id)
+    if not active_shift:
+        raise HTTPException(status_code=400, detail="Debes tener un turno activo (Clock In) para realizar envíos.")
+    
+    try:
+        return crud.create_transfer(db, transfer, current_user, active_shift.location_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.get("/transfers/", response_model=List[schemas.TransferRead])
+def list_transfers(
+    status: str | None = None,
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(security.get_current_user)
+):
+    if not current_user.company_id: return []
+    
+    # Filtro automático:
+    # - Si es Admin, ve todo.
+    # - Si es Empleado, ve solo lo que sale de SU bodega o llega a SU bodega.
+    loc_id = None
+    if current_user.role not in ["admin", "inventory_manager"]:
+        active_shift = crud.get_active_shift_for_user(db, current_user.id)
+        if active_shift:
+            # Buscamos la bodega asociada a su oficina actual
+            bodega = crud.get_primary_bodega_for_location(db, active_shift.location_id)
+            if bodega:
+                loc_id = bodega.id
+
+    return crud.get_transfers(db, company_id=current_user.company_id, skip=skip, limit=limit, status=status, location_id=loc_id)
+
+@app.get("/transfers/{transfer_id}", response_model=schemas.TransferRead)
+def get_transfer_detail(
+    transfer_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(security.get_current_user)
+):
+    transfer = crud.get_transfer(db, transfer_id)
+    if not transfer:
+        raise HTTPException(status_code=404, detail="Envío no encontrado")
+    
+    # Seguridad: Validar que sea de su empresa
+    if transfer.company_id != current_user.company_id:
+        raise HTTPException(status_code=403, detail="No tienes acceso a este registro.")
+        
+    return transfer
+
+@app.post("/transfers/{transfer_id}/receive", response_model=schemas.TransferRead)
+def receive_transfer_endpoint(
+    transfer_id: int,
+    receive_data: schemas.TransferReceive,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(security.get_current_user)
+):
+    try:
+        return crud.receive_transfer(db, transfer_id, receive_data, current_user)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 # ===================================================================
 # --- TAREA PROGRAMADA: CIERRE AUTOMÁTICO DE TURNOS (23:55) ---
 # ===================================================================

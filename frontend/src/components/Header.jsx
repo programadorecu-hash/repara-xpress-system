@@ -27,7 +27,8 @@ import {
   HiOutlineBell,
   HiOutlineUserGroup,
   HiOutlineCurrencyDollar,
-  HiOutlineChartPie, // <--- ÍCONO AGREGADO
+  HiOutlineChartPie,
+  HiOutlineSwitchHorizontal, // <--- ÍCONO PARA TRANSFERENCIAS
 } from "react-icons/hi";
 
 // Componente de Enlace con Ícono
@@ -172,6 +173,10 @@ function Header({ isMenuOpen, onToggle, companyInfo, apiUrl }) {
           <NavItem to="/pos" label="Vender" icon={<HiOutlineShoppingCart />} isExpanded={isMenuOpen} />
           <NavItem to="/ordenes" label="Ordenes" icon={<HiOutlineCog />} isExpanded={isMenuOpen} />
           <NavItem to="/inventario" label="Inventario" icon={<HiOutlineArchive />} isExpanded={isMenuOpen} />
+          
+          {/* --- NUEVO BOTÓN TRANSFERENCIAS --- */}
+          <NavItem to="/transferencias" label="Transferencias" icon={<HiOutlineSwitchHorizontal />} isExpanded={isMenuOpen} />
+          
           {user?.role === "admin" && (
             <NavItem to="/auditoria" label="Movimientos de Inventario" icon={<HiOutlineDocumentReport />} isExpanded={isMenuOpen} />
           )}
