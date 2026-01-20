@@ -460,19 +460,57 @@ function DashboardPage() {
             </div>
           </div>
 
-          {/* 4. Tarjeta de Balance Diario (no cambia) */}
-          <div className="bg-detail p-6 rounded-xl shadow-md text-white">
-            <div className="flex justify-between items-center mb-2">
-              <p className="text-lg font-medium uppercase">Balance Diario</p>
-              <HiOutlineScale className="h-8 w-8 text-white/70" />
+          {/* 4. Tarjeta de Balance Diario (INTELIGENTE) */}
+          {/* Si es admin o manager, es un enlace. Si no, es un div normal */}
+          <Link
+            to={(user?.role === "admin" || user?.role === "inventory_manager") ? "/reporte-financiero" : "#"}
+            className={`block relative overflow-hidden p-6 rounded-xl shadow-md text-white transition-transform hover:scale-[1.01] group
+              ${(totalBalance || 0) >= 0 ? "bg-gradient-to-br from-green-500 to-teal-600" : "bg-gradient-to-br from-red-500 to-pink-600"}
+            `}
+            title={user?.role === "admin" ? "Click para ver Reporte Financiero Completo" : "Balance del día"}
+            onClick={(e) => { if (user?.role !== "admin" && user?.role !== "inventory_manager") e.preventDefault(); }}
+          >
+            {/* Fondo decorativo */}
+            <div className="absolute top-0 right-0 -mt-4 -mr-4 w-24 h-24 bg-white opacity-10 rounded-full blur-xl"></div>
+
+            <div className="flex justify-between items-start mb-1 relative z-10">
+              <div>
+                <p className="text-sm font-medium uppercase tracking-wider opacity-90">Utilidad Diaria</p>
+                <p className="text-4xl font-extrabold mt-1">
+                  ${(totalBalance || 0).toFixed(2)}
+                </p>
+              </div>
+              <HiOutlineScale className="h-8 w-8 text-white/80" />
             </div>
-            <p className="text-5xl font-bold">
-              ${(totalBalance || 0).toFixed(2)}
-            </p>
-            <p className="text-sm text-white/80 mt-2">
-              Tu meta de esta sucursal: $150.00
-            </p>
-          </div>
+
+            {/* Barra de Progreso de Meta */}
+            <div className="mt-4 relative z-10">
+              <div className="flex justify-between text-xs font-semibold mb-1 opacity-90">
+                <span>Progreso de Meta</span>
+                <span>Meta: ${(summary?.daily_goal || 0).toFixed(2)}</span>
+              </div>
+              <div className="w-full bg-black/20 rounded-full h-2.5 backdrop-blur-sm">
+                <div 
+                  className="bg-white h-2.5 rounded-full transition-all duration-1000 ease-out shadow-sm" 
+                  style={{ 
+                    width: `${Math.min(((summary?.total_sales || 0) / (summary?.daily_goal || 1)) * 100, 100)}%` 
+                  }}
+                ></div>
+              </div>
+              <p className="text-[10px] mt-1 text-right opacity-80">
+                {summary?.daily_goal > 0 
+                  ? `${Math.round(((summary?.total_sales || 0) / summary.daily_goal) * 100)}% Completado`
+                  : "Sin meta definida"}
+              </p>
+            </div>
+
+            {/* Indicador de Click (Solo Admins) */}
+            {(user?.role === "admin" || user?.role === "inventory_manager") && (
+              <div className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity text-xs bg-white/20 px-2 py-1 rounded text-white font-bold backdrop-blur-md">
+                Ver Reporte Detallado →
+              </div>
+            )}
+          </Link>
 
           {/* --- 6. Panel "Órdenes Activas" (AGRUPADO POR SUCURSAL) --- */}
           <div className="bg-white p-6 rounded-xl shadow-md border">

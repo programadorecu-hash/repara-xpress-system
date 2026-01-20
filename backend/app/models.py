@@ -74,6 +74,11 @@ class Location(Base):
     address = Column(String, nullable=True)
     phone = Column(String, nullable=True) 
     email = Column(String, nullable=True)
+    
+    # --- NUEVO: Meta Diaria de Ventas ($) ---
+    daily_goal = Column(Float, default=0.0)
+    # ----------------------------------------
+
     parent_id = Column(Integer, ForeignKey("locations.id"), nullable=True)
     stock_entries = relationship("Stock", back_populates="location")
     movements = relationship("InventoryMovement", back_populates="location")

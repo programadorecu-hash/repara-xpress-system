@@ -12,6 +12,7 @@ from app.utils.money import money, calc_tax, calc_total
 import os
 
 from . import models, schemas, security
+from fastapi import HTTPException # <--- NUEVO: Para enviar mensajes de error claros
 
 # --- HELPER DE CÁLCULO DE TOTALES (VENTA) ---
 def _compute_sale_totals(items: list[dict], iva_percentage: float) -> tuple[float, float, float]:
@@ -1434,10 +1435,13 @@ def create_sale(db: Session, sale: schemas.SaleCreate, user_id: int, location_id
 
     except ValueError as e:
         db.rollback()
-        raise Exception(str(e))
+        # CAMBIO: En lugar de "romper" el servidor (500), enviamos una Alerta (400)
+        # Esto hará que en el POS salga un mensaje rojo con el detalle del error (ej: "Stock insuficiente...")
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         db.rollback()
-        raise e
+        # Para otros errores no previstos, sí lanzamos el error general
+        raise HTTPException(status_code=500, detail=f"Error interno al procesar la venta: {str(e)}")
 # --- FIN DE NUESTRO CÓDIGO ---
 
 
@@ -1695,9 +1699,15 @@ def get_dashboard_summary(db: Session, location_id: int, target_date: date):
             work_order_summary[key] = count
     # --- FIN DE LA SECCIÓN CORREGIDA ---
 
+    # --- NUEVO: Obtener la meta de la sucursal ---
+    current_location = get_location(db, location_id)
+    goal = current_location.daily_goal if current_location else 0.0
+    # ---------------------------------------------
+
     return {
         "total_sales": total_sales,
         "total_expenses": total_expenses,
+        "daily_goal": goal, # Enviamos la meta al frontend
         "work_order_summary": work_order_summary
     }
 

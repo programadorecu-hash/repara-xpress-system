@@ -96,9 +96,10 @@ class LocationBase(BaseModel):
     # --- NUEVOS CAMPOS ---
     phone: str | None = None
     email: str | None = None
+    # CORRECCIÓN: Aceptamos None por si la base de datos tiene valores antiguos nulos
+    daily_goal: float | None = 0.0 
     # ---------------------
     parent_id: int | None = None
-
 class StockBase(BaseModel):
     quantity: int
 
@@ -665,6 +666,8 @@ class DailyAttendance(BaseModel):
 class DashboardSummary(BaseModel):
     total_sales: float
     total_expenses: float
+    # CORRECCIÓN: Aceptamos None para evitar error de validación
+    daily_goal: float | None = 0.0 
     work_order_summary: WorkOrderStatusSummary
 
 # --- INICIO DE NUESTRO CÓDIGO (Schemas Notificaciones) ---

@@ -9,8 +9,9 @@ const emptyForm = {
   name: '',
   description: '',
   address: '',
-  phone: '', // Nuevo
-  email: '', // Nuevo
+  phone: '', 
+  email: '', 
+  daily_goal: 0, // <--- NUEVO
 };
 
 function LocationsPage() {
@@ -47,8 +48,9 @@ function LocationsPage() {
         name: location.name,
         description: location.description || '',
         address: location.address || '',
-        phone: location.phone || '', // Cargar teléfono
-        email: location.email || '', // Cargar email
+        phone: location.phone || '', 
+        email: location.email || '', 
+        daily_goal: location.daily_goal || 0, // <--- Cargar meta
       });
       setEditingId(location.id);
     } else {
@@ -200,6 +202,20 @@ function LocationsPage() {
               className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent"
               placeholder="sucursal@ejemplo.com"
             />
+          </div>
+
+          <div className="bg-green-50 p-3 rounded-lg border border-green-200">
+            <label className="block text-sm font-bold text-green-800">Meta Diaria de Ventas ($)</label>
+            <input
+              type="number"
+              step="0.01"
+              name="daily_goal"
+              value={formState.daily_goal}
+              onChange={handleFormChange}
+              className="mt-1 w-full rounded-lg border border-green-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500 font-bold text-green-900"
+              placeholder="0.00"
+            />
+            <p className="text-xs text-green-700 mt-1">Define el objetivo diario para medir el rendimiento en el Dashboard.</p>
           </div>
 
           <div className="md:col-span-2">
