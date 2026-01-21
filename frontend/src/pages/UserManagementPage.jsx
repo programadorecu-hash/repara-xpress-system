@@ -1,19 +1,19 @@
 // frontend/src/pages/UserManagementPage.jsx
-// Esta es la nueva página de "Oficina de RRHH"
+// Esta es la nueva página de "Oficina de RRHH" - AHORA CON INVITACIONES
 
 import React, { useState, useEffect } from 'react';
 import api from '../services/api';
 import DataTable from '../components/DataTable.jsx';
 import ModalForm from '../components/ModalForm.jsx';
+import { toast } from 'react-toastify';
 
-// Formulario vacío para un nuevo usuario
-const emptyForm = {
-  email: '', // Aquí guardaremos el "Usuario" (ej: ANDY202 o correo real)
-  password: '',
-  role: 'warehouse_operator', // Por defecto creamos "Empleados"
+// Formulario de INVITACIÓN (Solo pedimos correo y rol)
+const invitationForm = {
+  email: '',
+  role: 'warehouse_operator',
 };
 
-// Formulario vacío para editar
+// Formulario vacío para editar (esto se mantiene igual)
 const emptyEditForm = {
   full_name: '',
   id_card: '',
@@ -28,16 +28,15 @@ function UserManagementPage() {
   const [error, setError] = useState('');
 
   // Estados para los formularios
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
-  const [createFormState, setCreateFormState] = useState(emptyForm);
+  const [inviteFormState, setInviteFormState] = useState(invitationForm);
   const [editFormState, setEditFormState] = useState(emptyEditForm);
 
-  const [editingUser, setEditingUser] = useState(null); // Para guardar el usuario que editamos
+  const [editingUser, setEditingUser] = useState(null); 
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Cargar la lista de usuarios al abrir la página
   useEffect(() => {
     fetchUsers();
   }, []);
@@ -55,37 +54,38 @@ function UserManagementPage() {
     }
   };
 
-  // --- Lógica para el Modal de CREAR Usuario ---
-  const handleOpenCreateModal = () => {
-    setCreateFormState(emptyForm);
+  // --- Lógica para INVITAR Usuario ---
+  const handleOpenInviteModal = () => {
+    setInviteFormState(invitationForm);
     setError('');
-    setIsCreateModalOpen(true);
+    setIsInviteModalOpen(true);
   };
 
-  const handleCreateFormChange = (event) => {
+  const handleInviteChange = (event) => {
     const { name, value } = event.target;
-    setCreateFormState((prev) => ({ ...prev, [name]: value }));
+    setInviteFormState((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleCreateSubmit = async () => {
+  const handleInviteSubmit = async () => {
     setIsSubmitting(true);
     setError('');
     try {
-      // 1. Llamamos a la URL de crear usuario
-      await api.post('/users/', createFormState);
-      fetchUsers(); // Recargamos la lista
-      setIsCreateModalOpen(false); // Cerramos el formulario
+      // Llamamos al endpoint de invitar
+      await api.post('/invitations/send', inviteFormState);
+      toast.success('Invitación enviada al correo.');
+      setIsInviteModalOpen(false);
     } catch (err) {
-      setError(err.response?.data?.detail || 'No se pudo crear el usuario.');
+      const msg = err.response?.data?.detail || 'No se pudo enviar la invitación.';
+      setError(msg);
+      toast.error(msg);
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  // --- Lógica para el Modal de EDITAR Usuario ---
+  // --- Lógica para EDITAR Usuario (Se mantiene igual) ---
   const handleOpenEditModal = (user) => {
-    setEditingUser(user); // Guardamos el usuario original
-    // Llenamos el formulario de edición con sus datos
+    setEditingUser(user); 
     setEditFormState({
       full_name: user.full_name || '',
       id_card: user.id_card || '',
@@ -99,17 +99,7 @@ function UserManagementPage() {
 
   const handleEditFormChange = (event) => {
     const { name, value, type, checked } = event.target;
-    
-    let val;
-    if (type === 'checkbox') {
-      val = checked;
-    } else if (name === 'role') {
-      val = value; // El rol es un valor interno, no lo tocamos
-    } else {
-      // Nombre, Cédula, Contacto -> Mayúsculas
-      val = value.toUpperCase();
-    }
-
+    let val = type === 'checkbox' ? checked : (name === 'role' ? value : value.toUpperCase());
     setEditFormState((prev) => ({ ...prev, [name]: val }));
   };
 
@@ -117,81 +107,76 @@ function UserManagementPage() {
     setIsSubmitting(true);
     setError('');
     try {
-      // 1. Llamamos a la URL de "actualización" (PATCH)
       await api.patch(`/users/${editingUser.id}`, editFormState);
-      fetchUsers(); // Recargamos la lista
-      setIsEditModalOpen(false); // Cerramos
+      fetchUsers();
+      setIsEditModalOpen(false);
+      toast.success('Usuario actualizado.');
     } catch (err) {
-      setError(err.response?.data?.detail || 'No se pudo actualizar el usuario.');
+      setError(err.response?.data?.detail || 'Error al actualizar.');
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  // --- Lógica para Resetear Contraseña ---
   const handleResetPassword = async (userId) => {
     const newPassword = prompt('Escribe la NUEVA contraseña temporal para este usuario:');
     if (newPassword && newPassword.length >= 8) {
       try {
         await api.post(`/users/${userId}/reset-password`, { new_password: newPassword });
-        alert('¡Contraseña reseteada con éxito!');
+        toast.success('Contraseña reseteada.');
       } catch (err) {
-        alert('Error: ' + (err.response?.data?.detail || 'No se pudo resetear la contraseña.'));
+        toast.error('Error al resetear contraseña.');
       }
-    } else if (newPassword) {
-      alert('Error: La contraseña debe tener al menos 8 caracteres.');
     }
   };
 
-  // Definir las columnas para la tabla
   const columns = [
-    { key: 'email', label: 'Usuario / Email' }, // Cambiamos la etiqueta visual
-    { key: 'full_name', label: 'Nombre Completo' },
+    { key: 'email', label: 'Email' },
+    { key: 'full_name', label: 'Nombre' },
     { key: 'role', label: 'Rol' },
     {
       key: 'is_active',
       label: 'Estado',
       render: (user) => (
         <span className={user.is_active ? 'text-green-600' : 'text-red-600'}>
-          {user.is_active ? 'Activo' : 'Desactivado'}
+          {user.is_active ? 'Activo' : 'Inactivo'}
         </span>
       ),
     },
     { key: 'id_card', label: 'Cédula' },
-    { key: 'emergency_contact', label: 'Contacto Emergencia' },
   ];
 
   return (
     <div className="bg-white p-6 rounded-xl shadow-md border space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-secondary">Gestión de Usuarios</h1>
-          <p className="text-sm text-gray-500">Crea, edita y gestiona a tus empleados y gerentes.</p>
+          <h1 className="text-2xl font-bold text-secondary">Gestión de Personal</h1>
+          <p className="text-sm text-gray-500">Envía invitaciones para que tus empleados se unan.</p>
         </div>
         <button
-          onClick={handleOpenCreateModal}
-          className="bg-accent text-white font-semibold py-2 px-4 rounded-lg"
+          onClick={handleOpenInviteModal}
+          className="bg-accent text-white font-semibold py-2 px-4 rounded-lg shadow hover:bg-teal-600"
         >
-          + Nuevo Usuario
+          ✉️ Invitar Empleado
         </button>
       </div>
 
       {error && <div className="p-3 rounded-lg bg-red-100 text-red-700">{error}</div>}
 
       {isLoading ? (
-        <p className="text-gray-500">Cargando usuarios...</p>
+        <p className="text-gray-500">Cargando...</p>
       ) : (
         <DataTable
           columns={columns}
           data={users}
-          emptyMessage="No hay usuarios creados."
+          emptyMessage="No hay usuarios en la empresa."
           actions={(user) => (
             <div className="flex flex-col items-start gap-1">
               <button
                 onClick={() => handleOpenEditModal(user)}
                 className="text-accent font-semibold hover:underline text-sm"
               >
-                Editar
+                Editar Ficha
               </button>
               <button
                 onClick={() => handleResetPassword(user.id)}
@@ -204,66 +189,53 @@ function UserManagementPage() {
         />
       )}
 
-      {/* --- Modal para CREAR Usuario --- */}
+      {/* --- Modal para INVITAR --- */}
       <ModalForm
-        title="Crear Nuevo Usuario"
-        isOpen={isCreateModalOpen}
-        onClose={() => setIsCreateModalOpen(false)}
-        onSubmit={handleCreateSubmit}
+        title="Invitar Colaborador"
+        isOpen={isInviteModalOpen}
+        onClose={() => setIsInviteModalOpen(false)}
+        onSubmit={handleInviteSubmit}
         isSubmitting={isSubmitting}
-        submitLabel="Crear Usuario"
-        footer="El nuevo usuario será forzado a crear su propio PIN secreto en su primer inicio de sesión."
+        submitLabel="Enviar Invitación"
+        footer="Se enviará un correo con un enlace para que el empleado configure su contraseña y PIN."
       >
         <div className="grid grid-cols-1 gap-4">
           <div>
-            <label className="block text-sm font-semibold text-gray-700">Usuario o Email *</label>
-            <p className="text-xs text-gray-500 mb-1">Puede ser un correo (ej: pepe@gmail.com) o un usuario local (ej: ANDY202).</p>
+            <label className="block text-sm font-semibold text-gray-700">Correo Electrónico *</label>
             <input
-              type="text" // Cambiamos 'email' por 'text' para permitir nombres sin @
+              type="email"
               name="email"
-              value={createFormState.email}
-              onChange={handleCreateFormChange}
-              className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 uppercase" // Forzamos mayúsculas visualmente para orden
+              value={inviteFormState.email}
+              onChange={handleInviteChange}
+              className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 lowercase"
+              placeholder="ejemplo@correo.com"
               required
             />
           </div>
           <div>
-            <label className="block text-sm font-semibold text-gray-700">Contraseña Temporal *</label>
-            <input
-              type="text"
-              name="password"
-              value={createFormState.password}
-              onChange={handleCreateFormChange}
-              className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2"
-              placeholder="Mínimo 8 caracteres"
-              required
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-semibold text-gray-700">Rol del Usuario *</label>
+            <label className="block text-sm font-semibold text-gray-700">Rol *</label>
             <select
               name="role"
-              value={createFormState.role}
-              onChange={handleCreateFormChange}
+              value={inviteFormState.role}
+              onChange={handleInviteChange}
               className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2"
             >
               <option value="warehouse_operator">Empleado (Vendedor/Técnico)</option>
               <option value="inventory_manager">Gerente (Inventario)</option>
-              <option value="admin">Administrador (Control Total)</option>
+              <option value="admin">Administrador (Socio)</option>
             </select>
           </div>
         </div>
       </ModalForm>
 
-      {/* --- Modal para EDITAR Usuario --- */}
+      {/* --- Modal para EDITAR (Igual que antes) --- */}
       <ModalForm
-        title={`Editar Usuario: ${editingUser?.email}`}
+        title={`Editar: ${editingUser?.email}`}
         isOpen={isEditModalOpen}
         onClose={() => setIsEditModalOpen(false)}
         onSubmit={handleEditSubmit}
         isSubmitting={isSubmitting}
-        submitLabel="Guardar Cambios"
-        footer="El PIN del usuario no se puede modificar desde aquí."
+        submitLabel="Guardar"
       >
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
@@ -273,7 +245,7 @@ function UserManagementPage() {
               name="full_name"
               value={editFormState.full_name}
               onChange={handleEditFormChange}
-              className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2"
+              className="mt-1 w-full rounded-lg border px-3 py-2"
             />
           </div>
           <div>
@@ -283,45 +255,28 @@ function UserManagementPage() {
               name="id_card"
               value={editFormState.id_card}
               onChange={handleEditFormChange}
-              className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2"
+              className="mt-1 w-full rounded-lg border px-3 py-2"
             />
           </div>
           <div className="md:col-span-2">
-            <label className="block text-sm font-semibold text-gray-700">Contacto de Emergencia</label>
+            <label className="block text-sm font-semibold text-gray-700">Contacto Emergencia</label>
             <input
               type="text"
               name="emergency_contact"
               value={editFormState.emergency_contact}
               onChange={handleEditFormChange}
-              className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2"
-              placeholder="Ej: Nombre (Teléfono)"
+              className="mt-1 w-full rounded-lg border px-3 py-2"
             />
           </div>
-          <div>
-            <label className="block text-sm font-semibold text-gray-700">Rol del Usuario *</label>
-            <select
-              name="role"
-              value={editFormState.role}
-              onChange={handleEditFormChange}
-              className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2"
-            >
-              <option value="warehouse_operator">Empleado (Vendedor/Técnico)</option>
-              <option value="inventory_manager">Gerente (Inventario)</option>
-              <option value="admin">Administrador (Control Total)</option>
-            </select>
-          </div>
-          <div className="flex items-center justify-start pt-4">
+          <div className="flex items-center pt-4">
             <input
               type="checkbox"
-              id="is_active"
               name="is_active"
               checked={editFormState.is_active}
               onChange={handleEditFormChange}
-              className="h-4 w-4 text-accent rounded"
+              className="h-4 w-4"
             />
-            <label htmlFor="is_active" className="ml-2 block text-sm font-semibold text-gray-700">
-              Usuario Activo (Puede iniciar sesión)
-            </label>
+            <label className="ml-2 text-sm font-semibold">Usuario Activo</label>
           </div>
         </div>
       </ModalForm>

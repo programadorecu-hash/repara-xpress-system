@@ -344,7 +344,41 @@ def update_user_details(user_id: int, user_update: schemas.UserUpdate, db: Sessi
 
 @app.post("/users/me/set-pin", response_model=schemas.User)
 def set_current_user_pin(pin_data: schemas.UserSetPin, db: Session = Depends(get_db), current_user: schemas.User = Depends(security.get_current_user)):
+    # Esta ruta se mantiene para compatibilidad o configuración inicial
     return crud.set_user_pin(db=db, user_id=current_user.id, pin=pin_data.pin)
+
+# --- NUEVAS RUTAS: MI PERFIL ---
+@app.post("/users/me/change-password")
+def change_my_password(
+    data: schemas.ChangePasswordRequest,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(security.get_current_user)
+):
+    # 1. Verificar que sepa su contraseña actual
+    if not security.verify_password(data.current_password, current_user.hashed_password):
+        raise HTTPException(status_code=400, detail="La contraseña actual es incorrecta.")
+    
+    # 2. Actualizar (Reutilizamos la función del crud que ya hace hash)
+    crud.reset_user_password(db, user_id=current_user.id, new_password=data.new_password)
+    return {"message": "Contraseña actualizada exitosamente."}
+
+@app.post("/users/me/change-pin")
+def change_my_pin(
+    data: schemas.ChangePinRequest,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(security.get_current_user)
+):
+    # 1. Verificar PIN actual (solo si ya tiene uno configurado)
+    if current_user.hashed_pin:
+        if not data.current_pin:
+             raise HTTPException(status_code=400, detail="Por seguridad, ingresa tu PIN actual.")
+        if not security.verify_password(data.current_pin, current_user.hashed_pin):
+             raise HTTPException(status_code=400, detail="El PIN actual es incorrecto.")
+    
+    # 2. Actualizar
+    crud.set_user_pin(db, user_id=current_user.id, pin=data.new_pin)
+    return {"message": "PIN de seguridad actualizado correctamente."}
+# -------------------------------
 
 @app.post("/users/{user_id}/reset-password")
 def reset_password_for_user(user_id: int, password_data: schemas.UserPasswordReset, db: Session = Depends(get_db), _role_check: None = Depends(security.require_role(required_roles=["admin"]))):
@@ -1573,6 +1607,37 @@ def get_cash_account_balance_endpoint(
         current_balance=balance
     )
 # --- FIN DE NUESTRO CÓDIGO ---
+
+# ===================================================================
+# --- ENDPOINTS DE INVITACIONES (RRHH) ---
+# ===================================================================
+
+@app.post("/invitations/send", status_code=status.HTTP_201_CREATED)
+def send_invitation_endpoint(
+    invitation: schemas.InvitationCreate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(security.get_current_user),
+    _role: None = Depends(security.require_role(["admin", "inventory_manager"]))
+):
+    try:
+        crud.create_invitation(db, invitation, current_user)
+        return {"message": "Invitación enviada correctamente."}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/invitations/accept")
+def accept_invitation_endpoint(
+    data: schemas.InvitationAccept,
+    db: Session = Depends(get_db)
+):
+    """
+    Endpoint público para que el empleado se registre con su token.
+    """
+    try:
+        crud.accept_invitation(db, data)
+        return {"message": "Usuario creado exitosamente. Ya puedes iniciar sesión."}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 # ===================================================================
 # --- ENDPOINTS DE RECUPERACIÓN DE CONTRASEÑA ---

@@ -708,6 +708,39 @@ class CompanyRegister(BaseModel):
 class AccountVerification(BaseModel):
     email: str
     code: str
+
+# --- NUEVO: Formularios para Mi Perfil ---
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
+
+class ChangePinRequest(BaseModel):
+    current_pin: str | None = None # Puede ser nulo si es la primera vez
+    new_pin: str
+# --- FIN DE NUESTRO CÓDIGO ---
+
+# --- NUEVO: SISTEMA DE INVITACIONES ---
+# 1. Lo que envía el Admin
+class InvitationCreate(BaseModel):
+    email: str
+    role: str
+
+# 2. Lo que ve el Admin (Respuesta)
+class InvitationRead(BaseModel):
+    id: int
+    email: str
+    role: str
+    status: str = "Pendiente" # Calculado (si is_used es False)
+    created_at: datetime
+
+# 3. Lo que llena el EMPLEADO al aceptar
+class InvitationAccept(BaseModel):
+    token: str
+    full_name: str
+    id_card: str
+    password: str
+    pin: str
+    emergency_contact: str | None = None
 # --- FIN DE NUESTRO CÓDIGO ---
 
     # --- INICIO DE NUESTRO CÓDIGO (Schemas Reembolsos) ---

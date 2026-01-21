@@ -18,6 +18,7 @@ import string
 import smtplib # <--- El cartero
 from email.mime.text import MIMEText # <--- El papel de la carta
 from email.mime.multipart import MIMEMultipart # <--- El sobre
+from datetime import timedelta # <--- Para calcular fecha de expiración
 
 from . import models, schemas, security
 from fastapi import HTTPException # <--- NUEVO: Para enviar mensajes de error claros
@@ -626,6 +627,128 @@ def reset_user_password(db: Session, user_id: int, new_password: str):
         db.commit()
         db.refresh(db_user)
     return db_user
+
+
+# ===================================================================
+# --- SISTEMA DE INVITACIONES ---
+# ===================================================================
+
+def create_invitation(db: Session, invitation_data: schemas.InvitationCreate, admin_user: models.User):
+    """
+    1. Genera un token único.
+    2. Guarda la invitación.
+    3. Envía el correo al futuro empleado.
+    """
+    # Verificar si ya existe el usuario
+    if get_user_by_email(db, invitation_data.email):
+        raise ValueError("Este correo ya está registrado como usuario activo.")
+
+    # Generar Token único (Ticket)
+    token = str(uuid.uuid4())
+    
+    # Caduca en 48 horas
+    expiration = datetime.now(pytz.utc) + timedelta(hours=48)
+
+    db_invitation = models.UserInvitation(
+        email=invitation_data.email,
+        role=invitation_data.role,
+        token=token,
+        expires_at=expiration,
+        company_id=admin_user.company_id,
+        created_by_id=admin_user.id
+    )
+    db.add(db_invitation)
+    db.flush()
+
+    # --- ENVIAR CORREO ---
+    try:
+        # Configuración (Usa las mismas credenciales que ya pusimos en register)
+        smtp_server = "smtp.gmail.com"
+        smtp_port = 587
+        sender_email = "programador.ecu@gmail.com" # <--- TU CORREO
+        sender_password = "sjvg bgag xdkp zlaa"    # <--- TU CLAVE
+        
+        # Link de aceptación (Ajusta la URL base si es necesario)
+        # Apunta al Frontend: http://localhost:5173/accept-invite?token=...
+        invite_link = f"http://localhost:5173/accept-invite?token={token}"
+
+        msg = MIMEMultipart()
+        msg['From'] = sender_email
+        msg['To'] = invitation_data.email
+        msg['Subject'] = "Te han invitado a unirte a Repara Xpress"
+
+        body = f"""
+        Hola,
+        
+        {admin_user.email} te ha invitado a formar parte de su equipo en Repara Xpress.
+        
+        Para crear tu perfil, definir tu contraseña y comenzar, haz clic aquí:
+        
+        {invite_link}
+        
+        Este enlace caduca en 48 horas.
+        """
+        msg.attach(MIMEText(body, 'plain'))
+
+        server = smtplib.SMTP(smtp_server, smtp_port)
+        server.starttls()
+        server.login(sender_email, sender_password)
+        server.sendmail(sender_email, invitation_data.email, msg.as_string())
+        server.quit()
+        
+        print(f"✅ Invitación enviada a {invitation_data.email}")
+        
+    except Exception as e:
+        print(f"❌ Error enviando invitación: {e}")
+        # En desarrollo, imprimimos el link por si falla el correo
+        print(f"🔗 LINK RESPALDO: {invite_link}")
+
+    db.commit()
+    db.refresh(db_invitation)
+    return db_invitation
+
+def accept_invitation(db: Session, data: schemas.InvitationAccept):
+    """
+    1. Valida el token.
+    2. Crea el usuario con los datos que él mismo puso.
+    3. Marca la invitación como usada.
+    """
+    # Buscar invitación
+    invite = db.query(models.UserInvitation).filter(
+        models.UserInvitation.token == data.token,
+        models.UserInvitation.is_used == False
+    ).first()
+
+    if not invite:
+        raise ValueError("La invitación no existe o ya fue utilizada.")
+    
+    # Verificar expiración (simple comparison assuming UTC awareness or similar setup)
+    if invite.expires_at < datetime.now(pytz.utc):
+        raise ValueError("La invitación ha caducado. Pide una nueva.")
+
+    # Crear el usuario
+    hashed_password = security.get_password_hash(data.password)
+    hashed_pin = security.get_password_hash(data.pin)
+
+    new_user = models.User(
+        email=invite.email,
+        hashed_password=hashed_password,
+        hashed_pin=hashed_pin,
+        role=invite.role,
+        is_active=True, # Entra activo directo
+        company_id=invite.company_id,
+        full_name=data.full_name,
+        id_card=data.id_card,
+        emergency_contact=data.emergency_contact
+    )
+    db.add(new_user)
+    
+    # Marcar invitación como usada
+    invite.is_used = True
+    
+    db.commit()
+    db.refresh(new_user)
+    return new_user
 
 # --- INICIO DE NUESTRO CÓDIGO (ASISTENTE DE CONFIGURACIÓN) ---
 

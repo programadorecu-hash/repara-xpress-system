@@ -683,3 +683,22 @@ class TransferItem(Base):
     def product_name(self):
         return self.product.name if self.product else f"Producto ID {self.product_id}"
     # ---------------------------------------------
+
+
+    # ... (código existente de otras clases)
+
+# --- NUEVA TABLA: INVITACIONES PENDIENTES ---
+class UserInvitation(Base):
+    __tablename__ = "user_invitations"
+    id = Column(Integer, primary_key=True, index=True)
+    email = Column(String, index=True, nullable=False)
+    role = Column(String, nullable=False) # El rol que tendrá cuando acepte
+    token = Column(String, unique=True, index=True, nullable=False) # El "ticket" secreto
+    expires_at = Column(DateTime(timezone=True), nullable=False) # Cuándo caduca el ticket
+    is_used = Column(Boolean, default=False)
+    
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False)
+    created_by_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+# ---------------------------------------------

@@ -250,12 +250,18 @@ function Header({ isMenuOpen, onToggle, companyInfo, apiUrl }) {
           {token && user && (
             <div className="flex flex-col space-y-3">
               {isMenuOpen && (
-                <span
-                  className="text-sm text-surface/80 px-3 truncate"
-                  title={user.email}
-                >
-                  {user.email}
-                </span>
+                <div className="px-3 flex flex-col">
+                  <span className="text-sm text-surface/80 truncate" title={user.email}>
+                    {user.email}
+                  </span>
+                  {/* Link a Mi Perfil */}
+                  <NavLink 
+                    to="/perfil" 
+                    className="text-xs text-accent hover:text-white hover:underline mt-1 transition-colors"
+                  >
+                    Ver Mi Perfil
+                  </NavLink>
+                </div>
               )}
 
               <button

@@ -13,6 +13,7 @@ import 'react-toastify/dist/ReactToastify.css';
 // --- FIN DE NUESTRO CÓDIGO ---
 
 import ProductPage from "./pages/ProductPage.jsx";
+import AcceptInvitePage from "./pages/AcceptInvitePage";
 import LoginPage from "./pages/LoginPage.jsx";
 import DashboardPage from "./pages/DashboardPage.jsx";
 import SelectShiftPage from "./pages/SelectShiftPage.jsx";
@@ -39,6 +40,7 @@ import ExpensesPage from "./pages/ExpensesPage.jsx";
 import FinancialReportPage from "./pages/FinancialReportPage.jsx";
 import RegisterPage from "./pages/RegisterPage.jsx"; 
 import PasswordRecoveryPage from "./pages/PasswordRecoveryPage.jsx"; 
+import ProfilePage from "./pages/ProfilePage.jsx"; // <--- NUEVO
 import PublicCatalogPage from "./pages/PublicCatalogPage.jsx"; // <--- NUEVO
 import TransfersPage from "./pages/TransfersPage.jsx"; // <--- NUEVA PÁGINA DE TRANSFERENCIAS
 
@@ -121,6 +123,7 @@ function SetupGuard() {
       <Routes>
         {/* Agregamos la ruta pública de registro */}
         <Route path="/register" element={<RegisterPage />} />
+        <Route path="/accept-invite" element={<AcceptInvitePage />} />
         {/* Agregamos la ruta pública de recuperación */}
         <Route path="/recuperar-clave" element={<PasswordRecoveryPage />} />
         {/* --- NUEVO: RUTA DEL CATÁLOGO PÚBLICO --- */}
@@ -156,6 +159,7 @@ function SetupGuard() {
           }
         >
           <Route index element={<DashboardPage />} />
+          <Route path="perfil" element={<ProfilePage />} /> {/* <--- NUEVO */}
           <Route path="inventario" element={<ProductPage />} />
           <Route
             path="auditoria"
