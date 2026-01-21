@@ -11,6 +11,7 @@ import {
   HiOutlineCurrencyDollar,
   HiOutlineArrowCircleDown,
   HiOutlineScale,
+  HiOutlineArrowRight,
   HiOutlineShoppingCart, // <-- Ícono para "Vender"
   HiOutlineCog, // <-- Ícono para "Orden"
   HiOutlineCash, // <-- Ícono para "Gasto"
@@ -460,56 +461,73 @@ function DashboardPage() {
             </div>
           </div>
 
-          {/* 4. Tarjeta de Balance Diario (INTELIGENTE) */}
-          {/* Si es admin o manager, es un enlace. Si no, es un div normal */}
+          {/* 4. Tarjeta de Balance Diario (ESTILO CYAN AESTHETIC) */}
           <Link
             to={(user?.role === "admin" || user?.role === "inventory_manager") ? "/reporte-financiero" : "#"}
-            className={`block relative overflow-hidden p-6 rounded-xl shadow-md text-white transition-transform hover:scale-[1.01] group
-              ${(totalBalance || 0) >= 0 ? "bg-gradient-to-br from-green-500 to-teal-600" : "bg-gradient-to-br from-red-500 to-pink-600"}
-            `}
-            title={user?.role === "admin" ? "Click para ver Reporte Financiero Completo" : "Balance del día"}
             onClick={(e) => { if (user?.role !== "admin" && user?.role !== "inventory_manager") e.preventDefault(); }}
+            className="group relative block bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden transition-all duration-300 hover:shadow-lg hover:border-cyan-200"
           >
-            {/* Fondo decorativo */}
-            <div className="absolute top-0 right-0 -mt-4 -mr-4 w-24 h-24 bg-white opacity-10 rounded-full blur-xl"></div>
+            {/* Barra lateral de color (Detalle elegante) */}
+            <div className={`absolute left-0 top-0 bottom-0 w-1.5 transition-colors duration-300
+              ${(totalBalance || 0) >= 0 ? "bg-cyan-500" : "bg-red-500"}
+            `}></div>
 
-            <div className="flex justify-between items-start mb-1 relative z-10">
-              <div>
-                <p className="text-sm font-medium uppercase tracking-wider opacity-90">Utilidad Diaria</p>
-                <p className="text-4xl font-extrabold mt-1">
-                  ${(totalBalance || 0).toFixed(2)}
-                </p>
+            <div className="p-6 pl-8 flex flex-col justify-between h-full">
+              
+              {/* Encabezado */}
+              <div className="flex justify-between items-start mb-2">
+                 <div>
+                    <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest">
+                       UTILIDAD DEL DÍA
+                    </h3>
+                    {/* Badge Sutil */}
+                    <span className={`inline-block mt-1 text-[10px] px-2 py-0.5 rounded-md font-bold uppercase tracking-wide
+                       ${(totalBalance || 0) >= 0 ? "bg-cyan-50 text-cyan-700" : "bg-red-50 text-red-700"}
+                    `}>
+                       {(totalBalance || 0) >= 0 ? "En Verde" : "Déficit"}
+                    </span>
+                 </div>
+                 
+                 {/* Ícono Sutil */}
+                 <div className={`p-2 rounded-full ${(totalBalance || 0) >= 0 ? "bg-cyan-50 text-cyan-600" : "bg-red-50 text-red-600"}`}>
+                    <HiOutlineScale className="h-6 w-6" />
+                 </div>
               </div>
-              <HiOutlineScale className="h-8 w-8 text-white/80" />
+
+              {/* El Número (Protagonista) */}
+              <div className="mt-2 mb-4">
+                 <p className="text-4xl font-extrabold text-gray-800 tracking-tight">
+                    ${(totalBalance || 0).toFixed(2)}
+                 </p>
+              </div>
+
+              {/* Footer: Barra de Meta */}
+              <div className="mt-auto">
+                 <div className="flex justify-between items-center text-xs font-medium text-gray-500 mb-1.5">
+                    <span>Meta: ${(summary?.daily_goal || 0).toFixed(2)}</span>
+                    <span className="text-cyan-600 font-bold">
+                       {summary?.daily_goal > 0 ? `${Math.round(((summary?.total_sales || 0) / summary.daily_goal) * 100)}%` : "0%"}
+                    </span>
+                 </div>
+                 {/* Barra de progreso */}
+                 <div className="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
+                    <div 
+                       className={`h-full rounded-full transition-all duration-1000 ease-out
+                          ${(totalBalance || 0) >= 0 ? "bg-gradient-to-r from-cyan-400 to-blue-500" : "bg-red-500"}
+                       `}
+                       style={{ width: `${Math.min(((summary?.total_sales || 0) / (summary?.daily_goal || 1)) * 100, 100)}%` }}
+                    ></div>
+                 </div>
+              </div>
+
+              {/* Icono flotante al hacer hover (Solo Admin) */}
+              {(user?.role === "admin" || user?.role === "inventory_manager") && (
+                 <div className="absolute top-1/2 right-4 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-all duration-300 transform translate-x-2 group-hover:translate-x-0">
+                    <HiOutlineArrowRight className="text-gray-300 hover:text-cyan-600 text-2xl" />
+                 </div>
+              )}
+
             </div>
-
-            {/* Barra de Progreso de Meta */}
-            <div className="mt-4 relative z-10">
-              <div className="flex justify-between text-xs font-semibold mb-1 opacity-90">
-                <span>Progreso de Meta</span>
-                <span>Meta: ${(summary?.daily_goal || 0).toFixed(2)}</span>
-              </div>
-              <div className="w-full bg-black/20 rounded-full h-2.5 backdrop-blur-sm">
-                <div 
-                  className="bg-white h-2.5 rounded-full transition-all duration-1000 ease-out shadow-sm" 
-                  style={{ 
-                    width: `${Math.min(((summary?.total_sales || 0) / (summary?.daily_goal || 1)) * 100, 100)}%` 
-                  }}
-                ></div>
-              </div>
-              <p className="text-[10px] mt-1 text-right opacity-80">
-                {summary?.daily_goal > 0 
-                  ? `${Math.round(((summary?.total_sales || 0) / summary.daily_goal) * 100)}% Completado`
-                  : "Sin meta definida"}
-              </p>
-            </div>
-
-            {/* Indicador de Click (Solo Admins) */}
-            {(user?.role === "admin" || user?.role === "inventory_manager") && (
-              <div className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity text-xs bg-white/20 px-2 py-1 rounded text-white font-bold backdrop-blur-md">
-                Ver Reporte Detallado →
-              </div>
-            )}
           </Link>
 
           {/* --- 6. Panel "Órdenes Activas" (AGRUPADO POR SUCURSAL) --- */}
