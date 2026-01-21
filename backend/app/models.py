@@ -80,6 +80,16 @@ class Location(Base):
     # ----------------------------------------
 
     parent_id = Column(Integer, ForeignKey("locations.id"), nullable=True)
+    
+    # --- RELACIÓN JERÁRQUICA (PADRE - HIJOS) ---
+    # CORRECCIÓN: Definición explícita de ambos lados para evitar el error de backref
+    # 1. Los hijos ven a su padre
+    children = relationship("Location", back_populates="parent")
+    
+    # 2. El padre ve a sus hijos (remote_side=[id] es vital para relaciones recursivas)
+    parent = relationship("Location", back_populates="children", remote_side=[id])
+    # -------------------------------------------
+
     stock_entries = relationship("Stock", back_populates="location")
     movements = relationship("InventoryMovement", back_populates="location")
     shifts = relationship("Shift", back_populates="location")

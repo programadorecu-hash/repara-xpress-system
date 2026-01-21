@@ -275,12 +275,16 @@ def delete_work_order_image(db: Session, image_id: int):
 def get_location(db: Session, location_id: int):
     return db.query(models.Location).filter(models.Location.id == location_id).first()
 
-def get_locations(db: Session, company_id: int, skip: int = 0, limit: int = 100):
-    # --- INICIO DE NUESTRO CÓDIGO (Mostrar solo Sucursales de MI empresa) ---
-    return db.query(models.Location)\
-        .filter(models.Location.parent_id == None, models.Location.company_id == company_id)\
-        .order_by(models.Location.name)\
-        .offset(skip).limit(limit).all()
+def get_locations(db: Session, company_id: int, skip: int = 0, limit: int = 100, include_all: bool = False):
+    # --- INICIO DE NUESTRO CÓDIGO (Filtro Inteligente) ---
+    # Por defecto (include_all=False), solo mostramos "Padres" (Sucursales) para menús limpios.
+    # Si include_all=True, mostramos todo (para Transferencias y Logística).
+    query = db.query(models.Location).filter(models.Location.company_id == company_id)
+    
+    if not include_all:
+        query = query.filter(models.Location.parent_id == None)
+
+    return query.order_by(models.Location.name).offset(skip).limit(limit).all()
     # --- FIN DE NUESTRO CÓDIGO ---
 
 def create_location(db: Session, location: schemas.LocationCreate, company_id: int):
@@ -2804,3 +2808,50 @@ def receive_transfer(db: Session, transfer_id: int, receive_data: schemas.Transf
     db.commit()
     db.refresh(transfer)
     return transfer
+
+# ===================================================================
+# --- HERRAMIENTAS DE MANTENIMIENTO ---
+# ===================================================================
+def repair_location_hierarchy(db: Session, company_id: int):
+    """
+    Función de Mantenimiento:
+    Escanea todas las ubicaciones. Si encuentra una "Bodega - X" y existe "X",
+    las vincula oficialmente en la base de datos (establece parent_id).
+    """
+    # 1. Obtener todas las ubicaciones de la empresa
+    locations = db.query(models.Location).filter(models.Location.company_id == company_id).all()
+    
+    # Mapa de Nombre -> ID para búsqueda rápida (ej: "MATRIZ": 3)
+    loc_map = {loc.name.strip().upper(): loc for loc in locations}
+    
+    updates_count = 0
+    
+    for loc in locations:
+        # Si la ubicación ya tiene padre, la saltamos (ya está correcta)
+        if loc.parent_id:
+            continue
+            
+        name_upper = loc.name.strip().upper()
+        
+        # Detectar si es una Bodega Huérfana (empieza con "BODEGA - ")
+        if name_upper.startswith("BODEGA -"):
+            # Extraemos el nombre del presunto padre
+            # Ej: "BODEGA - MATRIZ NUEVA AURORA" -> "MATRIZ NUEVA AURORA"
+            potential_parent_name = name_upper.replace("BODEGA -", "").strip()
+            
+            # Buscamos al padre en el mapa
+            parent = loc_map.get(potential_parent_name)
+            
+            if parent:
+                # ¡Encontramos a la familia! Hacemos el vínculo oficial.
+                print(f"🔧 REPARANDO: Vinculando '{loc.name}' como hijo de '{parent.name}'")
+                loc.parent_id = parent.id
+                updates_count += 1
+    
+    if updates_count > 0:
+        db.commit()
+        print(f"✅ Se repararon {updates_count} relaciones de jerarquía.")
+    else:
+        print("👌 La jerarquía de ubicaciones parece correcta.")
+        
+    return updates_count

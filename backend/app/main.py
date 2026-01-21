@@ -749,12 +749,14 @@ def create_new_location(
 def read_locations(
     skip: int = 0, 
     limit: int = 100, 
+    all: bool = False, # <--- Nuevo interruptor (False por defecto)
     db: Session = Depends(get_db),
     # Ahora requiere usuario para saber qué sucursales mostrar
     current_user: models.User = Depends(security.get_current_user)
 ):
     if not current_user.company_id: return []
-    return crud.get_locations(db, company_id=current_user.company_id, skip=skip, limit=limit)
+    # Pasamos el interruptor al archivista
+    return crud.get_locations(db, company_id=current_user.company_id, skip=skip, limit=limit, include_all=all)
 
 @app.get("/locations/{location_id}", response_model=schemas.Location)
 def read_location(location_id: int, db: Session = Depends(get_db)):

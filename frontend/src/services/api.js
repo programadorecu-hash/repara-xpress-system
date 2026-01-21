@@ -96,8 +96,9 @@ export async function uploadCompanyLogo(file) {
 }
 
 // ===== API: Funciones Básicas Faltantes (Productos y Ubicaciones) =====
-export async function getLocations() {
-  const { data } = await apiClient.get('/locations/');
+export async function getLocations(params = {}) {
+  // Aceptamos params (ej: { all: true }) para activar el modo "mapa completo"
+  const { data } = await apiClient.get('/locations/', { params });
   return data;
 }
 
