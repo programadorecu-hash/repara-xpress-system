@@ -10,6 +10,14 @@ from decimal import Decimal
 from app.utils.money import money, calc_tax, calc_total
 
 import os
+import shutil
+import os
+import random
+import string
+
+import smtplib # <--- El cartero
+from email.mime.text import MIMEText # <--- El papel de la carta
+from email.mime.multipart import MIMEMultipart # <--- El sobre
 
 from . import models, schemas, security
 from fastapi import HTTPException # <--- NUEVO: Para enviar mensajes de error claros
@@ -686,13 +694,59 @@ def register_new_company(db: Session, data: schemas.CompanyRegister):
     hashed_password = security.get_password_hash(data.admin_password)
     hashed_pin = security.get_password_hash(data.admin_pin)
     
+    # --- GENERAR CÓDIGO DE VERIFICACIÓN (6 Dígitos) ---
+    verification_code = ''.join(random.choices(string.digits, k=6))
+    
+    # --- ENVÍO DE CORREO REAL (GMAIL) ---
+    try:
+        # 1. Configuración del Cartero (Cambia esto con tus datos reales)
+        smtp_server = "smtp.gmail.com"
+        smtp_port = 587
+        sender_email = "programador.ecu@gmail.com" # <--- PON AQUÍ TU GMAIL
+        sender_password = "sjvg bgag xdkp zlaa" # <--- PON AQUÍ LA CLAVE DE 16 LETRAS
+        
+        # 2. Escribir la carta
+        msg = MIMEMultipart()
+        msg['From'] = sender_email
+        msg['To'] = data.admin_email
+        msg['Subject'] = "Tu Código de Verificación - ReparaSystem"
+
+        body = f"""
+        Hola,
+        
+        Bienvenido a ReparaSystem.
+        Tu código de seguridad para activar la cuenta es:
+        
+        {verification_code}
+        
+        Si no solicitaste este registro, ignora este mensaje.
+        """
+        msg.attach(MIMEText(body, 'plain'))
+
+        # 3. Entregar la carta al servidor
+        server = smtplib.SMTP(smtp_server, smtp_port)
+        server.starttls() # Encriptar conexión (seguridad)
+        server.login(sender_email, sender_password)
+        text = msg.as_string()
+        server.sendmail(sender_email, data.admin_email, text)
+        server.quit()
+        
+        print(f"✅ Correo enviado exitosamente a {data.admin_email}")
+        
+    except Exception as e:
+        print(f"❌ Error enviando correo: {e}")
+        # IMPORTANTE: Si falla el correo, igual imprimimos el código en consola
+        # para que no te quedes bloqueado haciendo pruebas.
+        print(f"📧 [RESPALDO] CÓDIGO: {verification_code}")
+
     new_admin = models.User(
         email=data.admin_email,
         hashed_password=hashed_password,
         hashed_pin=hashed_pin,
         role="admin",
-        is_active=True,
-        company_id=new_company.id # <--- VINCULADO A SU EMPRESA
+        is_active=False, # <--- IMPORTANTE: Nace inactivo hasta que verifique
+        verification_code=verification_code, # Guardamos el código
+        company_id=new_company.id 
     )
     db.add(new_admin)
     db.flush() # Para obtener el ID del usuario
@@ -742,6 +796,27 @@ def register_new_company(db: Session, data: schemas.CompanyRegister):
     
     return new_admin
     # --- FIN DE NUESTRO CÓDIGO ---
+
+def verify_user_account(db: Session, email: str, code: str):
+    """
+    Activa la cuenta si el código coincide.
+    """
+    user = get_user_by_email(db, email=email)
+    if not user:
+        raise ValueError("Usuario no encontrado.")
+    
+    if user.is_active:
+        return True # Ya estaba activo
+        
+    if not user.verification_code or user.verification_code != code:
+        raise ValueError("Código de verificación incorrecto.")
+    
+    # Si todo coincide:
+    user.is_active = True
+    user.verification_code = None # Limpiamos el código
+    db.commit()
+    db.refresh(user)
+    return True
 
 # ===================================================================
 # --- TURNOS ---

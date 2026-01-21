@@ -241,17 +241,18 @@ def view_public_work_order(public_id: str, db: Session = Depends(get_db)):
 # ===================================================================
 
 # --- NUEVO: RUTA DE REGISTRO PÚBLICO (SaaS) ---
-@app.post("/register", response_model=schemas.User)
+@app.post("/register")
 def register_company_endpoint(
     data: schemas.CompanyRegister,
     db: Session = Depends(get_db)
 ):
     """
-    Permite registrar una nueva empresa y su administrador.
-    Crea automáticamente: Empresa + Admin + Sucursal + Bodega + Caja.
+    Permite registrar una nueva empresa.
+    AHORA retorna un mensaje simple, no el usuario completo, porque el usuario está inactivo.
     """
     try:
-        return crud.register_new_company(db, data)
+        crud.register_new_company(db, data)
+        return {"message": "Registro exitoso. Revise su correo para el código de verificación."}
     except ValueError as e:
         # Errores de validación (correo duplicado, etc.)
         raise HTTPException(status_code=400, detail=str(e))
@@ -260,6 +261,17 @@ def register_company_endpoint(
         print(f"Error en registro: {e}")
         raise HTTPException(status_code=500, detail="Error interno al registrar la empresa.")
 # ----------------------------------------------
+
+@app.post("/verify-account")
+def verify_account_endpoint(
+    data: schemas.AccountVerification,
+    db: Session = Depends(get_db)
+):
+    try:
+        crud.verify_user_account(db, email=data.email, code=data.code)
+        return {"message": "Cuenta verificada correctamente. Ya puede iniciar sesión."}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 @app.get("/api/setup/status")
 def get_setup_status(db: Session = Depends(get_db)):

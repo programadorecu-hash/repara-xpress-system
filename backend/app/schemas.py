@@ -703,6 +703,11 @@ class CompanyRegister(BaseModel):
     admin_email: str
     admin_password: str
     admin_pin: str
+
+# --- NUEVO: Formulario para verificar cuenta ---
+class AccountVerification(BaseModel):
+    email: str
+    code: str
 # --- FIN DE NUESTRO CÓDIGO ---
 
     # --- INICIO DE NUESTRO CÓDIGO (Schemas Reembolsos) ---
