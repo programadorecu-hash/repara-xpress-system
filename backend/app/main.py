@@ -2119,6 +2119,35 @@ def toggle_user_status_saas(
 # ---------------------------------------------------------------
 
 
+# --- NUEVO: ENDPOINT PARA ENTREGAR LLAVES ---
+class SaasInvitation(BaseModel):
+    email: str
+    role: str
+
+@app.post("/super-admin/companies/{company_id}/invite")
+def send_saas_invitation(
+    company_id: int,
+    invitation: SaasInvitation,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(security.get_current_user),
+    _role: None = Depends(security.require_role(["super_admin"]))
+):
+    """El Super Admin envía una invitación para que alguien reclame una empresa."""
+    try:
+        crud.saas_create_company_invitation(
+            db=db, 
+            company_id=company_id, 
+            email=invitation.email, 
+            role=invitation.role, 
+            super_admin_user=current_user
+        )
+        return {"message": "Enlace de reclamación enviado exitosamente."}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+# ---------------------------------------------
+
+
+
 # ===================================================================
 # --- ENDPOINTS PARA NOTAS DE CRÉDITO (IMPRESIÓN Y VERIFICACIÓN) ---
 # ===================================================================

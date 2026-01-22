@@ -3153,3 +3153,85 @@ def saas_update_company_modules(db: Session, company_id: int, modules_config: di
     db.commit()
     db.refresh(company)
     return company
+
+
+# --- NUEVO: FUNCIÓN DE ENTREGA DE LLAVES (INVITACIÓN SUPER ADMIN) ---
+def saas_create_company_invitation(db: Session, company_id: int, email: str, role: str, super_admin_user: models.User):
+    """
+    Permite al Super Admin invitar a un usuario a CUALQUIER empresa.
+    Ideal para entregar el dominio a un nuevo dueño.
+    """
+    # 1. Verificamos que la empresa exista
+    company = db.query(models.Company).filter(models.Company.id == company_id).first()
+    if not company:
+        raise ValueError("La empresa especificada no existe.")
+
+    # 2. Verificamos si el correo ya es usuario
+    if get_user_by_email(db, email):
+        raise ValueError("Este correo ya está registrado como usuario activo.")
+
+    # 3. Creamos la invitación reutilizando la lógica existente, 
+    # PERO forzamos el company_id del destino (no el del super admin)
+    
+    # Generar Token único
+    token = str(uuid.uuid4())
+    expiration = datetime.now(pytz.utc) + timedelta(hours=48)
+
+    db_invitation = models.UserInvitation(
+        email=email,
+        role=role,
+        token=token,
+        expires_at=expiration,
+        company_id=company.id, # <--- AQUÍ ESTÁ LA MAGIA: Asignamos la empresa destino
+        created_by_id=super_admin_user.id
+    )
+    db.add(db_invitation)
+    db.flush()
+
+    # --- ENVIAR CORREO PERSONALIZADO ---
+    try:
+        smtp_server = "smtp.gmail.com"
+        smtp_port = 587
+        sender_email = "programador.ecu@gmail.com" # Tu correo
+        sender_password = "sjvg bgag xdkp zlaa"    # Tu clave
+        
+        # Link al frontend
+        invite_link = f"http://localhost:5173/accept-invite?token={token}"
+
+        msg = MIMEMultipart()
+        msg['From'] = sender_email
+        msg['To'] = email
+        msg['Subject'] = f"Reclama el dominio de {company.name} - Repara Xpress"
+
+        # Mensaje con tono de PROPIEDAD
+        body = f"""
+        Hola,
+        
+        Se ha generado un enlace de acceso exclusivo para que tomes el control total y permanente de:
+        
+        Empresa: {company.name}
+        Rol Asignado: {role.upper()} (Propietario/Gerente)
+        
+        Haz clic en el siguiente enlace para configurar tus credenciales de acceso y tomar posesión inmediata:
+        
+        {invite_link}
+        
+        Este enlace es personal e intransferible. Caduca en 48 horas por seguridad.
+        """
+        msg.attach(MIMEText(body, 'plain'))
+
+        server = smtplib.SMTP(smtp_server, smtp_port)
+        server.starttls()
+        server.login(sender_email, sender_password)
+        server.sendmail(sender_email, email, msg.as_string())
+        server.quit()
+        
+        print(f"✅ Llaves enviadas a {email}")
+        
+    except Exception as e:
+        print(f"❌ Error enviando correo: {e}")
+        print(f"🔗 LINK RESPALDO: {invite_link}")
+
+    db.commit()
+    db.refresh(db_invitation)
+    return db_invitation

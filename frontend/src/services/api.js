@@ -187,3 +187,13 @@ export async function getTransferManifestUrl(id) {
   // Esto permite abrirlo en una nueva pestaña o iframe para impresión nativa
   return `${apiClient.defaults.baseURL}/transfers/${id}/print-manifest`;
 }
+
+
+// Enviar invitación como Super Admin (Entrega de Llaves)
+export async function sendSaasInvitation(companyId, email, role) {
+  const { data } = await apiClient.post(`/super-admin/companies/${companyId}/invite`, {
+    email,
+    role
+  });
+  return data;
+}

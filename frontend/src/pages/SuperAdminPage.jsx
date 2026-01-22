@@ -1,6 +1,6 @@
 // frontend/src/pages/SuperAdminPage.jsx
 import React, { useState, useEffect } from 'react';
-import api, { getCompanyUsers, toggleUserStatus as apiToggleUserStatus } from '../services/api';
+import api, { getCompanyUsers, toggleUserStatus as apiToggleUserStatus, sendSaasInvitation } from '../services/api';
 import { toast } from 'react-toastify';
 import { 
   HiOutlineOfficeBuilding, 
@@ -16,16 +16,16 @@ import {
   HiOutlineLocationMarker,
   HiOutlineChevronDown,
   HiOutlineChevronUp,
-  HiOutlineIdentification
+  HiOutlineIdentification,
+  HiOutlineKey // <--- ÍCONO NUEVO
 } from 'react-icons/hi';
 
 function SuperAdminPage() {
   const [companies, setCompanies] = useState([]);
   const [loading, setLoading] = useState(true);
   
-  // Estado para saber qué empresa está expandida (viendo usuarios)
   const [expandedCompanyId, setExpandedCompanyId] = useState(null);
-  const [companyUsers, setCompanyUsers] = useState({}); // Cache de usuarios por empresa: { companyId: [users] }
+  const [companyUsers, setCompanyUsers] = useState({});
   const [loadingUsers, setLoadingUsers] = useState(false);
 
   useEffect(() => {
@@ -46,13 +46,10 @@ function SuperAdminPage() {
 
   const handleExpandUsers = async (companyId) => {
     if (expandedCompanyId === companyId) {
-      setExpandedCompanyId(null); // Cerrar si ya está abierto
+      setExpandedCompanyId(null); 
       return;
     }
-
     setExpandedCompanyId(companyId);
-    
-    // Si no tenemos los usuarios cargados, los pedimos
     if (!companyUsers[companyId]) {
       setLoadingUsers(true);
       try {
@@ -72,20 +69,38 @@ function SuperAdminPage() {
 
     try {
       await apiToggleUserStatus(userId, !currentStatus);
-      
-      // Actualizamos el estado localmente para no recargar todo
       const updatedUsers = companyUsers[companyId].map(u => 
         u.id === userId ? { ...u, is_active: !currentStatus } : u
       );
       setCompanyUsers(prev => ({ ...prev, [companyId]: updatedUsers }));
-      
       toast.success(`Usuario ${!currentStatus ? 'activado' : 'desactivado'}.`);
     } catch (error) {
       toast.error("Error al cambiar estado del usuario.");
     }
   };
 
-  // ... (Funciones toggleModule y toggleStatus se mantienen igual, las omito para brevedad si quieres, pero mejor las incluyo para copiar y pegar completo)
+  // --- NUEVA FUNCIÓN: ENTREGAR LLAVES ---
+  const handleSendKeys = async (companyId, companyName) => {
+    const email = prompt(`🔑 ENTREGA DE PROPIEDAD: ${companyName}\n\nIngresa el correo del nuevo Dueño/Admin:`);
+    if (!email) return; 
+
+    // Opcional: Podrías preguntar el rol, pero "admin" es lo lógico para un dueño.
+    const role = 'admin'; 
+
+    if(!window.confirm(`CONFIRMACIÓN:\n\nSe enviará un enlace único a: ${email}\n\nEsta persona podrá registrarse como DUEÑO (Admin) de ${companyName}.\n\n¿Proceder?`)) return;
+
+    try {
+      await sendSaasInvitation(companyId, email, role);
+      toast.success(`✅ Enlace de propiedad enviado a ${email}`);
+    } catch (error) {
+      console.error(error);
+      // Extraemos el mensaje de error del backend si existe
+      const msg = error.response?.data?.detail || "Error enviando invitación.";
+      toast.error(msg);
+    }
+  };
+  // --------------------------------------
+
   const toggleModule = async (companyId, moduleKey, currentValue) => {
     const newValue = !currentValue;
     const originalCompanies = [...companies];
@@ -120,7 +135,7 @@ function SuperAdminPage() {
     }
   };
 
-  if (loading) return <div className="p-10 text-center">Cargando...</div>;
+  if (loading) return <div className="p-10 text-center">Cargando Torre de Control...</div>;
 
   return (
     <div className="p-6 bg-slate-50 min-h-screen pb-20">
@@ -137,7 +152,6 @@ function SuperAdminPage() {
           <div key={company.id} className={`bg-white rounded-xl shadow-lg border-l-8 transition-all ${company.is_active ? 'border-green-500' : 'border-red-500'}`}>
             <div className="p-6">
               
-              {/* --- CABECERA EMPRESA --- */}
               <div className="flex flex-col lg:flex-row justify-between items-start mb-6 border-b border-gray-100 pb-6">
                 <div className="flex-1">
                   <div className="flex items-center gap-3 mb-2">
@@ -146,7 +160,6 @@ function SuperAdminPage() {
                     <span className="bg-gray-100 text-gray-500 text-xs px-2 py-1 rounded font-mono">ID: {company.id}</span>
                   </div>
                   
-                  {/* Datos de Contacto (Rayos X) */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 text-sm text-gray-600 bg-gray-50 p-4 rounded-lg">
                     <div className="flex items-center gap-2">
                       <HiOutlineIdentification className="text-indigo-500 text-lg"/>
@@ -180,6 +193,15 @@ function SuperAdminPage() {
                 </div>
 
                 <div className="mt-4 lg:mt-0 lg:ml-6 flex flex-col gap-3 min-w-[200px]">
+                  {/* --- BOTÓN NUEVO: ENTREGAR LLAVES --- */}
+                  <button 
+                    onClick={() => handleSendKeys(company.id, company.name)}
+                    className="w-full py-2 px-4 rounded-lg font-bold text-yellow-700 bg-yellow-100 hover:bg-yellow-200 text-sm border border-yellow-300 flex items-center justify-center gap-2 transition-colors"
+                  >
+                    <HiOutlineKey className="text-lg"/> ENTREGAR LLAVES
+                  </button>
+                  {/* ------------------------------------ */}
+
                   <button 
                     onClick={() => toggleStatus(company.id, company.is_active, company.name)}
                     className={`w-full py-2 px-4 rounded-lg font-bold text-white text-sm shadow-sm flex items-center justify-center gap-2 ${company.is_active ? 'bg-red-500 hover:bg-red-600' : 'bg-green-600 hover:bg-green-700'}`}
@@ -197,7 +219,6 @@ function SuperAdminPage() {
                 </div>
               </div>
 
-              {/* --- PANEL DE USUARIOS (EXPANDIBLE) --- */}
               {expandedCompanyId === company.id && (
                 <div className="mb-6 animate-in fade-in slide-in-from-top-2 duration-300">
                   <div className="bg-indigo-50 rounded-xl p-4 border border-indigo-100">
@@ -264,7 +285,6 @@ function SuperAdminPage() {
                 </div>
               )}
 
-              {/* Panel de Control de Módulos (Igual que antes) */}
               <div className="bg-slate-50 rounded-xl p-5 border-t border-gray-100">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
