@@ -2092,6 +2092,33 @@ def toggle_tenant_modules(
         raise HTTPException(status_code=500, detail="Error interno. Verifique si la base de datos soporta módulos.")
 
 
+
+# --- NUEVOS ENDPOINTS PARA GESTIÓN DE PERSONAL (SUPER ADMIN) ---
+
+@app.get("/super-admin/companies/{company_id}/users", response_model=List[schemas.User])
+def get_company_users_saas(
+    company_id: int,
+    db: Session = Depends(get_db),
+    _role: None = Depends(security.require_role(["super_admin"]))
+):
+    """Obtiene la lista de empleados de una empresa específica."""
+    return crud.saas_get_company_users(db, company_id)
+
+@app.patch("/super-admin/users/{user_id}/status")
+def toggle_user_status_saas(
+    user_id: int,
+    status_data: schemas.UserStatusUpdate,
+    db: Session = Depends(get_db),
+    _role: None = Depends(security.require_role(["super_admin"]))
+):
+    """Activa o desactiva un usuario específico."""
+    try:
+        return crud.saas_toggle_user_status(db, user_id, status_data.is_active)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+# ---------------------------------------------------------------
+
+
 # ===================================================================
 # --- ENDPOINTS PARA NOTAS DE CRÉDITO (IMPRESIÓN Y VERIFICACIÓN) ---
 # ===================================================================

@@ -17,15 +17,25 @@ class CompanyCreate(CompanyBase):
 class Company(CompanyBase):
     id: int
     is_active: bool
-    is_distributor: bool # <--- Agregamos esto para lectura interna
+    is_distributor: bool 
     created_at: datetime
     
-    # --- NUEVO: Módulos contratados ---
     modules: dict | None = None
-    # ----------------------------------
+
+    # --- NUEVO: Datos de Contacto y Dueño (Rayos X) ---
+    admin_email: str | None = None
+    admin_name: str | None = None
+    contact_phone: str | None = None
+    contact_address: str | None = None
+    # --------------------------------------------------
 
     class Config:
         from_attributes = True
+
+# --- NUEVO: Para bloquear/desbloquear usuarios remotamente ---
+class UserStatusUpdate(BaseModel):
+    is_active: bool
+# -------------------------------------------------------------
 
 # --- NUEVO SCHEMA: ACTUALIZAR ESTADO DISTRIBUIDOR ---
 class CompanyDistributorUpdate(BaseModel):

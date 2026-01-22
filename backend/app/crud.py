@@ -3060,10 +3060,8 @@ def repair_location_hierarchy(db: Session, company_id: int):
 
 def saas_get_all_companies(db: Session):
     """
-    Super Admin: Obtiene todas las empresas registradas y cuenta sus empleados.
+    Super Admin: Obtiene empresas, cuenta empleados y busca al Dueño.
     """
-    # Hacemos una consulta "agrupada" para contar usuarios por empresa
-    # Esto equivale a una tabla dinámica en Excel
     results = db.query(
         models.Company,
         func.count(models.User.id).label("user_count")
@@ -3071,26 +3069,50 @@ def saas_get_all_companies(db: Session):
      .group_by(models.Company.id)\
      .order_by(models.Company.id.desc()).all()
     
-    # Formateamos la salida para que sea fácil de leer
     companies_list = []
     for company, user_count in results:
-        # Truco: Convertimos el objeto SQLAlchemy a diccionario
         comp_dict = company.__dict__.copy()
         comp_dict["user_count"] = user_count
         
-        # Aseguramos que 'modules' exista (si la columna es nueva o nula)
-        # Si la base de datos no tiene la columna 'modules', usamos un default.
         if not hasattr(company, "modules") or company.modules is None:
              comp_dict["modules"] = {
-                 "inventory": True, 
-                 "pos": True, 
-                 "work_orders": True, 
-                 "expenses": True
+                 "inventory": True, "pos": True, "work_orders": True, "expenses": True
              }
+
+        # --- RAYOS X: Buscar datos de contacto y dueño ---
+        # 1. Configuración (Teléfono/Dirección)
+        settings = db.query(models.CompanySettings).filter(models.CompanySettings.company_id == company.id).first()
+        comp_dict["contact_phone"] = settings.phone if settings else "No registrado"
+        comp_dict["contact_address"] = settings.address if settings else "No registrada"
+
+        # 2. Dueño (Primer Admin encontrado)
+        admin = db.query(models.User).filter(
+            models.User.company_id == company.id, 
+            models.User.role == 'admin'
+        ).order_by(models.User.id.asc()).first()
+        
+        comp_dict["admin_email"] = admin.email if admin else "Sin Admin"
+        comp_dict["admin_name"] = admin.full_name if (admin and admin.full_name) else "Sin Nombre"
+        # -----------------------------------------------
         
         companies_list.append(comp_dict)
         
     return companies_list
+
+def saas_get_company_users(db: Session, company_id: int):
+    """Obtiene toda la nómina de una empresa."""
+    return db.query(models.User).filter(models.User.company_id == company_id).all()
+
+def saas_toggle_user_status(db: Session, user_id: int, is_active: bool):
+    """Bloquea o desbloquea a un usuario específico."""
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        raise ValueError("Usuario no encontrado")
+    
+    user.is_active = is_active
+    db.commit()
+    db.refresh(user)
+    return user
 
 def saas_toggle_company_status(db: Session, company_id: int, is_active: bool):
     """

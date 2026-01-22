@@ -168,6 +168,20 @@ export async function receiveTransfer(id, { status, pin, note, items }) {
 }
 // ===== FIN API =====
 
+// ===== API: Super Admin - Gestión de Usuarios =====
+export async function getCompanyUsers(companyId) {
+  const { data } = await apiClient.get(`/super-admin/companies/${companyId}/users`);
+  return data;
+}
+
+export async function toggleUserStatus(userId, isActive) {
+  const { data } = await apiClient.patch(`/super-admin/users/${userId}/status`, {
+    is_active: isActive
+  });
+  return data;
+}
+// ==================================================
+
 export async function getTransferManifestUrl(id) {
   // En lugar de bajar los datos, construimos la URL directa al PDF
   // Esto permite abrirlo en una nueva pestaña o iframe para impresión nativa
