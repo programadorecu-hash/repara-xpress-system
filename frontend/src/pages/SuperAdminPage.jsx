@@ -1,6 +1,6 @@
 // frontend/src/pages/SuperAdminPage.jsx
 import React, { useState, useEffect } from 'react';
-import api, { getCompanyUsers, toggleUserStatus as apiToggleUserStatus, sendSaasInvitation } from '../services/api';
+import api, { getCompanyUsers, toggleUserStatus as apiToggleUserStatus, sendSaasInvitation, registerPayment } from '../services/api';
 import { toast } from 'react-toastify';
 import { 
   HiOutlineOfficeBuilding, 
@@ -17,7 +17,9 @@ import {
   HiOutlineChevronDown,
   HiOutlineChevronUp,
   HiOutlineIdentification,
-  HiOutlineKey // <--- ÍCONO NUEVO
+  HiOutlineKey,
+  HiOutlineCalendar,
+  HiOutlineCash
 } from 'react-icons/hi';
 
 function SuperAdminPage() {
@@ -35,7 +37,13 @@ function SuperAdminPage() {
   const fetchCompanies = async () => {
     try {
       const res = await api.get('/super-admin/companies');
-      const sorted = res.data.sort((a, b) => a.is_active === b.is_active ? 0 : a.is_active ? 1 : -1);
+      // Ordenar por fecha de vencimiento (los que vencen antes, primero)
+      // Si no tienen fecha (null), van al final.
+      const sorted = res.data.sort((a, b) => {
+        if (!a.next_payment_due) return 1;
+        if (!b.next_payment_due) return -1;
+        return new Date(a.next_payment_due) - new Date(b.next_payment_due);
+      });
       setCompanies(sorted);
     } catch (err) {
       toast.error('Error cargando datos.');
@@ -79,27 +87,50 @@ function SuperAdminPage() {
     }
   };
 
-  // --- NUEVA FUNCIÓN: ENTREGAR LLAVES ---
   const handleSendKeys = async (companyId, companyName) => {
     const email = prompt(`🔑 ENTREGA DE PROPIEDAD: ${companyName}\n\nIngresa el correo del nuevo Dueño/Admin:`);
     if (!email) return; 
-
-    // Opcional: Podrías preguntar el rol, pero "admin" es lo lógico para un dueño.
     const role = 'admin'; 
-
-    if(!window.confirm(`CONFIRMACIÓN:\n\nSe enviará un enlace único a: ${email}\n\nEsta persona podrá registrarse como DUEÑO (Admin) de ${companyName}.\n\n¿Proceder?`)) return;
-
+    if(!window.confirm(`CONFIRMACIÓN:\n\nSe enviará un enlace único a: ${email}\n\n¿Proceder?`)) return;
     try {
       await sendSaasInvitation(companyId, email, role);
       toast.success(`✅ Enlace de propiedad enviado a ${email}`);
     } catch (error) {
-      console.error(error);
-      // Extraemos el mensaje de error del backend si existe
       const msg = error.response?.data?.detail || "Error enviando invitación.";
       toast.error(msg);
     }
   };
-  // --------------------------------------
+
+  // --- NUEVA FUNCIÓN: REGISTRAR PAGO ---
+  const handleRegisterPayment = async (companyId, companyName) => {
+    const plan = prompt(`💰 REGISTRAR PAGO: ${companyName}\n\nEscribe:\n1 para MENSUAL ($19)\n12 para ANUAL ($190)`);
+    if (!plan) return;
+
+    let months = 0;
+    let planType = "FREE";
+
+    if (plan === "1") {
+      months = 1;
+      planType = "MONTHLY";
+    } else if (plan === "12") {
+      months = 12;
+      planType = "ANNUAL";
+    } else {
+      toast.error("Opción inválida. Escribe 1 o 12.");
+      return;
+    }
+
+    if(!window.confirm(`¿Confirmas que ${companyName} pagó por ${months} mes(es)?\n\nEsto activará la empresa y extenderá su fecha de vencimiento.`)) return;
+
+    try {
+      await registerPayment(companyId, months, planType);
+      toast.success("✅ Pago registrado. Servicio extendido.");
+      fetchCompanies(); // Recargamos para ver la nueva fecha
+    } catch (error) {
+      toast.error("Error al registrar pago.");
+    }
+  };
+  // -------------------------------------
 
   const toggleModule = async (companyId, moduleKey, currentValue) => {
     const newValue = !currentValue;
@@ -135,6 +166,21 @@ function SuperAdminPage() {
     }
   };
 
+  // --- HELPER: SEMÁFORO DE COBRANZA ---
+  const getPaymentStatus = (dueDate) => {
+    if (!dueDate) return { color: "bg-gray-100 text-gray-500", text: "SIN FECHA" };
+    
+    const today = new Date();
+    const due = new Date(dueDate);
+    const diffTime = due - today;
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
+
+    if (diffDays < 0) return { color: "bg-red-100 text-red-700 font-bold animate-pulse", text: `VENCIDO (${Math.abs(diffDays)} días)` };
+    if (diffDays <= 5) return { color: "bg-yellow-100 text-yellow-700 font-bold", text: `Vence en ${diffDays} días` };
+    return { color: "bg-green-100 text-green-700", text: `Vence el ${due.toLocaleDateString()}` };
+  };
+  // ------------------------------------
+
   if (loading) return <div className="p-10 text-center">Cargando Torre de Control...</div>;
 
   return (
@@ -148,7 +194,10 @@ function SuperAdminPage() {
       </div>
 
       <div className="grid grid-cols-1 gap-8">
-        {companies.map((company) => (
+        {companies.map((company) => {
+            const status = getPaymentStatus(company.next_payment_due);
+            
+            return (
           <div key={company.id} className={`bg-white rounded-xl shadow-lg border-l-8 transition-all ${company.is_active ? 'border-green-500' : 'border-red-500'}`}>
             <div className="p-6">
               
@@ -159,6 +208,20 @@ function SuperAdminPage() {
                     {!company.is_active && <span className="bg-red-100 text-red-600 text-xs px-2 py-1 rounded font-bold">SUSPENDIDA</span>}
                     <span className="bg-gray-100 text-gray-500 text-xs px-2 py-1 rounded font-mono">ID: {company.id}</span>
                   </div>
+
+                  {/* --- BARRA DE ESTADO DE COBRANZA --- */}
+                  <div className="flex flex-wrap gap-2 mb-4">
+                     <span className={`px-3 py-1 rounded text-xs border ${status.color}`}>
+                        {status.text}
+                     </span>
+                     <span className="px-3 py-1 rounded text-xs border bg-blue-50 text-blue-700 border-blue-100">
+                        Plan: {company.plan_type || "FREE"}
+                     </span>
+                     <span className="px-3 py-1 rounded text-xs border bg-gray-50 text-gray-500 border-gray-100">
+                        Registro: {new Date(company.created_at).toLocaleDateString()}
+                     </span>
+                  </div>
+                  {/* ----------------------------------- */}
                   
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 text-sm text-gray-600 bg-gray-50 p-4 rounded-lg">
                     <div className="flex items-center gap-2">
@@ -182,29 +245,29 @@ function SuperAdminPage() {
                         <span>{company.contact_phone}</span>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <HiOutlineLocationMarker className="text-indigo-500 text-lg"/>
-                      <div>
-                        <span className="block font-bold text-xs uppercase text-gray-400">Dirección</span>
-                        <span className="truncate max-w-[200px]" title={company.contact_address}>{company.contact_address}</span>
-                      </div>
-                    </div>
                   </div>
                 </div>
 
                 <div className="mt-4 lg:mt-0 lg:ml-6 flex flex-col gap-3 min-w-[200px]">
-                  {/* --- BOTÓN NUEVO: ENTREGAR LLAVES --- */}
+                   {/* --- BOTÓN DE PAGO --- */}
+                   <button 
+                    onClick={() => handleRegisterPayment(company.id, company.name)}
+                    className="w-full py-2 px-4 rounded-lg font-bold text-green-700 bg-green-100 hover:bg-green-200 text-sm border border-green-300 flex items-center justify-center gap-2 transition-colors"
+                  >
+                    <HiOutlineCash className="text-lg"/> REGISTRAR PAGO
+                  </button>
+                  {/* --------------------- */}
+
                   <button 
                     onClick={() => handleSendKeys(company.id, company.name)}
                     className="w-full py-2 px-4 rounded-lg font-bold text-yellow-700 bg-yellow-100 hover:bg-yellow-200 text-sm border border-yellow-300 flex items-center justify-center gap-2 transition-colors"
                   >
                     <HiOutlineKey className="text-lg"/> ENTREGAR LLAVES
                   </button>
-                  {/* ------------------------------------ */}
 
                   <button 
                     onClick={() => toggleStatus(company.id, company.is_active, company.name)}
-                    className={`w-full py-2 px-4 rounded-lg font-bold text-white text-sm shadow-sm flex items-center justify-center gap-2 ${company.is_active ? 'bg-red-500 hover:bg-red-600' : 'bg-green-600 hover:bg-green-700'}`}
+                    className={`w-full py-2 px-4 rounded-lg font-bold text-white text-sm shadow-sm flex items-center justify-center gap-2 ${company.is_active ? 'bg-red-500 hover:bg-red-600' : 'bg-gray-600 hover:bg-gray-700'}`}
                   >
                     {company.is_active ? <><HiOutlineBan/> BLOQUEAR EMPRESA</> : <><HiOutlineCheckCircle/> ACTIVAR SERVICIO</>}
                   </button>
@@ -219,6 +282,7 @@ function SuperAdminPage() {
                 </div>
               </div>
 
+              {/* ... (EL RESTO DEL CÓDIGO DE USUARIOS Y MÓDULOS SIGUE IGUAL) ... */}
               {expandedCompanyId === company.id && (
                 <div className="mb-6 animate-in fade-in slide-in-from-top-2 duration-300">
                   <div className="bg-indigo-50 rounded-xl p-4 border border-indigo-100">
@@ -301,7 +365,7 @@ function SuperAdminPage() {
 
             </div>
           </div>
-        ))}
+        )})}
       </div>
     </div>
   );

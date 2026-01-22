@@ -22,6 +22,11 @@ class Company(CompanyBase):
     
     modules: dict | None = None
 
+    # --- NUEVO: Datos de Facturación ---
+    next_payment_due: datetime | None = None
+    last_payment_date: datetime | None = None
+    # -----------------------------------
+
     # --- NUEVO: Datos de Contacto y Dueño (Rayos X) ---
     admin_email: str | None = None
     admin_name: str | None = None
@@ -31,6 +36,12 @@ class Company(CompanyBase):
 
     class Config:
         from_attributes = True
+
+# --- NUEVO: Schema para Registrar Pago ---
+class PaymentRegistration(BaseModel):
+    months_paid: int # Cantidad de meses a sumar (1 = Mensual, 12 = Anual)
+    plan_type: str # "MONTHLY" o "ANNUAL"
+# -----------------------------------------
 
 # --- NUEVO: Para bloquear/desbloquear usuarios remotamente ---
 class UserStatusUpdate(BaseModel):

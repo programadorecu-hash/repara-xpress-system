@@ -12,7 +12,7 @@ class Company(Base):
     __tablename__ = "companies"
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, unique=True, index=True, nullable=False) # Ej: "Fix It", "ReparaXpress"
-    plan_type = Column(String, default="FREE") # FREE, PRO, ENTERPRISE
+    plan_type = Column(String, default="FREE") # FREE, MONTHLY, ANNUAL
     is_active = Column(Boolean, default=True)
     
     # --- NUEVO: MARCA DE DISTRIBUIDOR (Para aparecer en el buscador público) ---
@@ -20,12 +20,24 @@ class Company(Base):
     # --------------------------------------------------------------------------
 
     # --- NUEVO: Configuración de Módulos (JSON) ---
-    # Almacena qué partes del sistema puede usar la empresa.
-    # Ej: {"pos": true, "inventory": true, "work_orders": false}
     modules = Column(JSON, nullable=True) 
     # ----------------------------------------------
 
+    # --- NUEVO: CICLO DE FACTURACIÓN ---
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    # Fecha límite de pago. Si es NULL, es FREE de por vida o periodo de prueba indefinido.
+    next_payment_due = Column(DateTime(timezone=True), nullable=True)
+    
+    # Fecha del último pago registrado
+    last_payment_date = Column(DateTime(timezone=True), nullable=True)
+    # -----------------------------------
+
+    # Relaciones: Una empresa tiene muchos usuarios y configuraciones
+    users = relationship("User", back_populates="company")
+    settings = relationship("CompanySettings", back_populates="company", uselist=False) 
+    # Relación inversa: Una empresa tiene muchos productos
+    products = relationship("Product", back_populates="company")
 
     # Relaciones: Una empresa tiene muchos usuarios y configuraciones
     users = relationship("User", back_populates="company")

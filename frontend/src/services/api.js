@@ -197,3 +197,12 @@ export async function sendSaasInvitation(companyId, email, role) {
   });
   return data;
 }
+
+// Registrar Pago (Super Admin)
+export async function registerPayment(companyId, months, planType) {
+  const { data } = await apiClient.post(`/super-admin/companies/${companyId}/payment`, {
+    months_paid: months,
+    plan_type: planType
+  });
+  return data;
+}

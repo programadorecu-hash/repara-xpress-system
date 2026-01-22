@@ -3235,3 +3235,52 @@ def saas_create_company_invitation(db: Session, company_id: int, email: str, rol
     db.commit()
     db.refresh(db_invitation)
     return db_invitation
+
+
+# --- NUEVO: REGISTRAR PAGO Y EXTENDER SERVICIO ---
+def saas_register_payment(db: Session, company_id: int, months: int, plan_type: str):
+    """
+    Registra un pago y extiende la fecha de vencimiento.
+    - Si ya estaba vencido, cuenta desde HOY.
+    - Si no estaba vencido, suma tiempo a la fecha existente.
+    """
+    company = db.query(models.Company).filter(models.Company.id == company_id).first()
+    if not company:
+        raise ValueError("Empresa no encontrada")
+
+    now = datetime.now(pytz.utc)
+    
+    # 1. Determinar desde cuándo sumar
+    # Si no tenía fecha o ya pasó, empezamos desde hoy.
+    # Si tiene fecha futura, sumamos a partir de esa fecha.
+    start_date = now
+    if company.next_payment_due and company.next_payment_due > now:
+        start_date = company.next_payment_due
+    
+    # 2. Calcular nueva fecha (+30 días por mes aprox)
+    # Usamos 30 días para simplificar, o relativedelta si quieres exactitud de calendario
+    days_to_add = months * 30 
+    new_due_date = start_date + timedelta(days=days_to_add)
+
+    # 3. Actualizar datos
+    company.next_payment_due = new_due_date
+    company.last_payment_date = now
+    company.plan_type = plan_type
+    company.is_active = True # Si paga, se activa automáticamente
+    
+    # Activamos los módulos "PRO" por defecto al pagar
+    if not company.modules:
+        company.modules = {"inventory": True, "pos": True, "work_orders": True, "expenses": True}
+    else:
+        # Aseguramos que los módulos estén activos
+        # (Aquí podrías ser más selectivo, pero por ahora activamos todo)
+        current = dict(company.modules)
+        current.update({"pos": True, "work_orders": True, "expenses": True})
+        company.modules = current
+        from sqlalchemy.orm.attributes import flag_modified
+        flag_modified(company, "modules")
+
+    db.commit()
+    db.refresh(company)
+    return company
+# -------------------------------------------------

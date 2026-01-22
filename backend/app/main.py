@@ -2146,6 +2146,18 @@ def send_saas_invitation(
         raise HTTPException(status_code=400, detail=str(e))
 # ---------------------------------------------
 
+@app.post("/super-admin/companies/{company_id}/payment")
+def register_tenant_payment(
+    company_id: int,
+    payment: schemas.PaymentRegistration,
+    db: Session = Depends(get_db),
+    _role: None = Depends(security.require_role(["super_admin"]))
+):
+    """Registra un pago y extiende la suscripción de la empresa."""
+    try:
+        return crud.saas_register_payment(db, company_id, payment.months_paid, payment.plan_type)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
 
 
 # ===================================================================
