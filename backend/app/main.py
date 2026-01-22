@@ -314,7 +314,7 @@ def create_new_user(
     user: schemas.UserCreate,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(security.get_current_user), # <--- NECESARIO
-    _role_check: None = Depends(security.require_role(required_roles=["admin"]))
+    _role_check: None = Depends(security.require_role(required_roles=["super_admin", "admin"]))
 ):
     if not current_user.company_id:
         raise HTTPException(status_code=400, detail="Error de permisos: Admin sin empresa.")
@@ -329,13 +329,13 @@ def create_new_user(
 def read_users(
     db: Session = Depends(get_db), 
     current_user: models.User = Depends(security.get_current_user), # <--- NECESARIO
-    _role_check: None = Depends(security.require_role(required_roles=["admin"]))
+    _role_check: None = Depends(security.require_role(required_roles=["super_admin", "admin"]))
 ):
     if not current_user.company_id: return []
     return crud.get_users(db, company_id=current_user.company_id)
 
 @app.patch("/users/{user_id}", response_model=schemas.User)
-def update_user_details(user_id: int, user_update: schemas.UserUpdate, db: Session = Depends(get_db), _role_check: None = Depends(security.require_role(required_roles=["admin"]))):
+def update_user_details(user_id: int, user_update: schemas.UserUpdate, db: Session = Depends(get_db), _role_check: None = Depends(security.require_role(required_roles=["super_admin", "admin"]))):
     # La lógica para no eliminar al último admin está dentro de crud.update_user
     db_user = crud.update_user(db, user_id=user_id, user_update=user_update)
     if not db_user:
@@ -381,7 +381,7 @@ def change_my_pin(
 # -------------------------------
 
 @app.post("/users/{user_id}/reset-password")
-def reset_password_for_user(user_id: int, password_data: schemas.UserPasswordReset, db: Session = Depends(get_db), _role_check: None = Depends(security.require_role(required_roles=["admin"]))):
+def reset_password_for_user(user_id: int, password_data: schemas.UserPasswordReset, db: Session = Depends(get_db), _role_check: None = Depends(security.require_role(required_roles=["super_admin", "admin"]))):
     db_user = crud.reset_user_password(db, user_id=user_id, new_password=password_data.new_password)
     if not db_user:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
@@ -426,7 +426,7 @@ def create_new_category(
     db: Session = Depends(get_db), 
     # Necesitamos el usuario para saber a qué empresa asignar la categoría
     current_user: models.User = Depends(security.get_current_user),
-    _role_check: None = Depends(security.require_role(required_roles=["admin", "inventory_manager"]))
+    _role_check: None = Depends(security.require_role(required_roles=["super_admin", "admin", "inventory_manager"]))
 ):
     if not current_user.company_id:
         raise HTTPException(status_code=400, detail="El usuario no pertenece a ninguna empresa.")
@@ -451,7 +451,7 @@ def create_new_product(
     product: schemas.ProductCreate, 
     db: Session = Depends(get_db), 
     current_user: models.User = Depends(security.get_current_user),
-    _role_check: None = Depends(security.require_role(required_roles=["admin", "inventory_manager"]))
+    _role_check: None = Depends(security.require_role(required_roles=["super_admin", "admin", "inventory_manager"]))
 ):
     if not current_user.company_id:
         raise HTTPException(status_code=400, detail="El usuario no pertenece a ninguna empresa.")
@@ -487,14 +487,14 @@ def read_product(product_id: int, db: Session = Depends(get_db)):
     return db_product
 
 @app.put("/products/{product_id}", response_model=schemas.Product)
-def update_product_details(product_id: int, product: schemas.ProductCreate, db: Session = Depends(get_db), _role_check: None = Depends(security.require_role(required_roles=["admin", "inventory_manager"]))):
+def update_product_details(product_id: int, product: schemas.ProductCreate, db: Session = Depends(get_db), _role_check: None = Depends(security.require_role(required_roles=["super_admin", "admin", "inventory_manager"]))):
     db_product = crud.update_product(db, product_id=product_id, product=product)
     if db_product is None:
         raise HTTPException(status_code=404, detail="Producto no encontrado para actualizar")
     return db_product
 
 @app.delete("/products/{product_id}", response_model=schemas.Product)
-def delete_product_by_id(product_id: int, db: Session = Depends(get_db), _role_check: None = Depends(security.require_role(required_roles=["admin"]))):
+def delete_product_by_id(product_id: int, db: Session = Depends(get_db), _role_check: None = Depends(security.require_role(required_roles=["super_admin", "admin"]))):
     db_product = crud.delete_product(db, product_id=product_id)
     if db_product is None:
         raise HTTPException(status_code=404, detail="Producto no encontrado para eliminar")
@@ -504,7 +504,7 @@ def delete_product_by_id(product_id: int, db: Session = Depends(get_db), _role_c
 @app.get("/products/reports/zero-cost", response_model=List[schemas.Product])
 def read_products_zero_cost(
     db: Session = Depends(get_db),
-    _role_check: None = Depends(security.require_role(required_roles=["admin", "inventory_manager"]))
+    _role_check: None = Depends(security.require_role(required_roles=["super_admin", "admin", "inventory_manager"]))
 ):
     return crud.get_products_zero_cost(db)
 # -------------------------------------------
@@ -616,7 +616,7 @@ def upload_product_image(
     # y que su "nombre de compartimiento" (alias) es "file".
     file: UploadFile = File(..., alias="file"),
     db: Session = Depends(get_db),
-    _role_check: None = Depends(security.require_role(required_roles=["admin", "inventory_manager"]))
+    _role_check: None = Depends(security.require_role(required_roles=["super_admin", "admin", "inventory_manager"]))
 ):
     db_product = crud.get_product(db, product_id=product_id)
     if not db_product:
@@ -709,7 +709,7 @@ def upload_product_image(
 def delete_an_image(
     image_id: int,
     db: Session = Depends(get_db),
-    _role_check: None = Depends(security.require_role(required_roles=["admin", "inventory_manager"]))
+    _role_check: None = Depends(security.require_role(required_roles=["super_admin", "admin", "inventory_manager"]))
 ):
     db_image = crud.delete_product_image(db, image_id=image_id)
     if db_image is None:
@@ -785,7 +785,7 @@ def create_new_location(
     location: schemas.LocationCreate, 
     db: Session = Depends(get_db), 
     current_user: models.User = Depends(security.get_current_user),
-    _role_check: None = Depends(security.require_role(required_roles=["admin"]))
+    _role_check: None = Depends(security.require_role(required_roles=["super_admin", "admin"]))
 ):
     if not current_user.company_id:
         raise HTTPException(status_code=400, detail="Admin sin empresa.")
@@ -812,14 +812,14 @@ def read_location(location_id: int, db: Session = Depends(get_db)):
     return db_location
 
 @app.put("/locations/{location_id}", response_model=schemas.Location)
-def update_location_details(location_id: int, location: schemas.LocationCreate, db: Session = Depends(get_db), _role_check: None = Depends(security.require_role(required_roles=["admin", "inventory_manager"]))):
+def update_location_details(location_id: int, location: schemas.LocationCreate, db: Session = Depends(get_db), _role_check: None = Depends(security.require_role(required_roles=["super_admin", "admin", "inventory_manager"]))):
     db_location = crud.update_location(db, location_id=location_id, location=location)
     if db_location is None:
         raise HTTPException(status_code=404, detail="Ubicación no encontrada para actualizar")
     return db_location
 
 @app.delete("/locations/{location_id}", response_model=schemas.Location)
-def delete_location_by_id(location_id: int, db: Session = Depends(get_db), _role_check: None = Depends(security.require_role(required_roles=["admin"]))):
+def delete_location_by_id(location_id: int, db: Session = Depends(get_db), _role_check: None = Depends(security.require_role(required_roles=["super_admin", "admin"]))):
     db_location = crud.delete_location(db, location_id=location_id)
     if db_location is None:
         raise HTTPException(status_code=404, detail="Ubicación no encontrada para eliminar")
@@ -844,7 +844,7 @@ def read_all_bodegas(
 # --- ENDPOINTS PARA STOCK ---
 # ===================================================================
 @app.post("/stock/", response_model=schemas.Stock, status_code=status.HTTP_201_CREATED)
-def set_product_stock(stock: schemas.StockCreate, db: Session = Depends(get_db), _role_check: None = Depends(security.require_role(required_roles=["admin"]))):
+def set_product_stock(stock: schemas.StockCreate, db: Session = Depends(get_db), _role_check: None = Depends(security.require_role(required_roles=["super_admin", "admin"]))):
     return crud.set_stock(db=db, stock=stock)
 
 @app.get("/locations/{location_id}/stock", response_model=List[schemas.Stock])
@@ -908,7 +908,7 @@ def create_movement(movement: schemas.InventoryMovementCreate, db: Session = Dep
     return db_movement
 
 @app.get("/products/{product_id}/movements/", response_model=List[schemas.InventoryMovement])
-def read_movements_for_product(product_id: int, db: Session = Depends(get_db), _role_check: None = Depends(security.require_role(required_roles=["admin", "inventory_manager"]))):
+def read_movements_for_product(product_id: int, db: Session = Depends(get_db), _role_check: None = Depends(security.require_role(required_roles=["super_admin", "admin", "inventory_manager"]))):
     return crud.get_movements_by_product(db, product_id=product_id)
 
 # ===================================================================
@@ -954,7 +954,7 @@ def get_personnel_report_endpoint(
     user_id: int | None = None,
     location_id: int | None = None,
     db: Session = Depends(get_db),
-    _role_check: None = Depends(security.require_role(required_roles=["admin", "inventory_manager"]))
+    _role_check: None = Depends(security.require_role(required_roles=["super_admin", "admin", "inventory_manager"]))
 ):
     return crud.get_personnel_report(
         db, 
@@ -973,7 +973,7 @@ def create_new_lost_sale_log(log: schemas.LostSaleLogCreate, db: Session = Depen
     return crud.create_lost_sale_log(db=db, log=log, user_id=current_user.id)
 
 @app.get("/lost-sales/", response_model=List[schemas.LostSaleLog])
-def read_lost_sale_logs(skip: int = 0, limit: int = 100, db: Session = Depends(get_db), _role_check: None = Depends(security.require_role(required_roles=["admin", "inventory_manager"]))):
+def read_lost_sale_logs(skip: int = 0, limit: int = 100, db: Session = Depends(get_db), _role_check: None = Depends(security.require_role(required_roles=["super_admin", "admin", "inventory_manager"]))):
     return crud.get_lost_sale_logs(db, skip=skip, limit=limit)
 
 # ===================================================================
@@ -1351,7 +1351,7 @@ def create_new_supplier(
     supplier: schemas.SupplierCreate, 
     db: Session = Depends(get_db), 
     current_user: models.User = Depends(security.get_current_user),
-    _role_check: None = Depends(security.require_role(required_roles=["admin", "inventory_manager"]))
+    _role_check: None = Depends(security.require_role(required_roles=["super_admin", "admin", "inventory_manager"]))
 ):
     if not current_user.company_id:
         raise HTTPException(status_code=400, detail="Usuario sin empresa.")
@@ -1363,27 +1363,27 @@ def read_suppliers(
     limit: int = 100, 
     db: Session = Depends(get_db), 
     current_user: models.User = Depends(security.get_current_user),
-    _role_check: None = Depends(security.require_role(required_roles=["admin", "inventory_manager"]))
+    _role_check: None = Depends(security.require_role(required_roles=["super_admin", "admin", "inventory_manager"]))
 ):
     if not current_user.company_id: return []
     return crud.get_suppliers(db, company_id=current_user.company_id, skip=skip, limit=limit)
 
 @app.get("/suppliers/{supplier_id}", response_model=schemas.Supplier)
-def read_single_supplier(supplier_id: int, db: Session = Depends(get_db), _role_check: None = Depends(security.require_role(required_roles=["admin", "inventory_manager"]))):
+def read_single_supplier(supplier_id: int, db: Session = Depends(get_db), _role_check: None = Depends(security.require_role(required_roles=["super_admin", "admin", "inventory_manager"]))):
     db_supplier = crud.get_supplier(db, supplier_id=supplier_id)
     if db_supplier is None:
         raise HTTPException(status_code=404, detail="Proveedor no encontrado")
     return db_supplier
 
 @app.put("/suppliers/{supplier_id}", response_model=schemas.Supplier)
-def update_supplier_details(supplier_id: int, supplier: schemas.SupplierCreate, db: Session = Depends(get_db), _role_check: None = Depends(security.require_role(required_roles=["admin", "inventory_manager"]))):
+def update_supplier_details(supplier_id: int, supplier: schemas.SupplierCreate, db: Session = Depends(get_db), _role_check: None = Depends(security.require_role(required_roles=["super_admin", "admin", "inventory_manager"]))):
     db_supplier = crud.update_supplier(db, supplier_id=supplier_id, supplier=supplier)
     if db_supplier is None:
         raise HTTPException(status_code=404, detail="Proveedor no encontrado para actualizar")
     return db_supplier
 
 @app.delete("/suppliers/{supplier_id}", response_model=schemas.Supplier)
-def delete_supplier_by_id(supplier_id: int, db: Session = Depends(get_db), _role_check: None = Depends(security.require_role(required_roles=["admin"]))):
+def delete_supplier_by_id(supplier_id: int, db: Session = Depends(get_db), _role_check: None = Depends(security.require_role(required_roles=["super_admin", "admin"]))):
     db_supplier = crud.delete_supplier(db, supplier_id=supplier_id)
     if db_supplier is None:
         raise HTTPException(status_code=404, detail="Proveedor no encontrado para eliminar")
@@ -1397,7 +1397,7 @@ def read_purchase_invoices(
     skip: int = 0,
     limit: int = 100,
     db: Session = Depends(get_db),
-    _role_check: None = Depends(security.require_role(required_roles=["admin", "inventory_manager"]))
+    _role_check: None = Depends(security.require_role(required_roles=["super_admin", "admin", "inventory_manager"]))
 ):
     return crud.get_purchase_invoices(db=db, skip=skip, limit=limit)
 
@@ -1562,7 +1562,7 @@ def create_new_cash_account(
     account: schemas.CashAccountCreate, 
     db: Session = Depends(get_db), 
     current_user: models.User = Depends(security.get_current_user), # <---
-    _role_check: None = Depends(security.require_role(required_roles=["admin"]))
+    _role_check: None = Depends(security.require_role(required_roles=["super_admin", "admin"]))
 ):
     if not current_user.company_id: raise HTTPException(status_code=400, detail="Admin sin empresa.")
     return crud.create_cash_account(db=db, account=account, company_id=current_user.company_id)
@@ -1586,7 +1586,7 @@ def create_new_cash_transaction(transaction: schemas.CashTransactionCreate, db: 
     return db_transaction
 
 @app.get("/cash-accounts/{account_id}/transactions/", response_model=List[schemas.CashTransaction])
-def read_transactions_for_account(account_id: int, skip: int = 0, limit: int = 100, db: Session = Depends(get_db), _role_check: None = Depends(security.require_role(required_roles=["admin", "inventory_manager"]))):
+def read_transactions_for_account(account_id: int, skip: int = 0, limit: int = 100, db: Session = Depends(get_db), _role_check: None = Depends(security.require_role(required_roles=["super_admin", "admin", "inventory_manager"]))):
     return crud.get_cash_transactions_by_account(db, account_id=account_id, skip=skip, limit=limit)
 
 # --- INICIO DE NUESTRO CÓDIGO (Cierre de Caja) ---
@@ -1594,7 +1594,7 @@ def read_transactions_for_account(account_id: int, skip: int = 0, limit: int = 1
 def get_cash_account_balance_endpoint(
     account_id: int,
     db: Session = Depends(get_db),
-    _role_check: None = Depends(security.require_role(required_roles=["admin"]))
+    _role_check: None = Depends(security.require_role(required_roles=["super_admin", "admin"]))
 ):
     """
     Devuelve el saldo actual de una cuenta de caja específica.
@@ -1625,7 +1625,7 @@ def send_invitation_endpoint(
     invitation: schemas.InvitationCreate,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(security.get_current_user),
-    _role: None = Depends(security.require_role(["admin", "inventory_manager"]))
+    _role: None = Depends(security.require_role(["super_admin", "admin", "inventory_manager"]))
 ):
     try:
         crud.create_invitation(db, invitation, current_user)
@@ -1717,7 +1717,7 @@ def confirm_password_recovery(
 # --- ENDPOINTS PARA REPORTES  - DASHBOARDS - ETC ---
 # ===================================================================
 @app.get("/reports/top-sellers", response_model=List[schemas.TopSeller])
-def get_top_sellers_report(start_date: date, end_date: date, db: Session = Depends(get_db), _role_check: None = Depends(security.require_role(required_roles=["admin", "inventory_manager"]))):
+def get_top_sellers_report(start_date: date, end_date: date, db: Session = Depends(get_db), _role_check: None = Depends(security.require_role(required_roles=["super_admin", "admin", "inventory_manager"]))):
     top_sellers_data = crud.get_top_sellers(db, start_date=start_date, end_date=end_date)
     response = []
     for user, total_sales in top_sellers_data:
@@ -1765,7 +1765,7 @@ def get_inventory_audit_report(
     end_date: date | None = None,
     user_id: int | None = None,
     db: Session = Depends(get_db),
-    _role_check: None = Depends(security.require_role(required_roles=["admin"]))
+    _role_check: None = Depends(security.require_role(required_roles=["super_admin", "admin"]))
 ):
     movements = crud.get_inventory_audit(db, start_date=start_date, end_date=end_date, user_id=user_id)
     return movements
@@ -1797,15 +1797,15 @@ def get_low_stock_report(
 
 # 1. Para que el Admin cree reglas
 @app.post("/notifications/rules", response_model=schemas.NotificationRule)
-def create_rule(rule: schemas.NotificationRuleCreate, db: Session = Depends(get_db), _role: None = Depends(security.require_role(["admin", "inventory_manager"]))):
+def create_rule(rule: schemas.NotificationRuleCreate, db: Session = Depends(get_db), _role: None = Depends(security.require_role(["super_admin", "admin", "inventory_manager"]))):
     return crud.create_notification_rule(db, rule)
 
 @app.get("/notifications/rules", response_model=List[schemas.NotificationRule])
-def list_rules(db: Session = Depends(get_db), _role: None = Depends(security.require_role(["admin", "inventory_manager"]))):
+def list_rules(db: Session = Depends(get_db), _role: None = Depends(security.require_role(["super_admin", "admin", "inventory_manager"]))):
     return crud.get_notification_rules(db)
 
 @app.delete("/notifications/rules/{rule_id}")
-def delete_rule(rule_id: int, db: Session = Depends(get_db), _role: None = Depends(security.require_role(["admin", "inventory_manager"]))):
+def delete_rule(rule_id: int, db: Session = Depends(get_db), _role: None = Depends(security.require_role(["super_admin", "admin", "inventory_manager"]))):
     return crud.delete_notification_rule(db, rule_id)
 
 # 2. Para que el sistema (Frontend) pregunte si debe mostrar alerta
@@ -1825,7 +1825,7 @@ def update_rule(
     rule_id: int, 
     rule: schemas.NotificationRuleCreate, 
     db: Session = Depends(get_db), 
-    _role: None = Depends(security.require_role(["admin", "inventory_manager"]))
+    _role: None = Depends(security.require_role(["super_admin", "admin", "inventory_manager"]))
 ):
     updated_rule = crud.update_notification_rule(db, rule_id, rule)
     if not updated_rule:
@@ -1874,7 +1874,7 @@ def update_customer_details(customer_id: int, customer: schemas.CustomerCreate, 
     return updated
 
 @app.delete("/customers/{customer_id}", response_model=schemas.Customer)
-def delete_customer_endpoint(customer_id: int, db: Session = Depends(get_db), _role: None = Depends(security.require_role(["admin", "inventory_manager"]))):
+def delete_customer_endpoint(customer_id: int, db: Session = Depends(get_db), _role: None = Depends(security.require_role(["super_admin", "admin", "inventory_manager"]))):
     deleted = crud.delete_customer(db, customer_id=customer_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Cliente no encontrado.")
@@ -1975,7 +1975,7 @@ def update_company_settings(
     settings: schemas.CompanySettingsCreate, 
     db: Session = Depends(get_db),
     current_user: models.User = Depends(security.get_current_user), # <--- Necesario
-    _role: None = Depends(security.require_role(["admin"]))
+    _role: None = Depends(security.require_role(["super_admin", "admin"]))
 ):
     return crud.update_company_settings(db, settings, company_id=current_user.company_id)
 
@@ -1984,7 +1984,7 @@ def update_distributor_status_endpoint(
     status_update: schemas.CompanyDistributorUpdate,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(security.get_current_user),
-    _role: None = Depends(security.require_role(["admin"]))
+    _role: None = Depends(security.require_role(["super_admin", "admin"]))
 ):
     """
     Activa o desactiva la visibilidad pública de la empresa.
@@ -2016,7 +2016,7 @@ def upload_company_logo(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(security.get_current_user), # <--- Necesario
-    _role: None = Depends(security.require_role(["admin"]))
+    _role: None = Depends(security.require_role(["super_admin", "admin"]))
 ):
     # 1. Validaciones básicas de imagen
     allowed_types = ["image/jpeg", "image/png", "image/webp"]
@@ -2256,7 +2256,7 @@ def create_expense_category_endpoint(
     category: schemas.ExpenseCategoryCreate, 
     db: Session = Depends(get_db), 
     current_user: models.User = Depends(security.get_current_user), # <---
-    _role: None = Depends(security.require_role(["admin", "inventory_manager"]))
+    _role: None = Depends(security.require_role(["super_admin", "admin", "inventory_manager"]))
 ):
     if not current_user.company_id: raise HTTPException(status_code=400, detail="Usuario sin empresa.")
     return crud.create_expense_category(db, category, company_id=current_user.company_id)
@@ -2265,7 +2265,7 @@ def create_expense_category_endpoint(
 def delete_expense_category_endpoint(
     category_id: int, 
     db: Session = Depends(get_db),
-    _role: None = Depends(security.require_role(["admin"]))
+    _role: None = Depends(security.require_role(["super_admin", "admin"]))
 ):
     """Elimina una categoría de gasto."""
     result = crud.delete_expense_category(db, category_id)
@@ -2301,7 +2301,7 @@ def read_expenses_history(
     limit: int = 100,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(security.get_current_user), # <--- NECESARIO
-    _role: None = Depends(security.require_role(["admin", "inventory_manager"]))
+    _role: None = Depends(security.require_role(["super_admin", "admin", "inventory_manager"]))
 ):
     if not current_user.company_id: return []
     return crud.get_expenses(
@@ -2318,7 +2318,7 @@ def read_expenses_history(
 def delete_expense_endpoint(
     expense_id: int, 
     db: Session = Depends(get_db),
-    _role: None = Depends(security.require_role(["admin"]))
+    _role: None = Depends(security.require_role(["super_admin", "admin"]))
 ):
     """Elimina un gasto registrado por error."""
     result = crud.delete_expense(db, expense_id)
@@ -2335,7 +2335,7 @@ def get_financial_report_endpoint(
     location_id: int | None = None,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(security.get_current_user), # <---
-    _role: None = Depends(security.require_role(["admin", "inventory_manager"])),
+    _role: None = Depends(security.require_role(["super_admin", "admin", "inventory_manager"])),
     # --- GUARDIA SaaS: Requiere módulo FINANZAS ---
     _saas: None = Depends(security.require_module("expenses"))
 ):

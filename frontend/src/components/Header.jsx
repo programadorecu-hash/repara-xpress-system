@@ -79,8 +79,8 @@ function Header({ isMenuOpen, onToggle, companyInfo, apiUrl }) {
   // Ya no cargamos datos aquí, usamos companyInfo que viene de AppLayout
 
   const canManageInventory =
-    user?.role === "admin" || user?.role === "inventory_manager";
-  const canManageCash = user?.role === "admin";
+    user?.role === "super_admin" || user?.role === "admin" || user?.role === "inventory_manager";
+  const canManageCash = user?.role === "super_admin" || user?.role === "admin";
 
   const handleLogout = () => {
     logout();
@@ -189,7 +189,7 @@ function Header({ isMenuOpen, onToggle, companyInfo, apiUrl }) {
           {/* --- NUEVO BOTÓN TRANSFERENCIAS --- */}
           <NavItem to="/transferencias" label="Transferencias" icon={<HiOutlineSwitchHorizontal />} isExpanded={isMenuOpen} />
           
-          {user?.role === "admin" && (
+          {(user?.role === "super_admin" || user?.role === "admin") && (
             <NavItem to="/auditoria" label="Movimientos de Inventario" icon={<HiOutlineDocumentReport />} isExpanded={isMenuOpen} />
           )}
 
@@ -220,7 +220,7 @@ function Header({ isMenuOpen, onToggle, companyInfo, apiUrl }) {
               {canManageInventory && (
                 <NavItem to="/gastos" label="Gastos y Costos" icon={<HiOutlineCurrencyDollar />} isExpanded={isMenuOpen} />
               )}
-              {user?.role === "admin" && (
+              {(user?.role === "super_admin" || user?.role === "admin") && (
                 <NavItem to="/reporte-financiero" label="Utilidad Neta" icon={<HiOutlineChartPie />} isExpanded={isMenuOpen} />
               )}
               {canManageCash && (
@@ -235,20 +235,20 @@ function Header({ isMenuOpen, onToggle, companyInfo, apiUrl }) {
           <div className="my-2 border-t border-white/10" /> {/* Separador */}
 
           {/* --- GRUPO: ADMINISTRACIÓN (Solo Admins) --- */}
-          {(user?.role === "admin" || user?.role === "inventory_manager") && (
+          {(user?.role === "super_admin" || user?.role === "admin" || user?.role === "inventory_manager") && (
              <>
                {isMenuOpen && <div className="text-xs font-bold text-surface/50 uppercase px-3 mt-2 mb-1">Administración</div>}
                
-               {user?.role === "admin" && (
+               {(user?.role === "super_admin" || user?.role === "admin") && (
                  <NavItem to="/configuracion/empresa" label="Datos Empresa" icon={<HiOutlineOfficeBuilding />} isExpanded={isMenuOpen} />
                )}
-               {user?.role === "admin" && (
+               {(user?.role === "super_admin" || user?.role === "admin") && (
                  <NavItem to="/sucursales" label="Sucursales" icon={<HiOutlineOfficeBuilding />} isExpanded={isMenuOpen} />
                )}
-               {user?.role === "admin" && (
+               {(user?.role === "super_admin" || user?.role === "admin") && (
                  <NavItem to="/usuarios" label="Gerencia y Empleados" icon={<HiOutlineUsers />} isExpanded={isMenuOpen} />
                )}
-               {user?.role === "admin" && (
+               {(user?.role === "super_admin" || user?.role === "admin") && (
                  <NavItem to="/personal" label="Control de Personal" icon={<HiOutlineIdentification />} isExpanded={isMenuOpen} />
                )}
                <NavItem to="/configuracion/notificaciones" label="Alertas" icon={<HiOutlineBell />} isExpanded={isMenuOpen} />

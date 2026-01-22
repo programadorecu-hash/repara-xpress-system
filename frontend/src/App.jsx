@@ -194,7 +194,7 @@ function SetupGuard() {
           <Route
             path="auditoria"
             element={
-              <ProtectedRoute requiredRoles={["admin"]}>
+              <ProtectedRoute requiredRoles={["super_admin", "admin"]}>
                 <AuditPage />
               </ProtectedRoute>
             }
@@ -206,7 +206,7 @@ function SetupGuard() {
           <Route
             path="personal"
             element={
-              <ProtectedRoute requiredRoles={["admin", "inventory_manager"]}>
+              <ProtectedRoute requiredRoles={["super_admin", "admin", "inventory_manager"]}>
                 <PersonnelPage />
               </ProtectedRoute>
             }
@@ -215,7 +215,7 @@ function SetupGuard() {
           <Route
             path="configuracion/notificaciones"
             element={
-              <ProtectedRoute requiredRoles={["admin", "inventory_manager"]}>
+              <ProtectedRoute requiredRoles={["super_admin", "admin", "inventory_manager"]}>
                 <NotificationRulesPage />
               </ProtectedRoute>
             }
@@ -224,7 +224,7 @@ function SetupGuard() {
           <Route
             path="configuracion/empresa"
             element={
-              <ProtectedRoute requiredRoles={["admin"]}>
+              <ProtectedRoute requiredRoles={["super_admin", "admin"]}>
                 <CompanySettingsPage />
               </ProtectedRoute>
             }
@@ -232,7 +232,7 @@ function SetupGuard() {
           <Route
             path="proveedores"
             element={
-              <ProtectedRoute requiredRoles={["admin", "inventory_manager"]}>
+              <ProtectedRoute requiredRoles={["super_admin", "admin", "inventory_manager"]}>
                 <SuppliersPage />
               </ProtectedRoute>
             }
@@ -240,7 +240,7 @@ function SetupGuard() {
           <Route
             path="compras"
             element={
-              <ProtectedRoute requiredRoles={["admin", "inventory_manager"]}>
+              <ProtectedRoute requiredRoles={["super_admin", "admin", "inventory_manager"]}>
                 <PurchaseInvoicesPage />
               </ProtectedRoute>
             }
@@ -257,7 +257,7 @@ function SetupGuard() {
           <Route
             path="ventas-perdidas"
             element={
-              <ProtectedRoute requiredRoles={["admin", "inventory_manager"]}>
+              <ProtectedRoute requiredRoles={["super_admin", "admin", "inventory_manager"]}>
                 <LostSalesPage />
               </ProtectedRoute>
             }
@@ -265,7 +265,7 @@ function SetupGuard() {
           <Route
             path="caja"
             element={
-              <ProtectedRoute requiredRoles={["admin"]}>
+              <ProtectedRoute requiredRoles={["super_admin", "admin"]}>
                 <CashAccountsPage />
               </ProtectedRoute>
             }
@@ -273,7 +273,7 @@ function SetupGuard() {
           <Route
             path="caja/transacciones"
             element={
-              <ProtectedRoute requiredRoles={["admin"]}>
+              <ProtectedRoute requiredRoles={["super_admin", "admin"]}>
                 <CashTransactionsPage />
               </ProtectedRoute>
             }
@@ -282,7 +282,7 @@ function SetupGuard() {
           <Route
             path="gastos"
             element={
-              <ProtectedRoute requiredRoles={["admin", "inventory_manager"]}>
+              <ProtectedRoute requiredRoles={["super_admin", "admin", "inventory_manager"]}>
                 <ExpensesPage />
               </ProtectedRoute>
             }
@@ -291,7 +291,7 @@ function SetupGuard() {
           <Route
             path="reporte-financiero"
             element={
-              <ProtectedRoute requiredRoles={["admin", "inventory_manager"]}>
+              <ProtectedRoute requiredRoles={["super_admin", "admin", "inventory_manager"]}>
                 <FinancialReportPage />
               </ProtectedRoute>
             }
@@ -300,7 +300,7 @@ function SetupGuard() {
           <Route
             path="sucursales"
             element={
-              <ProtectedRoute requiredRoles={["admin"]}>
+              <ProtectedRoute requiredRoles={["super_admin", "admin"]}>
                 <LocationsPage />
               </ProtectedRoute>
             }
@@ -309,17 +309,17 @@ function SetupGuard() {
           <Route
             path="usuarios"
             element={
-              <ProtectedRoute requiredRoles={["admin"]}>
+              <ProtectedRoute requiredRoles={["super_admin", "admin"]}>
                 <UserManagementPage />
               </ProtectedRoute>
             }
           />
-          
           <Route
             path="clientes"
             element={
               <ProtectedRoute
                 requiredRoles={[
+                  "super_admin",
                   "admin",
                   "inventory_manager",
                   "warehouse_operator",
