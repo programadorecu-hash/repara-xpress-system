@@ -983,7 +983,9 @@ def read_lost_sale_logs(skip: int = 0, limit: int = 100, db: Session = Depends(g
 def create_new_work_order(
     work_order: schemas.WorkOrderCreate, 
     db: Session = Depends(get_db), 
-    current_user: models.User = Depends(security.get_current_user)
+    current_user: models.User = Depends(security.get_current_user),
+    # --- GUARDIA SaaS: Requiere módulo TALLER ---
+    _saas: None = Depends(security.require_module("work_orders"))
 ):
     if not current_user.hashed_pin or not security.verify_password(work_order.pin, current_user.hashed_pin):
         raise HTTPException(status_code=403, detail="PIN incorrecto o no establecido")
@@ -1416,7 +1418,13 @@ def create_new_purchase_invoice(invoice: schemas.PurchaseInvoiceCreate, location
 # --- ENDPOINTS PARA VENTAS ---
 # ===================================================================
 @app.post("/sales/", response_model=schemas.Sale, status_code=status.HTTP_201_CREATED)
-def create_new_sale(sale: schemas.SaleCreate, db: Session = Depends(get_db), current_user: schemas.User = Depends(security.get_current_user)):
+def create_new_sale(
+    sale: schemas.SaleCreate, 
+    db: Session = Depends(get_db), 
+    current_user: schemas.User = Depends(security.get_current_user),
+    # --- GUARDIA SaaS: Requiere módulo POS ---
+    _saas: None = Depends(security.require_module("pos"))
+):
     if not current_user.hashed_pin or not security.verify_password(sale.pin, current_user.hashed_pin):
         raise HTTPException(status_code=403, detail="PIN incorrecto o no establecido")
     active_shift = crud.get_active_shift_for_user(db, user_id=current_user.id)
@@ -2033,6 +2041,58 @@ def upload_company_logo(
 
 
 # ===================================================================
+# --- ENDPOINTS SUPER ADMIN (PANEL DE CONTROL) ---
+# ===================================================================
+
+# Definimos los "formularios" (Schemas) aquí mismo para no tocar schemas.py ahora
+from pydantic import BaseModel
+
+class CompanyStatusUpdate(BaseModel):
+    is_active: bool
+
+class CompanyModulesUpdate(BaseModel):
+    modules: dict # Ej: {"pos": false, "inventory": true}
+
+@app.get("/super-admin/companies")
+def get_all_tenants(
+    db: Session = Depends(get_db),
+    _role: None = Depends(security.require_role(["super_admin"])) # <--- SOLO EL JEFE
+):
+    """Lista todas las empresas registradas."""
+    return crud.saas_get_all_companies(db)
+
+@app.patch("/super-admin/companies/{company_id}/status")
+def toggle_tenant_status(
+    company_id: int,
+    status_data: CompanyStatusUpdate,
+    db: Session = Depends(get_db),
+    _role: None = Depends(security.require_role(["super_admin"]))
+):
+    """Bloquea o desbloquea una empresa por falta de pago."""
+    try:
+        return crud.saas_toggle_company_status(db, company_id, status_data.is_active)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+@app.patch("/super-admin/companies/{company_id}/modules")
+def toggle_tenant_modules(
+    company_id: int,
+    modules_data: CompanyModulesUpdate,
+    db: Session = Depends(get_db),
+    _role: None = Depends(security.require_role(["super_admin"]))
+):
+    """Activa o desactiva módulos específicos."""
+    try:
+        return crud.saas_update_company_modules(db, company_id, modules_data.modules)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        # Si falla (ej. columna modules no existe), avisamos
+        print(f"Error actualizando módulos: {e}")
+        raise HTTPException(status_code=500, detail="Error interno. Verifique si la base de datos soporta módulos.")
+
+
+# ===================================================================
 # --- ENDPOINTS PARA NOTAS DE CRÉDITO (IMPRESIÓN Y VERIFICACIÓN) ---
 # ===================================================================
 
@@ -2162,7 +2222,9 @@ def delete_expense_category_endpoint(
 def create_expense_endpoint(
     expense: schemas.ExpenseCreate, 
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(security.get_current_user)
+    current_user: models.User = Depends(security.get_current_user),
+    # --- GUARDIA SaaS: Requiere módulo FINANZAS ---
+    _saas: None = Depends(security.require_module("expenses"))
 ):
     """
     Registra un nuevo gasto. Requiere PIN.
@@ -2217,7 +2279,9 @@ def get_financial_report_endpoint(
     location_id: int | None = None,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(security.get_current_user), # <---
-    _role: None = Depends(security.require_role(["admin", "inventory_manager"]))
+    _role: None = Depends(security.require_role(["admin", "inventory_manager"])),
+    # --- GUARDIA SaaS: Requiere módulo FINANZAS ---
+    _saas: None = Depends(security.require_module("expenses"))
 ):
     if not current_user.company_id: raise HTTPException(status_code=400, detail="Usuario sin empresa.")
     return crud.generate_financial_report(

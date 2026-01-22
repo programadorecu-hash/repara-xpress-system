@@ -2,7 +2,16 @@
 import React, { useState, useEffect } from 'react';
 import api from '../services/api';
 import { toast } from 'react-toastify';
-import { HiOutlineOfficeBuilding, HiOutlineShieldCheck, HiOutlineBan, HiOutlineCube, HiOutlineCurrencyDollar, HiOutlineCog } from 'react-icons/hi';
+import { 
+  HiOutlineOfficeBuilding, 
+  HiOutlineShieldCheck, 
+  HiOutlineBan, 
+  HiOutlineCube, 
+  HiOutlineCurrencyDollar, 
+  HiOutlineCog,
+  HiOutlineUsers,
+  HiOutlineCheckCircle
+} from 'react-icons/hi';
 
 function SuperAdminPage() {
   const [companies, setCompanies] = useState([]);
@@ -15,160 +24,220 @@ function SuperAdminPage() {
   const fetchCompanies = async () => {
     try {
       const res = await api.get('/super-admin/companies');
-      setCompanies(res.data);
+      // Ordenamos: Inactivas primero para ver quién debe dinero
+      const sorted = res.data.sort((a, b) => a.is_active === b.is_active ? 0 : a.is_active ? 1 : -1);
+      setCompanies(sorted);
     } catch (err) {
-      toast.error('Error cargando empresas. ¿Eres Super Admin?');
+      console.error(err);
+      toast.error('Error cargando datos. Verifica tu rol de Super Admin.');
     } finally {
       setLoading(false);
     }
   };
 
   const toggleModule = async (companyId, moduleKey, currentValue) => {
-    try {
-      // Optimistic update (actualizar visualmente antes)
-      const newCompanies = companies.map(c => {
-        if (c.id === companyId) {
-          return { ...c, modules: { ...c.modules, [moduleKey]: !currentValue } };
-        }
-        return c;
-      });
-      setCompanies(newCompanies);
+    // Definimos el nuevo valor (lo contrario al actual)
+    const newValue = !currentValue;
+    
+    // 1. Actualización Optimista (Visual inmediata)
+    const originalCompanies = [...companies];
+    setCompanies(prev => prev.map(c => {
+      if (c.id === companyId) {
+        // Aseguramos que modules exista
+        const currentModules = c.modules || {};
+        return { ...c, modules: { ...currentModules, [moduleKey]: newValue } };
+      }
+      return c;
+    }));
 
+    // 2. Llamada al Backend
+    try {
       await api.patch(`/super-admin/companies/${companyId}/modules`, {
-        modules: { [moduleKey]: !currentValue }
+        modules: { [moduleKey]: newValue }
       });
-      toast.success(`Módulo ${moduleKey} actualizado.`);
+      toast.success(`Módulo actualizado correctamente.`);
     } catch (error) {
-      toast.error('Error al actualizar módulo.');
-      fetchCompanies(); // Revertir en caso de error
+      // 3. Si falla, revertimos
+      setCompanies(originalCompanies);
+      toast.error('Error al actualizar módulo. ¿Base de datos actualizada?');
     }
   };
 
-  const toggleStatus = async (companyId, currentStatus) => {
-    if (!window.confirm(`¿Seguro que quieres ${currentStatus ? 'BLOQUEAR' : 'ACTIVAR'} esta empresa?`)) return;
+  const toggleStatus = async (companyId, currentStatus, companyName) => {
+    const action = currentStatus ? 'BLOQUEAR' : 'ACTIVAR';
+    if (!window.confirm(`⚠️ ¿Estás seguro de ${action} el acceso a "${companyName}"?\n\nSi bloqueas, nadie de esa empresa podrá entrar.`)) return;
+    
     try {
       await api.patch(`/super-admin/companies/${companyId}/status`, { is_active: !currentStatus });
-      fetchCompanies();
-      toast.success(`Empresa ${!currentStatus ? 'activada' : 'bloqueada'}.`);
+      fetchCompanies(); // Recargamos para estar seguros
+      toast.success(`Empresa ${!currentStatus ? 'ACTIVADA' : 'BLOQUEADA'} exitosamente.`);
     } catch (error) {
       toast.error('Error al cambiar estado.');
     }
   };
 
-  if (loading) return <div className="p-10 text-center">Cargando Torre de Control...</div>;
+  if (loading) return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="text-center">
+        <HiOutlineShieldCheck className="text-6xl text-indigo-300 mx-auto animate-pulse"/>
+        <p className="mt-4 text-gray-500 font-medium">Validando credenciales de Nivel 5...</p>
+      </div>
+    </div>
+  );
 
   return (
-    <div className="p-6 bg-gray-50 min-h-screen">
-      <div className="mb-8">
-        <h1 className="text-3xl font-extrabold text-gray-800 flex items-center gap-3">
-          <HiOutlineShieldCheck className="text-indigo-600" />
-          Torre de Control (Super Admin)
-        </h1>
-        <p className="text-gray-500">Administra tus inquilinos y sus suscripciones.</p>
+    <div className="p-6 bg-slate-50 min-h-screen pb-20">
+      {/* Encabezado */}
+      <div className="mb-8 bg-indigo-700 text-white p-8 rounded-2xl shadow-lg relative overflow-hidden">
+        <div className="relative z-10">
+          <h1 className="text-3xl font-extrabold flex items-center gap-3">
+            <HiOutlineShieldCheck className="text-yellow-400 text-4xl" />
+            CONSOLA SUPER ADMIN
+          </h1>
+          <p className="text-indigo-100 mt-2 text-lg">
+            Control de Inquilinos y Suscripciones SaaS.
+          </p>
+          <div className="mt-6 flex gap-4">
+            <div className="bg-white/10 px-4 py-2 rounded-lg backdrop-blur-sm">
+              <span className="block text-2xl font-bold">{companies.length}</span>
+              <span className="text-xs opacity-75">Empresas Totales</span>
+            </div>
+            <div className="bg-green-500/20 px-4 py-2 rounded-lg backdrop-blur-sm">
+              <span className="block text-2xl font-bold">{companies.filter(c => c.is_active).length}</span>
+              <span className="text-xs opacity-75">Activas (Pagando)</span>
+            </div>
+            <div className="bg-red-500/20 px-4 py-2 rounded-lg backdrop-blur-sm">
+              <span className="block text-2xl font-bold">{companies.filter(c => !c.is_active).length}</span>
+              <span className="text-xs opacity-75">Bloqueadas</span>
+            </div>
+          </div>
+        </div>
+        {/* Decoración de fondo */}
+        <HiOutlineShieldCheck className="absolute -bottom-10 -right-10 text-9xl text-white/10 rotate-12"/>
       </div>
 
+      {/* Lista de Empresas */}
       <div className="grid grid-cols-1 gap-6">
         {companies.map((company) => (
-          <div key={company.id} className={`bg-white rounded-xl shadow-sm border-l-4 p-6 transition-all ${company.is_active ? 'border-green-500' : 'border-red-500 opacity-75'}`}>
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
-              <div>
-                <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
-                  <HiOutlineOfficeBuilding className="text-gray-400"/> {company.name}
-                </h2>
-                <p className="text-sm text-gray-400 font-mono mt-1">ID: {company.id} | Registrado: {new Date(company.created_at).toLocaleDateString()}</p>
-              </div>
+          <div key={company.id} className={`bg-white rounded-xl shadow-sm border-l-8 transition-all hover:shadow-md ${company.is_active ? 'border-green-500' : 'border-red-500'}`}>
+            <div className="p-6">
               
-              <div className="flex items-center gap-3 mt-4 md:mt-0">
-                <span className={`px-3 py-1 rounded-full text-xs font-bold ${company.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                  {company.is_active ? 'ACTIVA' : 'BLOQUEADA'}
-                </span>
+              {/* Cabecera de la Tarjeta */}
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 pb-6 border-b border-gray-100">
+                <div className="flex items-center gap-4">
+                  <div className={`h-12 w-12 rounded-full flex items-center justify-center text-xl font-bold ${company.is_active ? 'bg-indigo-50 text-indigo-600' : 'bg-red-50 text-red-600'}`}>
+                    {company.name.charAt(0)}
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+                      {company.name}
+                      {!company.is_active && <span className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded uppercase">Suspendida</span>}
+                    </h2>
+                    <div className="flex items-center gap-4 text-sm text-gray-400 mt-1">
+                      <span className="font-mono">ID: {company.id}</span>
+                      <span className="flex items-center gap-1"><HiOutlineUsers/> {company.user_count || 0} Usuarios</span>
+                      <span>Plan: {company.plan_type}</span>
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Botón Maestro de Activación */}
                 <button 
-                  onClick={() => toggleStatus(company.id, company.is_active)}
-                  className={`px-4 py-2 rounded-lg text-xs font-bold text-white transition-colors ${company.is_active ? 'bg-red-500 hover:bg-red-600' : 'bg-green-500 hover:bg-green-600'}`}
+                  onClick={() => toggleStatus(company.id, company.is_active, company.name)}
+                  className={`mt-4 md:mt-0 px-6 py-2 rounded-lg text-sm font-bold text-white shadow-sm transition-transform active:scale-95 flex items-center gap-2 ${company.is_active ? 'bg-red-500 hover:bg-red-600' : 'bg-green-600 hover:bg-green-700'}`}
                 >
-                  {company.is_active ? <span className="flex items-center gap-1"><HiOutlineBan/> BLOQUEAR ACCESO</span> : 'RESTAURAR ACCESO'}
+                  {company.is_active ? (
+                    <><HiOutlineBan className="text-lg"/> BLOQUEAR EMPRESA</>
+                  ) : (
+                    <><HiOutlineCheckCircle className="text-lg"/> ACTIVAR SERVICIO</>
+                  )}
                 </button>
               </div>
-            </div>
 
-            {/* PANEL DE MÓDULOS */}
-            <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
-              <p className="text-xs font-bold text-gray-400 uppercase mb-3 tracking-wider">Módulos Contratados</p>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {/* Panel de Control de Módulos */}
+              <div className="bg-slate-50 rounded-xl p-5">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
+                    <HiOutlineCube/> Configuración de Módulos
+                  </h3>
+                  <span className="text-[10px] text-slate-400 bg-slate-200 px-2 py-1 rounded">
+                    Clic para activar/desactivar
+                  </span>
+                </div>
                 
-                {/* Inventario (Gancho) */}
-                <ModuleSwitch 
-                  label="Inventario" 
-                  icon={<HiOutlineCube/>} 
-                  // Usamos "|| false" para que no falle si es undefined
-                  active={company.modules?.inventory || false} 
-                  color="blue"
-                  onClick={() => toggleModule(company.id, 'inventory', company.modules?.inventory)}
-                />
-
-                {/* POS (Ventas) */}
-                <ModuleSwitch 
-                  label="Punto de Venta" 
-                  icon={<HiOutlineCurrencyDollar/>} 
-                  active={company.modules?.pos} 
-                  color="green"
-                  onClick={() => toggleModule(company.id, 'pos', company.modules?.pos)}
-                />
-
-                {/* Órdenes (Taller) */}
-                <ModuleSwitch 
-                  label="Taller / Órdenes" 
-                  icon={<HiOutlineCog/>} 
-                  active={company.modules?.work_orders} 
-                  color="orange"
-                  onClick={() => toggleModule(company.id, 'work_orders', company.modules?.work_orders)}
-                />
-
-                 {/* Gastos */}
-                 <ModuleSwitch 
-                  label="Finanzas / Gastos" 
-                  icon={<HiOutlineCurrencyDollar/>} 
-                  active={company.modules?.expenses} 
-                  color="purple"
-                  onClick={() => toggleModule(company.id, 'expenses', company.modules?.expenses)}
-                />
-
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <ModuleSwitch 
+                    label="Inventario" 
+                    icon={<HiOutlineCube/>} 
+                    active={company.modules?.inventory} 
+                    color="blue"
+                    onClick={() => toggleModule(company.id, 'inventory', company.modules?.inventory)}
+                  />
+                  <ModuleSwitch 
+                    label="Punto de Venta" 
+                    icon={<HiOutlineCurrencyDollar/>} 
+                    active={company.modules?.pos} 
+                    color="green"
+                    onClick={() => toggleModule(company.id, 'pos', company.modules?.pos)}
+                  />
+                  <ModuleSwitch 
+                    label="Taller / Órdenes" 
+                    icon={<HiOutlineCog/>} 
+                    active={company.modules?.work_orders} 
+                    color="orange"
+                    onClick={() => toggleModule(company.id, 'work_orders', company.modules?.work_orders)}
+                  />
+                  <ModuleSwitch 
+                    label="Finanzas" 
+                    icon={<HiOutlineCurrencyDollar/>} 
+                    active={company.modules?.expenses} 
+                    color="purple"
+                    onClick={() => toggleModule(company.id, 'expenses', company.modules?.expenses)}
+                  />
+                </div>
               </div>
+
             </div>
           </div>
         ))}
+
+        {companies.length === 0 && (
+          <div className="text-center p-10 bg-white rounded-xl shadow border border-gray-100">
+            <p className="text-gray-400">No hay empresas registradas aún.</p>
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-// Componente pequeño para los interruptores
+// Componente visual del Switch
 function ModuleSwitch({ label, icon, active, color, onClick }) {
+  // Manejo defensivo por si active es undefined
+  const isActive = !!active;
+
   const colors = {
-    blue:   active ? 'bg-blue-500 border-blue-500' : 'bg-gray-200 border-gray-200',
-    green:  active ? 'bg-green-500 border-green-500' : 'bg-gray-200 border-gray-200',
-    orange: active ? 'bg-orange-500 border-orange-500' : 'bg-gray-200 border-gray-200',
-    purple: active ? 'bg-purple-500 border-purple-500' : 'bg-gray-200 border-gray-200',
+    blue:   isActive ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-gray-200 text-gray-400 hover:border-blue-300',
+    green:  isActive ? 'bg-green-600 border-green-600 text-white' : 'bg-white border-gray-200 text-gray-400 hover:border-green-300',
+    orange: isActive ? 'bg-orange-500 border-orange-500 text-white' : 'bg-white border-gray-200 text-gray-400 hover:border-orange-300',
+    purple: isActive ? 'bg-purple-600 border-purple-600 text-white' : 'bg-white border-gray-200 text-gray-400 hover:border-purple-300',
   };
 
   return (
-    <div 
+    <button 
       onClick={onClick}
-      className={`flex items-center justify-between p-3 rounded-lg border-2 cursor-pointer transition-all select-none hover:shadow-sm
-        ${active ? 'bg-white border-opacity-100' : 'bg-gray-100 border-transparent opacity-60 hover:opacity-100'}
-        ${active ? `border-${color}-200` : ''}
-      `}
+      className={`group flex flex-col items-center justify-center p-4 rounded-xl border-2 transition-all duration-200 ${colors[color]}`}
     >
-      <div className="flex items-center gap-2">
-        <div className={`text-lg ${active ? `text-${color}-600` : 'text-gray-400'}`}>{icon}</div>
-        <span className={`text-xs font-bold ${active ? 'text-gray-800' : 'text-gray-500'}`}>{label}</span>
+      <div className={`text-2xl mb-2 transition-transform group-hover:scale-110 ${isActive ? 'text-white' : ''}`}>
+        {icon}
       </div>
-      
-      {/* Toggle visual */}
-      <div className={`w-8 h-4 rounded-full relative transition-colors ${colors[color]}`}>
-        <div className={`absolute top-0.5 w-3 h-3 bg-white rounded-full shadow-sm transition-transform ${active ? 'left-4.5' : 'left-0.5'}`} style={{left: active ? '18px' : '2px'}}></div>
+      <span className="text-xs font-bold uppercase tracking-wide">
+        {label}
+      </span>
+      <div className={`mt-2 text-[10px] px-2 py-0.5 rounded-full ${isActive ? 'bg-white/20' : 'bg-gray-100 text-gray-500'}`}>
+        {isActive ? 'ACTIVADO' : 'INACTIVO'}
       </div>
-    </div>
+    </button>
   );
 }
 

@@ -3053,3 +3053,81 @@ def repair_location_hierarchy(db: Session, company_id: int):
         print("👌 La jerarquía de ubicaciones parece correcta.")
         
     return updates_count
+
+# ===================================================================
+# --- SUPER ADMIN (GESTIÓN DE TALLERES Y SAAS) ---
+# ===================================================================
+
+def saas_get_all_companies(db: Session):
+    """
+    Super Admin: Obtiene todas las empresas registradas y cuenta sus empleados.
+    """
+    # Hacemos una consulta "agrupada" para contar usuarios por empresa
+    # Esto equivale a una tabla dinámica en Excel
+    results = db.query(
+        models.Company,
+        func.count(models.User.id).label("user_count")
+    ).outerjoin(models.User, models.User.company_id == models.Company.id)\
+     .group_by(models.Company.id)\
+     .order_by(models.Company.id.desc()).all()
+    
+    # Formateamos la salida para que sea fácil de leer
+    companies_list = []
+    for company, user_count in results:
+        # Truco: Convertimos el objeto SQLAlchemy a diccionario
+        comp_dict = company.__dict__.copy()
+        comp_dict["user_count"] = user_count
+        
+        # Aseguramos que 'modules' exista (si la columna es nueva o nula)
+        # Si la base de datos no tiene la columna 'modules', usamos un default.
+        if not hasattr(company, "modules") or company.modules is None:
+             comp_dict["modules"] = {
+                 "inventory": True, 
+                 "pos": True, 
+                 "work_orders": True, 
+                 "expenses": True
+             }
+        
+        companies_list.append(comp_dict)
+        
+    return companies_list
+
+def saas_toggle_company_status(db: Session, company_id: int, is_active: bool):
+    """
+    Activa o Bloquea una empresa entera (El botón de 'PAGAME').
+    """
+    company = db.query(models.Company).filter(models.Company.id == company_id).first()
+    if not company:
+        raise ValueError("Empresa no encontrada")
+    
+    company.is_active = is_active
+    db.commit()
+    db.refresh(company)
+    return company
+
+def saas_update_company_modules(db: Session, company_id: int, modules_config: dict):
+    """
+    Activa o desactiva módulos específicos (POS, Taller, etc.).
+    """
+    company = db.query(models.Company).filter(models.Company.id == company_id).first()
+    if not company:
+        raise ValueError("Empresa no encontrada")
+    
+    # IMPORTANTE: Asumimos que el modelo Company tiene una columna 'modules' (JSON).
+    # Si no la tiene, esto dará error hasta que actualicemos models.py, 
+    # pero preparamos el terreno.
+    
+    # Actualizamos el JSON
+    # Si ya tenía configuración, la mezclamos con la nueva.
+    current_modules = dict(company.modules) if (hasattr(company, "modules") and company.modules) else {}
+    current_modules.update(modules_config)
+    
+    company.modules = current_modules
+    
+    # Forzamos a SQLAlchemy a detectar el cambio en el JSON
+    from sqlalchemy.orm.attributes import flag_modified
+    flag_modified(company, "modules")
+    
+    db.commit()
+    db.refresh(company)
+    return company

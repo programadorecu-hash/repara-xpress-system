@@ -19,6 +19,11 @@ class Company(CompanyBase):
     is_active: bool
     is_distributor: bool # <--- Agregamos esto para lectura interna
     created_at: datetime
+    
+    # --- NUEVO: Módulos contratados ---
+    modules: dict | None = None
+    # ----------------------------------
+
     class Config:
         from_attributes = True
 

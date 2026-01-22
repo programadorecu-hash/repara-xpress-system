@@ -19,6 +19,12 @@ class Company(Base):
     is_distributor = Column(Boolean, default=False) 
     # --------------------------------------------------------------------------
 
+    # --- NUEVO: Configuración de Módulos (JSON) ---
+    # Almacena qué partes del sistema puede usar la empresa.
+    # Ej: {"pos": true, "inventory": true, "work_orders": false}
+    modules = Column(JSON, nullable=True) 
+    # ----------------------------------------------
+
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     # Relaciones: Una empresa tiene muchos usuarios y configuraciones

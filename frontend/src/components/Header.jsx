@@ -29,6 +29,7 @@ import {
   HiOutlineCurrencyDollar,
   HiOutlineChartPie,
   HiOutlineSwitchHorizontal, // <--- ÍCONO PARA TRANSFERENCIAS
+  HiOutlineShieldCheck, // <--- ÍCONO SUPER ADMIN
 } from "react-icons/hi";
 
 // Componente de Enlace con Ícono
@@ -168,6 +169,17 @@ function Header({ isMenuOpen, onToggle, companyInfo, apiUrl }) {
         <nav className="flex flex-col space-y-1 mt-8 flex-1 overflow-y-auto min-h-0">
           
           {/* --- GRUPO: OPERATIVO --- */}
+          
+          {/* BOTÓN SUPER ADMIN (Solo visible para el Jefe) */}
+          {user?.role === "super_admin" && (
+            <NavItem 
+              to="/super-admin" 
+              label="Super Admin Console" 
+              icon={<HiOutlineShieldCheck className="text-yellow-400" />} // Icono dorado
+              isExpanded={isMenuOpen} 
+            />
+          )}
+
           {/* Siempre visible porque es lo más usado */}
           <NavItem to="/" label="Inicio" icon={<HiOutlineHome />} isExpanded={isMenuOpen} />
           <NavItem to="/pos" label="Vender" icon={<HiOutlineShoppingCart />} isExpanded={isMenuOpen} />

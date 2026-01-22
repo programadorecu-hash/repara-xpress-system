@@ -9,8 +9,31 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [activeShift, setActiveShift] = useState(null);
 
+  // --- ESTADO DEL MURO DE PAGO ---
+  const [showPaywall, setShowPaywall] = useState(false);
+  const [paywallMessage, setPaywallMessage] = useState("");
+  // -------------------------------
+
    // --- INICIO DE NUESTRO CÓDIGO (Guardia de PIN) ---
   const navigate = useNavigate(); // Para poder redirigir
+
+  // --- NUEVO: EFECTO PARA ESCUCHAR LA ALARMA DE PAGO ---
+  useEffect(() => {
+    const handlePaywallSignal = (event) => {
+      // Cuando suena la alarma (viene del api.js), levantamos el muro
+      setPaywallMessage(event.detail || "Función reservada para usuarios PRO.");
+      setShowPaywall(true);
+    };
+
+    // Conectamos la oreja a la ventana
+    window.addEventListener('payment-required', handlePaywallSignal);
+
+    // Limpieza al desmontar
+    return () => {
+      window.removeEventListener('payment-required', handlePaywallSignal);
+    };
+  }, []);
+  // -----------------------------------------------------
 
   useEffect(() => {
     if (token) {
@@ -21,8 +44,8 @@ export function AuthProvider({ children }) {
           setActiveShift(userProfile.active_shift);
 
           // --- GUARDIA DE PIN REFORZADO (Patrulla Constante) ---
-          // Si el usuario ya cargó, NO tiene PIN y NO es admin...
-          if (userProfile && !userProfile.hashed_pin) {
+          // Si el usuario ya cargó, NO tiene PIN, NO es admin y NO es super_admin...
+          if (userProfile && !userProfile.hashed_pin && userProfile.role !== 'super_admin') {
             // ...¡Lo mandamos a crear su PIN inmediatamente!
             navigate('/crear-pin');
           }
@@ -51,8 +74,8 @@ export function AuthProvider({ children }) {
     // --- ¡AQUÍ ESTÁ LA LÓGICA DEL GUARDIA! ---
     // 1. Revisamos el "gafete" (perfil) del usuario
     // 2. Si el usuario NO tiene un PIN configurado (hashed_pin es null o vacío)
-    // 3. Y NO es el admin (el admin puede que no necesite PIN para todo)
-    if (!userProfile.hashed_pin && userProfile.role !== 'admin') {
+    // 3. Y NO es el admin NI el super_admin...
+    if (!userProfile.hashed_pin && userProfile.role !== 'admin' && userProfile.role !== 'super_admin') {
       // 4. Lo forzamos a ir al "escritorio de crear PIN"
       navigate('/crear-pin');
     }
@@ -86,7 +109,19 @@ export function AuthProvider({ children }) {
     setActiveShift(shift);
   };
 
-  const authValue = { token, user, activeShift, login, logout, startShift, setUser };
+  // Agregamos el control del Paywall a la caja de herramientas
+  const authValue = { 
+    token, 
+    user, 
+    activeShift, 
+    login, 
+    logout, 
+    startShift, 
+    setUser,
+    showPaywall,      // ¿Está abierto el muro?
+    setShowPaywall,   // Función para abrir/cerrar
+    paywallMessage    // Mensaje de error
+  };
 
   return (
     <AuthContext.Provider value={authValue}>

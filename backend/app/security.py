@@ -115,10 +115,44 @@ def require_role(required_roles: List[str]):
 
 def require_internal_roles():
     """
-    Acceso a usuarios internos del negocio (roles actuales):
-    - admin
-    - inventory_manager
-    - warehouse_operator
-    Nota: cuando agregues un rol nuevo (ej. technician), añádelo a esta lista.
+    Acceso a usuarios internos del negocio (roles actuales).
+    Agregamos 'super_admin' para que el Jefe pueda usar cualquier función del sistema si lo desea.
     """
-    return require_role(required_roles=["admin", "inventory_manager", "warehouse_operator"])
+    return require_role(required_roles=["super_admin", "admin", "inventory_manager", "warehouse_operator"])
+
+# --- NUEVO: REGLA DE ACCESO POR MÓDULOS (EL PORTERO SaaS) ---
+def require_module(module_name: str):
+    """
+    Verifica si la empresa del usuario tiene contratado/activado un módulo específico.
+    Si el módulo está apagado (False), prohíbe el paso.
+    """
+    async def module_checker(current_user: schemas.User = Depends(get_current_user)):
+        # 1. El Super Admin siempre pasa (es el dueño del edificio)
+        if current_user.role == 'super_admin':
+            return
+
+        # 2. Si el usuario no tiene empresa (raro), no pasa
+        if not current_user.company:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Usuario no asociado a ninguna empresa."
+            )
+
+        # 3. Revisamos los permisos en el cajón 'modules'
+        # modules es un Diccionario (JSON). Ej: {"pos": False, "inventory": True}
+        modules_config = current_user.company.modules
+
+        # Si la configuración existe y el módulo específico está explícitamente en FALSE...
+        if modules_config and isinstance(modules_config, dict):
+            if modules_config.get(module_name) is False:
+                # ...¡ALTO AHÍ! Mostramos el mensaje de venta.
+                raise HTTPException(
+                    status_code=status.HTTP_402_PAYMENT_REQUIRED, # Error 402 = Pago Requerido
+                    detail=f"ACCESO DENEGADO: El módulo '{module_name}' no está activo en su plan. Contacte a soporte."
+                )
+        
+        # Si no hay configuración o el módulo es True (o no existe la llave), dejamos pasar.
+        # Esto asegura que las empresas antiguas sigan funcionando hasta que las configures.
+        return True
+
+    return module_checker

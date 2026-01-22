@@ -34,6 +34,22 @@ apiClient.interceptors.request.use(
   }
 );
 
+// --- NUEVO: INTERCEPTOR PARA EL MURO DE PAGO (DETECTIVE DE ERRORES) ---
+apiClient.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    // Si el servidor responde con error 402 (Pago Requerido)
+    if (error.response && error.response.status === 402) {
+      // Disparamos un evento global (una bengala) que la App escuchará
+      const event = new CustomEvent('payment-required', {
+        detail: error.response.data.detail // El mensaje del backend
+      });
+      window.dispatchEvent(event);
+    }
+    return Promise.reject(error);
+  }
+);
+
 export default apiClient;
 
 
