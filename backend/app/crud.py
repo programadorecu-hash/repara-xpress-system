@@ -2097,16 +2097,21 @@ def get_personnel_report(db: Session, start_date: date, end_date: date, user_id:
 
 
 # --- INICIO DE NUESTRO CÓDIGO (Lógica de Notificaciones ACTUALIZADA) ---
-def create_notification_rule(db: Session, rule: schemas.NotificationRuleCreate):
-    db_rule = models.NotificationRule(**rule.model_dump())
+def create_notification_rule(db: Session, rule: schemas.NotificationRuleCreate, company_id: int):
+    # Asignamos la regla a la empresa específica
+    db_rule = models.NotificationRule(**rule.model_dump(), company_id=company_id)
     db.add(db_rule)
     db.commit()
     db.refresh(db_rule)
     return db_rule
 
-def update_notification_rule(db: Session, rule_id: int, rule_update: schemas.NotificationRuleCreate):
-    """Permite editar una regla existente."""
-    db_rule = db.query(models.NotificationRule).filter(models.NotificationRule.id == rule_id).first()
+def update_notification_rule(db: Session, rule_id: int, rule_update: schemas.NotificationRuleCreate, company_id: int):
+    """Permite editar una regla existente (SOLO SI ES DE MI EMPRESA)."""
+    db_rule = db.query(models.NotificationRule).filter(
+        models.NotificationRule.id == rule_id,
+        models.NotificationRule.company_id == company_id
+    ).first()
+    
     if db_rule:
         # Actualizamos solo los campos enviados
         update_data = rule_update.model_dump(exclude_unset=True)
@@ -2116,22 +2121,29 @@ def update_notification_rule(db: Session, rule_id: int, rule_update: schemas.Not
         db.refresh(db_rule)
     return db_rule
 
-def get_notification_rules(db: Session):
-    return db.query(models.NotificationRule).all()
+def get_notification_rules(db: Session, company_id: int):
+    # Filtramos para ver solo las reglas de MI empresa
+    return db.query(models.NotificationRule).filter(models.NotificationRule.company_id == company_id).all()
 
-def delete_notification_rule(db: Session, rule_id: int):
-    db_rule = db.query(models.NotificationRule).filter(models.NotificationRule.id == rule_id).first()
+def delete_notification_rule(db: Session, rule_id: int, company_id: int):
+    # Solo borramos si la regla pertenece a mi empresa
+    db_rule = db.query(models.NotificationRule).filter(
+        models.NotificationRule.id == rule_id,
+        models.NotificationRule.company_id == company_id
+    ).first()
+    
     if db_rule:
         db.delete(db_rule)
         db.commit()
     return db_rule
 
-def check_active_notifications(db: Session, user_id: int, event_type: str):
+def check_active_notifications(db: Session, user_id: int, event_type: str, company_id: int):
     """
-    Revisa reglas para el evento dado (CLOCK_IN o SCHEDULED).
+    Revisa reglas para el evento dado DE MI EMPRESA.
     """
-    # 1. Filtro básico por tipo y activo
+    # 1. Filtro por EMPRESA, tipo y activo
     rules = db.query(models.NotificationRule).filter(
+        models.NotificationRule.company_id == company_id,
         models.NotificationRule.event_type == event_type,
         models.NotificationRule.active == True
     ).all()

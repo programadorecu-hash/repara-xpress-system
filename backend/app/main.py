@@ -1812,16 +1812,36 @@ def get_low_stock_report(
 
 # 1. Para que el Admin cree reglas
 @app.post("/notifications/rules", response_model=schemas.NotificationRule)
-def create_rule(rule: schemas.NotificationRuleCreate, db: Session = Depends(get_db), _role: None = Depends(security.require_role(["super_admin", "admin", "inventory_manager"]))):
-    return crud.create_notification_rule(db, rule)
+def create_rule(
+    rule: schemas.NotificationRuleCreate, 
+    db: Session = Depends(get_db), 
+    current_user: models.User = Depends(security.get_current_user), # <--- Inyectamos usuario
+    _role: None = Depends(security.require_role(["super_admin", "admin", "inventory_manager"]))
+):
+    if not current_user.company_id: raise HTTPException(status_code=400, detail="Usuario sin empresa.")
+    return crud.create_notification_rule(db, rule, company_id=current_user.company_id)
 
 @app.get("/notifications/rules", response_model=List[schemas.NotificationRule])
-def list_rules(db: Session = Depends(get_db), _role: None = Depends(security.require_role(["super_admin", "admin", "inventory_manager"]))):
-    return crud.get_notification_rules(db)
+def list_rules(
+    db: Session = Depends(get_db), 
+    current_user: models.User = Depends(security.get_current_user), # <--- Inyectamos usuario
+    _role: None = Depends(security.require_role(["super_admin", "admin", "inventory_manager"]))
+):
+    if not current_user.company_id: return []
+    return crud.get_notification_rules(db, company_id=current_user.company_id)
 
 @app.delete("/notifications/rules/{rule_id}")
-def delete_rule(rule_id: int, db: Session = Depends(get_db), _role: None = Depends(security.require_role(["super_admin", "admin", "inventory_manager"]))):
-    return crud.delete_notification_rule(db, rule_id)
+def delete_rule(
+    rule_id: int, 
+    db: Session = Depends(get_db), 
+    current_user: models.User = Depends(security.get_current_user), # <--- Inyectamos usuario
+    _role: None = Depends(security.require_role(["super_admin", "admin", "inventory_manager"]))
+):
+    if not current_user.company_id: raise HTTPException(status_code=400, detail="Usuario sin empresa.")
+    result = crud.delete_notification_rule(db, rule_id, company_id=current_user.company_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="Regla no encontrada (o no tienes permiso).")
+    return result
 
 # 2. Para que el sistema (Frontend) pregunte si debe mostrar alerta
 @app.get("/notifications/check", response_model=List[schemas.NotificationRule])
@@ -1829,22 +1849,31 @@ def check_notifications(
     event_type: str,
     db: Session = Depends(get_db),
     current_user: schemas.User = Depends(security.get_current_user)
-    
 ):
+    if not current_user.company_id: return []
     
     # El frontend llama esto: /notifications/check?event_type=CLOCK_IN
-    return crud.check_active_notifications(db, user_id=current_user.id, event_type=event_type)
+    # Pasamos el company_id para que solo busque alarmas de ESTA empresa
+    return crud.check_active_notifications(
+        db, 
+        user_id=current_user.id, 
+        event_type=event_type, 
+        company_id=current_user.company_id
+    )
 
 @app.put("/notifications/rules/{rule_id}", response_model=schemas.NotificationRule)
 def update_rule(
     rule_id: int, 
     rule: schemas.NotificationRuleCreate, 
     db: Session = Depends(get_db), 
+    current_user: models.User = Depends(security.get_current_user), # <--- Inyectamos usuario
     _role: None = Depends(security.require_role(["super_admin", "admin", "inventory_manager"]))
 ):
-    updated_rule = crud.update_notification_rule(db, rule_id, rule)
+    if not current_user.company_id: raise HTTPException(status_code=400, detail="Usuario sin empresa.")
+    
+    updated_rule = crud.update_notification_rule(db, rule_id, rule, company_id=current_user.company_id)
     if not updated_rule:
-        raise HTTPException(status_code=404, detail="Regla no encontrada")
+        raise HTTPException(status_code=404, detail="Regla no encontrada (o no tienes permiso).")
     return updated_rule
 
 
