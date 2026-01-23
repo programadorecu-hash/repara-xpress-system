@@ -379,6 +379,7 @@ class WorkOrderCreate(WorkOrderBase):
     pin: str
     # --- NUEVO: Método de pago del adelanto (si hay adelanto) ---
     deposit_payment_method: str = "EFECTIVO" # Por defecto efectivo
+    deposit_bank_account_id: int | None = None # <--- ID de la cuenta destino (si es transferencia)
 class WorkOrderUpdate(BaseModel):
     status: str | None = None
     final_cost: float | None = None

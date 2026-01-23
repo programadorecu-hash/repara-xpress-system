@@ -1567,6 +1567,21 @@ def create_new_cash_account(
     if not current_user.company_id: raise HTTPException(status_code=400, detail="Admin sin empresa.")
     return crud.create_cash_account(db=db, account=account, company_id=current_user.company_id)
 
+# --- NUEVO: Endpoint para listar TODAS las cuentas (Bancos y Cajas) ---
+@app.get("/cash-accounts/", response_model=List[schemas.CashAccount])
+def read_all_cash_accounts(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(security.get_current_user)
+):
+    """
+    Devuelve todas las cuentas activas de la empresa.
+    Vital para el selector de bancos en Órdenes y Ventas.
+    """
+    if not current_user.company_id: return []
+    # Consulta directa simple para obtener todas las cuentas de la empresa
+    return db.query(models.CashAccount).filter(models.CashAccount.company_id == current_user.company_id).all()
+# ----------------------------------------------------------------------
+
 @app.get("/locations/{location_id}/cash-accounts/", response_model=List[schemas.CashAccount])
 def read_cash_accounts_for_location(
     location_id: int, 

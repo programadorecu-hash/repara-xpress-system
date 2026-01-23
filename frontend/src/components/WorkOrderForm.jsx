@@ -376,6 +376,27 @@ function WorkOrderForm({ orderId, onClose, onSave }) {
   const [order, setOrder] = useState(initialState);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  
+  // --- NUEVO: Estado para cargar las cuentas bancarias ---
+  const [bankAccounts, setBankAccounts] = useState([]);
+
+  useEffect(() => {
+    // Cargar cuentas disponibles al abrir el formulario
+    const fetchAccounts = async () => {
+        try {
+            const res = await api.get("/cash-accounts/");
+            // FILTRO ESTRICTO: Mostrar SOLO Cuentas Bancarias.
+            // Excluimos cualquier cuenta cuyo tipo contenga la palabra "CAJA" (ej: CAJA_VENTAS, CAJA_CHICA).
+            // Esto asegura que las transferencias solo vayan a Bancos.
+            const banksOnly = res.data.filter(acc => !acc.account_type.toUpperCase().includes("CAJA"));
+            setBankAccounts(banksOnly);
+        } catch (e) {
+            console.error("Error cargando cuentas", e);
+        }
+    };
+    fetchAccounts();
+  }, []);
+  // -------------------------------------------------------
   // Estado para el visor de fotos (Lightbox)
   const [viewImage, setViewImage] = useState(null);
   // Estados para el Zoom
@@ -725,6 +746,26 @@ function WorkOrderForm({ orderId, onClose, onSave }) {
                      <option value="TRANSFERENCIA">🏦 Transferencia</option>
                      <option value="TARJETA">💳 Tarjeta</option>
                    </select>
+
+                   {/* --- NUEVO: Selector de Banco si es Transferencia --- */}
+                   {order.deposit_payment_method === "TRANSFERENCIA" && (
+                     <div className="mt-2 animate-fade-in">
+                        <label className="block text-xs font-bold text-blue-600 mb-1">Selecciona la Cuenta de Destino:</label>
+                        <select 
+                            name="deposit_bank_account_id" 
+                            value={order.deposit_bank_account_id || ""} 
+                            onChange={handleChange} 
+                            className="w-full p-2 border border-blue-300 rounded bg-blue-50 text-sm"
+                            required
+                        >
+                            <option value="">-- Elige un Banco --</option>
+                            {bankAccounts.map(acc => (
+                                <option key={acc.id} value={acc.id}>{acc.name}</option>
+                            ))}
+                        </select>
+                     </div>
+                   )}
+                   {/* --------------------------------------------------- */}
                 </div>
               )}
             </div>

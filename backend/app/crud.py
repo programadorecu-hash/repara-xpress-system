@@ -1122,7 +1122,8 @@ def create_work_order(db: Session, work_order: schemas.WorkOrderCreate, user_id:
     # --- FIN LÓGICA CLIENTE INTELIGENTE ---
 
     # 1. Crear la Orden de Trabajo básica
-    work_order_data = work_order.model_dump(exclude={"pin", "deposit_payment_method"})
+    # --- CAMBIO: Excluimos también el ID de la cuenta bancaria para que no de error ---
+    work_order_data = work_order.model_dump(exclude={"pin", "deposit_payment_method", "deposit_bank_account_id"})
     # Asignamos la company_id también a la Orden
     db_work_order = models.WorkOrder(**work_order_data, user_id=user_id, location_id=location_id, company_id=company_id)
     db.add(db_work_order)
@@ -1143,7 +1144,8 @@ def create_work_order(db: Session, work_order: schemas.WorkOrderCreate, user_id:
         payment_detail = schemas.PaymentDetail(
             method=work_order.deposit_payment_method,
             amount=work_order.deposit_amount,
-            reference="Adelanto Automático"
+            reference="Adelanto Automático",
+            bank_account_id=work_order.deposit_bank_account_id # <--- PASAMOS LA CUENTA AL PAGO
         )
 
         # Creamos la estructura de venta
