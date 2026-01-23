@@ -271,6 +271,11 @@ class WorkOrder(Base):
     
     # 3. Checkbox para indicar si el cliente no esperó la revisión.
     customer_declined_check = Column(Boolean, default=False, nullable=False)
+
+    # --- NUEVO: Firma Digital del Cliente ---
+    # Guardaremos la URL o path de la imagen de la firma
+    customer_signature = Column(String, nullable=True) 
+    # ----------------------------------------
     
     # Relaciones (se añade la relación con las imágenes)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)

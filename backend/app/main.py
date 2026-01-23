@@ -1212,6 +1212,53 @@ def upload_work_order_image(
     return db_work_order
     # --- FIN LÓGICA DE CARPETA/NOMBRE POR ORDEN ---
 
+
+# --- NUEVO: ENDPOINT PARA SUBIR FIRMA DIGITAL ---
+@app.post("/work-orders/{work_order_id}/upload-signature/", response_model=schemas.WorkOrderPublic)
+def upload_work_order_signature(
+    work_order_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(security.get_current_user)
+):
+    """
+    Recibe la imagen de la firma (blob) y actualiza el campo customer_signature.
+    """
+    db_work_order = crud.get_work_order(db, work_order_id=work_order_id)
+    if not db_work_order:
+        raise HTTPException(status_code=404, detail="Orden no encontrada")
+
+    # 1. Validaciones básicas
+    MAX_BYTES = 2 * 1024 * 1024 # 2MB máximo para firmas
+    contents = file.file.read()
+    if len(contents) > MAX_BYTES:
+        raise HTTPException(status_code=400, detail="La firma es demasiado pesada.")
+
+    # 2. Rutas y Nombres
+    base_upload_dir = "/code/uploads"
+    # Usamos la misma carpeta de la orden
+    wo_number = getattr(db_work_order, "work_order_number", str(work_order_id))
+    folder_name = f"WORK_ORDER_{_slugify(wo_number, case='upper')}"
+    order_dir = os.path.join(base_upload_dir, folder_name)
+    os.makedirs(order_dir, exist_ok=True)
+
+    # Nombre único para la firma
+    filename = f"signature_{uuid.uuid4().hex[:8]}.png"
+    file_path = os.path.join(order_dir, filename)
+
+    # 3. Guardar archivo
+    with open(file_path, "wb") as buffer:
+        buffer.write(contents)
+
+    # 4. Actualizar Base de Datos (Campo customer_signature)
+    signature_url = f"/uploads/{folder_name}/{filename}"
+    db_work_order.customer_signature = signature_url
+    db.commit()
+    db.refresh(db_work_order)
+    
+    return db_work_order
+# ------------------------------------------------
+
     
 # ===== Bitácora de órdenes (solo roles internos) =====
 

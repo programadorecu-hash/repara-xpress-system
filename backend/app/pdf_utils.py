@@ -123,7 +123,25 @@ def generate_work_order_pdf(work_order: schemas.WorkOrder, company_settings: sch
     if company_settings.footer_message:
         draw_paragraph(company_settings.footer_message, style_centered)
 
-    y -= 15 * mm # Espacio para firma
+    y -= 5 * mm # Bajamos un poco antes de la firma
+
+    # --- DIBUJAR FIRMA DIGITAL (SI EXISTE) ---
+    if work_order.customer_signature:
+        try:
+            # 1. Construimos la ruta real del archivo en el servidor
+            # La base de datos tiene: "/uploads/..." -> El disco tiene: "/code/uploads/..."
+            image_path = f"/code{work_order.customer_signature}"
+            
+            if os.path.exists(image_path):
+                # 2. Dibujamos la imagen centrada
+                # Ajustamos coordenadas para que quede sobre la línea
+                # x = centro (29mm) - mitad ancho firma (15mm) = 14mm
+                c.drawImage(image_path, 14 * mm, y - 12 * mm, width=30 * mm, height=15 * mm, mask='auto')
+        except Exception as e:
+            print(f"Error dibujando firma en PDF: {e}")
+    # -----------------------------------------
+
+    y -= 10 * mm # Espacio que ocupa la firma visualmente
 
     c.line(8 * mm, y, width - (8 * mm), y)
     y -= 4 * mm

@@ -187,6 +187,10 @@ class WorkOrderBase(BaseModel):
     device_account_password: Optional[str] = None
     device_initial_check: Optional[Dict[str, Any]] = None # Aceptará un objeto JSON
     customer_declined_check: Optional[bool] = False
+    
+    # --- NUEVO: Firma Digital ---
+    customer_signature: Optional[str] = None 
+    # ----------------------------
 
 class WorkOrderImageBase(BaseModel):
     image_url: str
@@ -565,6 +569,10 @@ class WorkOrderPublic(BaseModel):
     device_account_password: Optional[str] = None
     device_initial_check: Optional[Dict[str, Any]] = None 
     customer_declined_check: Optional[bool] = False
+    
+    # --- NUEVO: Firma Digital ---
+    customer_signature: Optional[str] = None
+    # ----------------------------
     # ----------------------------------------------
 
     estimated_cost: float

@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from "react";
 import api, { deliverWorkOrderUnrepaired, deleteWorkOrderImage } from "../services/api";
 import PatternLockModal from "./PatternLockModal"; // <--- IMPORTANTE
-import { HiOutlineSearch, HiOutlineCamera, HiOutlineCloudUpload } from "react-icons/hi"; // <--- Iconos añadidos
+import { HiOutlineSearch, HiOutlineCamera, HiOutlineCloudUpload, HiPencilAlt } from "react-icons/hi"; // <--- Iconos añadidos
+import SignatureCanvas from 'react-signature-canvas'; // <--- NUEVA LIBRERÍA
 
 // --- COMPONENTE DE SLOT DE FOTO (MEJORADO: BOTONES DIRECTOS) ---
 const PhotoSlot = ({ index, image, orderId, onUpload, onView }) => {
@@ -276,6 +277,33 @@ function WorkOrderForm({ orderId, onClose, onSave }) {
   // Estado para el modal de patrón
   const [showPatternModal, setShowPatternModal] = useState(false);
 
+  // --- LÓGICA FIRMA DIGITAL ---
+  const [showSignatureModal, setShowSignatureModal] = useState(false);
+  const sigPadRef = useRef({}); // Referencia al canvas de firma
+  const [signatureBlob, setSignatureBlob] = useState(null); // El archivo de la firma temporal
+  const [signaturePreview, setSignaturePreview] = useState(null); // Para mostrarla en pequeñito
+
+  const clearSignature = () => {
+    sigPadRef.current.clear();
+    setSignatureBlob(null);
+    setSignaturePreview(null);
+  };
+
+  const saveSignatureFromPad = () => {
+    if (sigPadRef.current.isEmpty()) {
+      alert("Por favor firme antes de guardar.");
+      return;
+    }
+    // CORRECCIÓN: Usamos getCanvas() directo para evitar error de compatibilidad
+    // Convertir el dibujo a una imagen (blob)
+    sigPadRef.current.getCanvas().toBlob((blob) => {
+      setSignatureBlob(blob);
+      setSignaturePreview(URL.createObjectURL(blob));
+      setShowSignatureModal(false);
+    }, 'image/png');
+  };
+  // ---------------------------
+
   // --- LÓGICA DE BÚSQUEDA INTELIGENTE DE CLIENTE ---
   const [customerCandidates, setCustomerCandidates] = useState([]);
   const [showCustomerModal, setShowCustomerModal] = useState(false);
@@ -491,6 +519,16 @@ function WorkOrderForm({ orderId, onClose, onSave }) {
       } else {
         const payload = { ...order, customer_address: order.customer_address || null, customer_email: order.customer_email || null };
         const response = await api.post("/work-orders/", payload);
+        
+        // --- NUEVO: SI HAY FIRMA PENDIENTE, LA SUBIMOS AHORA ---
+        if (signatureBlob) {
+           const formData = new FormData();
+           formData.append("file", signatureBlob, "signature.png");
+           // Usamos el ID de la orden recién creada (response.data.id)
+           await api.post(`/work-orders/${response.data.id}/upload-signature/`, formData);
+        }
+        // -------------------------------------------------------
+
         onSave(response.data);
         return; 
       }
@@ -564,9 +602,39 @@ function WorkOrderForm({ orderId, onClose, onSave }) {
           
           {/* SECCIÓN 1: DATOS DEL CLIENTE */}
           <div className="space-y-4">
-             <div className="flex items-center gap-3 mb-2">
-                <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-sm">1</div>
-                <h3 className="text-sm font-bold text-gray-700 uppercase tracking-wide">Datos del Cliente</h3>
+             <div className="flex justify-between items-center mb-2">
+                <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-sm">1</div>
+                    <h3 className="text-sm font-bold text-gray-700 uppercase tracking-wide">Datos del Cliente</h3>
+                </div>
+                
+                {/* BOTÓN / VISTA PREVIA FIRMA */}
+                {!orderId && (
+                    <button 
+                        type="button"
+                        onClick={() => setShowSignatureModal(true)}
+                        className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-bold transition-all ${signaturePreview ? 'bg-green-50 border-green-200 text-green-700' : 'bg-white border-gray-300 text-gray-600 hover:bg-gray-50'}`}
+                    >
+                        {signaturePreview ? (
+                            <>
+                                <span className="text-green-600">✓ Firmado</span>
+                                <img src={signaturePreview} alt="Firma" className="h-6 w-auto border border-gray-200 bg-white" />
+                            </>
+                        ) : (
+                            <>
+                                <HiPencilAlt className="text-lg"/>
+                                Firmar Recepción
+                            </>
+                        )}
+                    </button>
+                )}
+                {/* Si ya existe la orden y tiene firma guardada */}
+                {orderId && order.customer_signature && (
+                    <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg">
+                        <span className="text-xs font-bold text-gray-500">Firma Registrada:</span>
+                        <img src={`${import.meta.env.VITE_API_URL || "http://localhost:8000"}${order.customer_signature}`} alt="Firma Cliente" className="h-8 w-auto bg-white border" />
+                    </div>
+                )}
              </div>
              
              <div className="bg-gray-50/50 p-6 rounded-2xl border border-gray-200/60 shadow-sm grid grid-cols-1 md:grid-cols-3 gap-5 transition-all focus-within:border-blue-300 focus-within:ring-4 focus-within:ring-blue-50/50">
@@ -945,8 +1013,60 @@ function WorkOrderForm({ orderId, onClose, onSave }) {
           </div>
         )}
 
+        {/* --- MODAL DE FIRMA DIGITAL --- */}
+        {showSignatureModal && (
+            <div className="fixed inset-0 bg-black bg-opacity-80 z-[80] flex items-center justify-center p-4 animate-fade-in">
+                <div className="bg-white w-full max-w-lg rounded-2xl overflow-hidden shadow-2xl flex flex-col">
+                    <div className="bg-gray-100 px-6 py-4 border-b flex justify-between items-center">
+                        <h3 className="font-bold text-gray-700 flex items-center gap-2">
+                            <HiPencilAlt /> Firma del Cliente
+                        </h3>
+                        <button onClick={() => setShowSignatureModal(false)} className="text-gray-400 hover:text-red-500 font-bold text-xl">&times;</button>
+                    </div>
+                    
+                    <div className="p-4 bg-gray-50 flex justify-center">
+                        <div className="border-2 border-dashed border-gray-300 rounded-xl bg-white shadow-inner">
+                            <SignatureCanvas 
+                                ref={sigPadRef}
+                                penColor="black"
+                                canvasProps={{width: 350, height: 200, className: 'cursor-crosshair'}}
+                                backgroundColor="rgba(255,255,255,1)"
+                            />
+                        </div>
+                    </div>
+                    <p className="text-center text-xs text-gray-400 py-1">Firme con el dedo dentro del recuadro</p>
+
+                    <div className="p-6 border-t bg-white flex justify-between gap-4">
+                        <button 
+                            type="button" 
+                            onClick={clearSignature} 
+                            className="px-4 py-2 text-red-500 font-bold hover:bg-red-50 rounded-lg transition-colors text-sm"
+                        >
+                            Borrar
+                        </button>
+                        <div className="flex gap-3">
+                            <button 
+                                type="button" 
+                                onClick={() => setShowSignatureModal(false)} 
+                                className="px-4 py-2 text-gray-600 font-bold hover:bg-gray-100 rounded-lg transition-colors text-sm"
+                            >
+                                Cancelar
+                            </button>
+                            <button 
+                                type="button" 
+                                onClick={saveSignatureFromPad} 
+                                className="px-6 py-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 shadow-lg shadow-blue-200 transition-transform active:scale-95 text-sm"
+                            >
+                                Guardar Firma
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        )}
+
         {/* --- NUEVO: MODAL DE DIBUJO DE PATRÓN --- */}
-        <PatternLockModal 
+        <PatternLockModal
           isOpen={showPatternModal}
           onClose={() => setShowPatternModal(false)}
           initialPattern={order.device_unlock_pattern}
