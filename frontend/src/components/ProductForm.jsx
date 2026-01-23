@@ -67,6 +67,10 @@ function ProductForm({ productToEdit, onSave, onClose }) {
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   // Para mostrar errores de cámara (si permisos o dispositivo fallan)
   const [cameraError, setCameraError] = useState("");
+  
+  // --- VISOR DE IMÁGENES (LIGHTBOX) ---
+  const [viewImage, setViewImage] = useState(null); // Guarda la imagen que se está viendo en grande
+
   // --- MODO BLITZ ---
   const [isBlitzMode, setIsBlitzMode] = useState(false); // Por defecto apagado
 
@@ -589,7 +593,7 @@ function ProductForm({ productToEdit, onSave, onClose }) {
                     {!isBlitzMode && (
                         <>
                             <div>
-                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1.5 ml-1">Precio Taller</label>
+                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1.5 ml-1">DESCUENTO</label>
                                 <div className="relative">
                                     <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">$</span>
                                     <input 
@@ -602,7 +606,7 @@ function ProductForm({ productToEdit, onSave, onClose }) {
                                 </div>
                             </div>
                             <div>
-                                <label className="block text-xs font-bold text-blue-500 uppercase mb-1.5 ml-1">Precio Web</label>
+                                <label className="block text-xs font-bold text-blue-500 uppercase mb-1.5 ml-1">DISTRIBUIDOR</label>
                                 <div className="relative">
                                     <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">$</span>
                                     <input 
@@ -754,42 +758,129 @@ function ProductForm({ productToEdit, onSave, onClose }) {
 
         {/* --- GALERÍA DE IMÁGENES (SOLO SI EXISTE) --- */}
         {productToEdit && (
-            <div className="px-8 pb-8 pt-2 bg-gray-50">
-                <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">Evidencia Fotográfica</h3>
-                <div className="grid grid-cols-4 sm:grid-cols-6 gap-3">
+            <div className="px-8 pb-8 pt-2 bg-gray-50 border-t border-gray-200">
+                <div className="flex justify-between items-center mb-4">
+                    <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest">Evidencia Fotográfica</h3>
+                    <span className="text-[10px] text-gray-400 bg-gray-100 px-2 py-1 rounded-full">{product.images.length} Fotos</span>
+                </div>
+                
+                {/* SOLUCIÓN DE ALTURA: max-h-[300px] y scroll automático */}
+                <div className="grid grid-cols-4 sm:grid-cols-6 gap-3 max-h-[300px] overflow-y-auto custom-scrollbar p-1">
                     {product.images.map((image) => (
-                        <div key={image.id} className="relative group aspect-square bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden cursor-pointer hover:shadow-md transition-all">
+                        <div 
+                            key={image.id} 
+                            className="relative group aspect-square bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden cursor-pointer hover:shadow-md transition-all"
+                            onClick={() => setViewImage(image)} // <--- ABRIR VISOR AL HACER CLICK
+                        >
                             <img src={`${import.meta.env.VITE_API_URL || "http://localhost:8000"}${image.image_url}`} alt="Prod" className="w-full h-full object-cover" />
-                            <button onClick={() => handleImageDelete(image.id)} className="absolute top-1 right-1 bg-white/90 text-red-500 rounded-full p-1.5 shadow-sm opacity-0 group-hover:opacity-100 transition-all hover:bg-red-50">
+                            {/* Botón Borrar con stopPropagation para no abrir el visor al borrar */}
+                            <button 
+                                type="button" 
+                                onClick={(e) => { e.stopPropagation(); handleImageDelete(image.id); }} 
+                                className="absolute top-1 right-1 bg-white/90 text-red-500 rounded-full p-1.5 shadow-sm opacity-0 group-hover:opacity-100 transition-all hover:bg-red-50"
+                            >
                                 <HiOutlineTrash/>
                             </button>
                         </div>
                     ))}
                     
-                    {/* Botón Subir Foto */}
-                    <button onClick={() => fileInputRef.current.click()} className="flex flex-col items-center justify-center aspect-square bg-white border-2 border-dashed border-indigo-200 rounded-xl hover:bg-indigo-50/50 hover:border-indigo-400 transition-all group">
+                    {/* Botón 1: Subir de Galería/Archivo */}
+                    <button type="button" onClick={() => fileInputRef.current.click()} className="flex flex-col items-center justify-center aspect-square bg-white border-2 border-dashed border-gray-300 rounded-xl hover:bg-gray-50 hover:border-gray-400 transition-all group">
+                        <div className="p-2 bg-gray-50 text-gray-400 rounded-full group-hover:bg-gray-100 group-hover:text-gray-600 transition-colors mb-1">
+                            <HiOutlineCloudUpload className="text-xl"/>
+                        </div>
+                        <span className="text-[9px] font-bold text-gray-400 uppercase tracking-wide group-hover:text-gray-600">Galería</span>
+                    </button>
+
+                    {/* Botón 2: Tomar Foto (Usa la función openCamera existente) */}
+                    <button type="button" onClick={openCamera} className="flex flex-col items-center justify-center aspect-square bg-white border-2 border-dashed border-indigo-300 rounded-xl hover:bg-indigo-50 hover:border-indigo-500 transition-all group">
                         <div className="p-2 bg-indigo-50 text-indigo-500 rounded-full group-hover:bg-indigo-100 group-hover:text-indigo-600 transition-colors mb-1">
                             <HiOutlineCamera className="text-xl"/>
                         </div>
-                        <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-wide">Añadir</span>
+                        <span className="text-[9px] font-bold text-indigo-500 uppercase tracking-wide group-hover:text-indigo-700">Cámara</span>
                     </button>
                 </div>
+            </div>
+        )}
+
+        {/* --- VISOR DE IMAGEN (LIGHTBOX) --- */}
+        {viewImage && (
+            <div 
+                className="fixed inset-0 z-[200] bg-black/95 flex items-center justify-center p-4 backdrop-blur-sm animate-fade-in"
+                onClick={() => setViewImage(null)} // Click fuera cierra
+            >
+                {/* Botón Cerrar */}
+                <button 
+                    className="absolute top-4 right-4 text-white/70 hover:text-white bg-white/10 hover:bg-white/20 rounded-full p-2 transition-all"
+                    onClick={() => setViewImage(null)}
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+
+                {/* Imagen Grande */}
+                <img 
+                    src={`${import.meta.env.VITE_API_URL || "http://localhost:8000"}${viewImage.image_url}`} 
+                    alt="Detalle" 
+                    className="max-w-full max-h-[85vh] object-contain rounded-lg shadow-2xl"
+                    onClick={(e) => e.stopPropagation()} // Click en la imagen no cierra
+                />
+
+                {/* Botón Descargar */}
+                <a 
+                    href={`${import.meta.env.VITE_API_URL || "http://localhost:8000"}${viewImage.image_url}`} 
+                    download
+                    target="_blank"
+                    rel="noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                    className="absolute bottom-8 bg-white text-gray-900 px-6 py-3 rounded-full font-bold shadow-lg hover:bg-gray-100 transition-transform hover:scale-105 flex items-center gap-2"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd" />
+                    </svg>
+                    Descargar Original
+                </a>
             </div>
         )}
 
         {/* INPUTS OCULTOS Y MODALES DE CÁMARA */}
         <input type="file" accept="image/*" ref={fileInputRef} onChange={(e) => { setSelectedFile(e.target.files[0]); handleImageUpload(e.target.files[0]); }} className="hidden" />
         
+        {/* MODAL CÁMARA ROBUSTO (SUPERPOSICIÓN TOTAL) */}
         {isCameraOpen && (
-            <div className="fixed inset-0 bg-black z-[60] flex flex-col">
-                <div className="flex-1 bg-black relative">
-                    <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-contain" />
+            <div className="fixed inset-0 z-[100] bg-black flex flex-col items-center justify-center">
+                {/* 1. Video en pantalla completa (fondo) */}
+                <video 
+                    ref={videoRef} 
+                    autoPlay 
+                    playsInline 
+                    muted 
+                    className="absolute inset-0 w-full h-full object-contain bg-black" 
+                />
+                
+                {/* 2. Botonera Flotante (Siempre visible encima del video) */}
+                <div className="absolute bottom-0 left-0 right-0 p-6 flex items-center justify-between bg-gradient-to-t from-black/90 via-black/60 to-transparent z-[110]">
+                    <button 
+                        type="button" 
+                        onClick={closeCamera} 
+                        className="text-white font-bold text-sm bg-gray-800/60 px-5 py-3 rounded-full backdrop-blur-md border border-gray-600 hover:bg-gray-700 transition-colors"
+                    >
+                        Cancelar
+                    </button>
+
+                    <button 
+                        type="button" 
+                        onClick={takePhotoAndUpload} 
+                        className="w-20 h-20 bg-white rounded-full border-4 border-gray-300 shadow-2xl active:scale-90 transition-transform flex items-center justify-center hover:border-gray-400"
+                    >
+                        <div className="w-16 h-16 border-2 border-black/10 rounded-full bg-gray-50"></div>
+                    </button>
+
+                    {/* Espaciador invisible para mantener el botón central centrado */}
+                    <div className="w-20 hidden sm:block"></div> 
                 </div>
-                <div className="h-24 bg-black flex items-center justify-between px-8 pb-4">
-                    <button onClick={closeCamera} className="text-white text-sm font-bold">Cancelar</button>
-                    <button onClick={takePhotoAndUpload} className="w-16 h-16 bg-white rounded-full border-4 border-gray-300 shadow-lg active:scale-90 transition-transform"></button>
-                    <div className="w-10"></div> {/* Espaciador */}
-                </div>
+                
                 <canvas ref={canvasRef} className="hidden" />
             </div>
         )}

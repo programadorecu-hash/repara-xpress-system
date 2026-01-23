@@ -1,11 +1,10 @@
 import React, { useState, useEffect, useRef } from "react";
 import api, { deliverWorkOrderUnrepaired, deleteWorkOrderImage } from "../services/api";
 import PatternLockModal from "./PatternLockModal"; // <--- IMPORTANTE
-import { HiOutlineSearch } from "react-icons/hi"; // <--- Importamos la lupa
+import { HiOutlineSearch, HiOutlineCamera, HiOutlineCloudUpload } from "react-icons/hi"; // <--- Iconos añadidos
 
-// --- COMPONENTE DE SLOT DE FOTO (MEJORADO: CON ZOOM) ---
+// --- COMPONENTE DE SLOT DE FOTO (MEJORADO: BOTONES DIRECTOS) ---
 const PhotoSlot = ({ index, image, orderId, onUpload, onView }) => {
-  const [showOptions, setShowOptions] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   
   // Estados para cámara
@@ -38,7 +37,6 @@ const PhotoSlot = ({ index, image, orderId, onUpload, onView }) => {
     try {
       const response = await api.post(`/work-orders/${orderId}/upload-image/`, formData);
       onUpload(response.data.images); // Actualizamos la lista de fotos en el formulario padre
-      setShowOptions(false);
     } catch (error) {
       console.error(error);
       alert("Error al subir imagen");
@@ -47,9 +45,9 @@ const PhotoSlot = ({ index, image, orderId, onUpload, onView }) => {
     }
   };
 
-  // Función de borrado (NUEVA)
+  // Función de borrado
   const handleDelete = async (e) => {
-    e.stopPropagation(); // Evitar abrir el menú
+    e.stopPropagation(); // Evitar abrir el visor
     if (!confirm("¿Borrar esta foto permanentemente?")) return;
     
     try {
@@ -82,13 +80,16 @@ const PhotoSlot = ({ index, image, orderId, onUpload, onView }) => {
       // SOLICITAMOS MÁXIMA RESOLUCIÓN POSIBLE (HD/4K)
       const stream = await navigator.mediaDevices.getUserMedia({ 
         video: { 
-            facingMode: "environment",
+            facingMode: { ideal: "environment" },
             width: { ideal: 4096 }, // Pedimos 4K idealmente
             height: { ideal: 2160 } 
         } 
       });
       streamRef.current = stream;
-      if (videoRef.current) videoRef.current.srcObject = stream;
+      if (videoRef.current) {
+         videoRef.current.srcObject = stream;
+         videoRef.current.play().catch(e => console.error(e));
+      }
     } catch (err) {
       alert("No se pudo acceder a la cámara. Revisa permisos.");
       setIsCameraOpen(false);
@@ -108,24 +109,25 @@ const PhotoSlot = ({ index, image, orderId, onUpload, onView }) => {
       ctx.imageSmoothingEnabled = false; 
       ctx.drawImage(video, 0, 0);
 
-      // 3. Guardamos con CALIDAD MÁXIMA (1.0) en lugar de 0.8
+      // 3. Guardamos con CALIDAD MÁXIMA (1.0)
       canvas.toBlob(blob => {
         uploadFile(blob);
         closeCamera();
-      }, "image/jpeg", 1.0); // <--- AQUÍ ESTÁ EL CAMBIO CLAVE (1.0 es 100% calidad)
+      }, "image/jpeg", 1.0); 
     }
   };
 
   const closeCamera = () => {
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(t => t.stop());
+      streamRef.current = null;
     }
     setIsCameraOpen(false);
   };
 
   // --- RENDERIZADO DEL SLOT ---
   
-  // CASO A: Ya hay foto -> Mostrarla
+  // CASO A: Ya hay foto -> Mostrarla (Mismo código de antes)
   if (image) {
     return (
       <div 
@@ -139,8 +141,9 @@ const PhotoSlot = ({ index, image, orderId, onUpload, onView }) => {
         />
         {/* Botón Borrar (Papelera) */}
         <button 
+            type="button"
             onClick={handleDelete}
-            className="absolute top-1 right-1 bg-red-600 text-white rounded-full p-1 shadow hover:bg-red-700 transition-colors z-10"
+            className="absolute top-1 right-1 bg-red-600 text-white rounded-full p-1 shadow hover:bg-red-700 transition-colors z-10 opacity-0 group-hover:opacity-100"
             title="Borrar foto"
         >
             <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
@@ -162,45 +165,48 @@ const PhotoSlot = ({ index, image, orderId, onUpload, onView }) => {
     );
   }
 
-  // CASO B: No hay foto -> Mostrar botón "+"
+  // CASO B: No hay foto -> MOSTRAR BOTONES DIRECTOS (NUEVO DISEÑO)
   return (
     <>
       <div 
-        className="relative w-24 h-24 border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center cursor-pointer hover:border-accent hover:bg-teal-50 transition-colors bg-white"
-        onClick={() => !isUploading && orderId && setShowOptions(true)}
+        className="relative w-24 h-24 border-2 border-dashed border-gray-300 rounded-lg overflow-hidden bg-white hover:border-blue-400 transition-colors shadow-sm"
         title={orderId ? "Añadir foto" : "Guarda la orden primero"}
       >
         {isUploading ? (
-          <span className="text-[10px] text-gray-400 animate-pulse">Subiendo...</span>
-        ) : (
-          <>
-            <span className="text-3xl text-gray-300 font-light group-hover:text-accent">+</span>
-            <span className="text-[10px] text-gray-400 mt-1">Foto {index + 1}</span>
-          </>
-        )}
-        
-        {/* Menú desplegable (Archivo / Cámara) dentro del cuadradito */}
-        {showOptions && (
-          <div className="absolute inset-0 bg-white z-10 flex flex-col items-center justify-center p-1 rounded-lg animate-fade-in-down shadow-inner">
-             <button 
-               onClick={(e) => { e.stopPropagation(); fileInputRef.current.click(); }}
-               className="text-[10px] bg-gray-100 hover:bg-gray-200 w-full py-1 mb-1 rounded text-gray-700 font-medium border"
-             >
-               📁 Archivo
-             </button>
-             <button 
-               onClick={(e) => { e.stopPropagation(); openCamera(); }}
-               className="text-[10px] bg-accent text-white hover:opacity-90 w-full py-1 mb-1 rounded font-medium"
-             >
-               📷 Cámara
-             </button>
-             <button 
-               onClick={(e) => { e.stopPropagation(); setShowOptions(false); }}
-               className="text-[9px] text-red-400 hover:text-red-600 underline"
-             >
-               Cancelar
-             </button>
+          <div className="flex items-center justify-center h-full">
+             <span className="text-[10px] text-gray-400 animate-pulse">Subiendo...</span>
           </div>
+        ) : !orderId ? (
+           // Estado deshabilitado
+           <div className="flex flex-col items-center justify-center h-full opacity-50 cursor-not-allowed">
+              <span className="text-2xl text-gray-300 font-light">+</span>
+              <span className="text-[10px] text-gray-400 mt-1">Foto {index + 1}</span>
+           </div>
+        ) : (
+           // Estado Habilitado: Botones divididos
+           <div className="flex flex-col h-full">
+              {/* Mitad Superior: Cámara */}
+              <button 
+                  type="button"
+                  onClick={openCamera}
+                  className="flex-1 flex flex-col items-center justify-center bg-blue-50 hover:bg-blue-100 text-blue-600 border-b border-blue-100 transition-colors group"
+                  title="Tomar foto con cámara"
+              >
+                  <HiOutlineCamera className="text-lg mb-0.5 group-hover:scale-110 transition-transform"/>
+                  <span className="text-[9px] font-bold uppercase tracking-tight">Cámara</span>
+              </button>
+              
+              {/* Mitad Inferior: Galería */}
+              <button 
+                  type="button"
+                  onClick={() => fileInputRef.current.click()}
+                  className="flex-1 flex flex-col items-center justify-center bg-white hover:bg-gray-50 text-gray-500 hover:text-gray-700 transition-colors group"
+                  title="Subir archivo"
+              >
+                  <HiOutlineCloudUpload className="text-lg mb-0.5 group-hover:scale-110 transition-transform"/>
+                  <span className="text-[9px] font-bold uppercase tracking-tight">Galería</span>
+              </button>
+           </div>
         )}
       </div>
 
@@ -220,8 +226,8 @@ const PhotoSlot = ({ index, image, orderId, onUpload, onView }) => {
             <video ref={videoRef} autoPlay playsInline className="w-full h-64 bg-gray-900 object-contain" />
             <canvas ref={canvasRef} className="hidden" />
             <div className="flex justify-center gap-4 p-4 bg-gray-900">
-               <button onClick={closeCamera} className="bg-gray-700 text-white px-4 py-2 rounded text-sm hover:bg-gray-600">Cancelar</button>
-               <button onClick={takePhoto} className="bg-white text-black font-bold px-6 py-2 rounded-full ring-4 ring-gray-500 hover:scale-105 transition-transform">CAPTURAR</button>
+               <button type="button" onClick={closeCamera} className="bg-gray-700 text-white px-4 py-2 rounded text-sm hover:bg-gray-600">Cancelar</button>
+               <button type="button" onClick={takePhoto} className="bg-white text-black font-bold px-6 py-2 rounded-full ring-4 ring-gray-500 hover:scale-105 transition-transform">CAPTURAR</button>
             </div>
           </div>
         </div>
