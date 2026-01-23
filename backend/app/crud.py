@@ -488,30 +488,19 @@ def get_movements_by_product(db: Session, product_id: int):
 # --- NUEVO: MOTOR DE BÚSQUEDA GLOBAL (TRIVAGO DE REPUESTOS) ---
 def search_global_parts(db: Session, query: str, limit: int = 50):
     """
-    Busca repuestos en TODAS las empresas marcadas como 'is_distributor'.
-    Retorna una lista comparativa de precios y disponibilidad.
+    Busca repuestos en TODAS las empresas activas (ya no solo distribuidores).
+    Basta con que el producto tenga is_public=True.
     """
     search_term = f"%{query.lower()}%"
     
-    # 1. Encontrar IDs de empresas distribuidoras activas
-    distributor_ids = db.query(models.Company.id).filter(
-        models.Company.is_distributor == True,
-        models.Company.is_active == True
-    ).all()
-    # Aplanamos la lista de IDs (ej: [1, 5, 8])
-    dist_ids = [d.id for d in distributor_ids]
-
-    if not dist_ids:
-        return []
-
-    # 2. Buscar productos que coincidan en esas empresas
+    # Buscamos productos directamente en CUALQUIER empresa activa
     products = db.query(models.Product).join(models.Company).options(
         joinedload(models.Product.stock_entries), # Para ver si hay stock
         joinedload(models.Product.company).joinedload(models.Company.settings) # Para datos de contacto
     ).filter(
-        models.Product.company_id.in_(dist_ids),
-        models.Product.is_active == True,
-        models.Product.is_public == True, # <--- FILTRO VITAL: Solo mostrar si está marcado como público
+        models.Company.is_active == True, # <--- Único requisito: Que la empresa pague su mensualidad
+        models.Product.is_active == True, # El producto debe existir
+        models.Product.is_public == True, # <--- FILTRO VITAL: El técnico decidió hacerlo público
         # Búsqueda flexible en nombre o descripción
         or_(
             func.lower(models.Product.name).like(search_term),
@@ -533,6 +522,13 @@ def search_global_parts(db: Session, query: str, limit: int = 50):
 
         # Datos de contacto de la empresa
         company_settings = p.company.settings if p.company.settings else None
+        
+        # --- LÓGICA DE NOMBRE COMERCIAL ---
+        # Priorizamos el nombre configurado en settings. 
+        # Si no existe, usamos el nombre de registro (company.name) como fallback.
+        display_name = company_settings.name if (company_settings and company_settings.name) else p.company.name
+        # ----------------------------------
+
         phone = company_settings.phone if company_settings else None
         address = company_settings.address if company_settings else None
 
@@ -542,7 +538,7 @@ def search_global_parts(db: Session, query: str, limit: int = 50):
             # Si no tiene precio distribuidor (0), usamos el Price 3 (PVP) como fallback.
             price=p.price_1 if p.price_1 > 0 else p.price_3, 
             stock_status=stock_status,
-            company_name=p.company.name,
+            company_name=display_name, 
             company_address=address,
             company_phone=phone,
             last_updated=datetime.now() # Fecha referencia
@@ -1063,7 +1059,7 @@ def get_work_orders(db: Session, user: models.User, skip: int = 0, limit: int = 
         query = query.filter(models.WorkOrder.status.notin_(["ENTREGADO", "SIN_REPARACION"]))
     # -----------------------------------------------------------------------
 
-    if user.role not in ["admin", "inventory_manager"]:
+    if user.role not in ["super_admin", "admin", "inventory_manager"]:
         active_shift = get_active_shift_for_user(db, user_id=user.id)
         if not active_shift:
             return [] 
@@ -1189,7 +1185,7 @@ def search_ready_work_orders(db: Session, user: models.User, search: str | None 
         joinedload(models.WorkOrder.location)
     ).filter(models.WorkOrder.status == 'LISTO')
 
-    if user.role not in ["admin", "inventory_manager"]:
+    if user.role not in ["super_admin", "admin", "inventory_manager"]:
         active_shift = get_active_shift_for_user(db, user_id=user.id)
         if not active_shift: return []
         query = query.filter(models.WorkOrder.location_id == active_shift.location_id)
@@ -1733,8 +1729,8 @@ def get_sales(
 
     # --- INICIO DE LA LÓGICA DE PERMISOS CORREGIDA (CON INDENTACIÓN) ---
     # 2. Lógica de permisos y filtrado por sucursal
-    if user.role in ["admin", "inventory_manager"]:
-        # Si es Admin o Gerente, PUEDE filtrar por sucursal.
+    if user.role in ["super_admin", "admin", "inventory_manager"]:
+        # Si es Super Admin, Admin o Gerente, PUEDE filtrar por sucursal.
         if location_id:
             # Si se le pasa un ID, filtra por ese ID
             query = query.filter(models.Sale.location_id == location_id)
@@ -1971,7 +1967,7 @@ def get_low_stock_items(db: Session, user: models.User, threshold: int = 5):
     query = query.filter(models.Stock.quantity <= threshold)
 
     # 3. Filtro por Rol
-    if user.role not in ["admin", "inventory_manager"]:
+    if user.role not in ["super_admin", "admin", "inventory_manager"]:
         # Si es empleado, buscamos su turno
         active_shift = get_active_shift_for_user(db, user.id)
         if not active_shift:
@@ -2243,7 +2239,7 @@ def process_refund(db: Session, refund: schemas.RefundCreate, user: models.User,
         # que el PIN corresponde al usuario activo.
         
         # AJUSTE: Si el usuario activo NO es admin, rechazamos CASH.
-        if user.role not in ["admin", "inventory_manager"]:
+        if user.role not in ["super_admin", "admin", "inventory_manager"]:
             raise ValueError("⛔ PROHIBIDO: Solo un Administrador puede autorizar devoluciones de dinero. Por favor, emita una Nota de Crédito.")
         
         # Procesar salida de dinero (Gasto)
@@ -3080,10 +3076,16 @@ def saas_get_all_companies(db: Session):
              }
 
         # --- RAYOS X: Buscar datos de contacto y dueño ---
-        # 1. Configuración (Teléfono/Dirección)
+        # 1. Configuración (Teléfono/Dirección/RUC/Nombre Comercial)
         settings = db.query(models.CompanySettings).filter(models.CompanySettings.company_id == company.id).first()
         comp_dict["contact_phone"] = settings.phone if settings else "No registrado"
         comp_dict["contact_address"] = settings.address if settings else "No registrada"
+        
+        # --- NUEVO: Extraemos RUC y Nombre Comercial para el Buscador ---
+        comp_dict["contact_ruc"] = settings.ruc if settings else "No registrado"
+        # Si tiene nombre comercial en settings, lo usamos. Si no, usamos el de registro.
+        comp_dict["commercial_name"] = settings.name if (settings and settings.name) else company.name 
+        # ---------------------------------------------------------------
 
         # 2. Dueño (Primer Admin encontrado)
         admin = db.query(models.User).filter(

@@ -228,7 +228,7 @@ function ProductPage() {
 
   const isLoggedIn = !!user;
   const canManageProducts =
-    user?.role === "admin" || user?.role === "inventory_manager";
+    user?.role === "super_admin" || user?.role === "admin" || user?.role === "inventory_manager";
 
   if (loading) return <p>Cargando productos...</p>;
   if (error) return <p className="text-red-500">{error}</p>;

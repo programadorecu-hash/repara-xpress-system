@@ -19,13 +19,18 @@ import {
   HiOutlineIdentification,
   HiOutlineKey,
   HiOutlineCalendar,
-  HiOutlineCash
+  HiOutlineCash,
+  HiOutlineSearch // <--- ÍCONO NUEVO
 } from 'react-icons/hi';
 
 function SuperAdminPage() {
   const [companies, setCompanies] = useState([]);
   const [loading, setLoading] = useState(true);
   
+  // --- ESTADO DEL BUSCADOR ---
+  const [searchTerm, setSearchTerm] = useState(""); 
+  // ---------------------------
+
   const [expandedCompanyId, setExpandedCompanyId] = useState(null);
   const [companyUsers, setCompanyUsers] = useState({});
   const [loadingUsers, setLoadingUsers] = useState(false);
@@ -37,8 +42,6 @@ function SuperAdminPage() {
   const fetchCompanies = async () => {
     try {
       const res = await api.get('/super-admin/companies');
-      // Ordenar por fecha de vencimiento (los que vencen antes, primero)
-      // Si no tienen fecha (null), van al final.
       const sorted = res.data.sort((a, b) => {
         if (!a.next_payment_due) return 1;
         if (!b.next_payment_due) return -1;
@@ -51,6 +54,23 @@ function SuperAdminPage() {
       setLoading(false);
     }
   };
+
+  // --- LÓGICA DE FILTRADO INTELIGENTE ---
+  const filteredCompanies = companies.filter(company => {
+    const term = searchTerm.toLowerCase();
+    // Creamos un mega-string con todos los datos buscables de la empresa
+    const searchableText = `
+      ${company.name} 
+      ${company.commercial_name || ""} 
+      ${company.contact_ruc || ""} 
+      ${company.admin_email || ""} 
+      ${company.admin_name || ""} 
+      ${company.id}
+    `.toLowerCase();
+    
+    return searchableText.includes(term);
+  });
+  // --------------------------------------
 
   const handleExpandUsers = async (companyId) => {
     if (expandedCompanyId === companyId) {
@@ -101,7 +121,6 @@ function SuperAdminPage() {
     }
   };
 
-  // --- NUEVA FUNCIÓN: REGISTRAR PAGO ---
   const handleRegisterPayment = async (companyId, companyName) => {
     const plan = prompt(`💰 REGISTRAR PAGO: ${companyName}\n\nEscribe:\n1 para MENSUAL ($19)\n12 para ANUAL ($190)`);
     if (!plan) return;
@@ -125,12 +144,11 @@ function SuperAdminPage() {
     try {
       await registerPayment(companyId, months, planType);
       toast.success("✅ Pago registrado. Servicio extendido.");
-      fetchCompanies(); // Recargamos para ver la nueva fecha
+      fetchCompanies(); 
     } catch (error) {
       toast.error("Error al registrar pago.");
     }
   };
-  // -------------------------------------
 
   const toggleModule = async (companyId, moduleKey, currentValue) => {
     const newValue = !currentValue;
@@ -166,35 +184,49 @@ function SuperAdminPage() {
     }
   };
 
-  // --- HELPER: SEMÁFORO DE COBRANZA ---
   const getPaymentStatus = (dueDate) => {
     if (!dueDate) return { color: "bg-gray-100 text-gray-500", text: "SIN FECHA" };
-    
     const today = new Date();
     const due = new Date(dueDate);
     const diffTime = due - today;
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
-
     if (diffDays < 0) return { color: "bg-red-100 text-red-700 font-bold animate-pulse", text: `VENCIDO (${Math.abs(diffDays)} días)` };
     if (diffDays <= 5) return { color: "bg-yellow-100 text-yellow-700 font-bold", text: `Vence en ${diffDays} días` };
     return { color: "bg-green-100 text-green-700", text: `Vence el ${due.toLocaleDateString()}` };
   };
-  // ------------------------------------
 
   if (loading) return <div className="p-10 text-center">Cargando Torre de Control...</div>;
 
   return (
     <div className="p-6 bg-slate-50 min-h-screen pb-20">
       <div className="mb-8 bg-indigo-700 text-white p-8 rounded-2xl shadow-lg relative overflow-hidden">
-        <h1 className="text-3xl font-extrabold flex items-center gap-3 relative z-10">
-          <HiOutlineShieldCheck className="text-yellow-400 text-4xl" /> CONSOLA SUPER ADMIN
-        </h1>
-        <p className="text-indigo-100 mt-2 relative z-10">Gestión Total de Empresas y Personal.</p>
+        <div className="relative z-10">
+          <h1 className="text-3xl font-extrabold flex items-center gap-3">
+            <HiOutlineShieldCheck className="text-yellow-400 text-4xl" /> CONSOLA SUPER ADMIN
+          </h1>
+          <p className="text-indigo-100 mt-2 text-lg">Gestión Total de Empresas y Personal.</p>
+          
+          {/* --- BARRA DE BÚSQUEDA --- */}
+          <div className="relative max-w-md w-full mt-6 text-indigo-100">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <HiOutlineSearch className="text-xl" />
+            </div>
+            <input
+              type="text"
+              className="block w-full pl-10 pr-3 py-2 border border-transparent rounded-lg leading-5 bg-indigo-800/50 text-white placeholder-indigo-300 focus:outline-none focus:bg-indigo-900 focus:border-white focus:ring-white sm:text-sm transition-colors"
+              placeholder="Buscar por Nombre, RUC, Correo o ID..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
+          {/* ------------------------- */}
+        </div>
         <HiOutlineShieldCheck className="absolute -bottom-10 -right-10 text-9xl text-white/10 rotate-12"/>
       </div>
 
       <div className="grid grid-cols-1 gap-8">
-        {companies.map((company) => {
+        {/* Usamos filteredCompanies en lugar de companies */}
+        {filteredCompanies.map((company) => {
             const status = getPaymentStatus(company.next_payment_due);
             
             return (
@@ -204,12 +236,20 @@ function SuperAdminPage() {
               <div className="flex flex-col lg:flex-row justify-between items-start mb-6 border-b border-gray-100 pb-6">
                 <div className="flex-1">
                   <div className="flex items-center gap-3 mb-2">
-                    <h2 className="text-2xl font-bold text-gray-800">{company.name}</h2>
+                    {/* --- TÍTULO MEJORADO: Usamos commercial_name si existe --- */}
+                    <h2 className="text-2xl font-bold text-gray-800">
+                      {company.commercial_name || company.name}
+                    </h2>
+                    {/* Si el nombre comercial es distinto al de registro, mostramos el de registro pequeño */}
+                    {company.commercial_name && company.commercial_name !== company.name && (
+                       <span className="text-xs text-gray-400 font-mono">({company.name})</span>
+                    )}
+                    {/* -------------------------------------------------------- */}
+
                     {!company.is_active && <span className="bg-red-100 text-red-600 text-xs px-2 py-1 rounded font-bold">SUSPENDIDA</span>}
                     <span className="bg-gray-100 text-gray-500 text-xs px-2 py-1 rounded font-mono">ID: {company.id}</span>
                   </div>
 
-                  {/* --- BARRA DE ESTADO DE COBRANZA --- */}
                   <div className="flex flex-wrap gap-2 mb-4">
                      <span className={`px-3 py-1 rounded text-xs border ${status.color}`}>
                         {status.text}
@@ -220,8 +260,13 @@ function SuperAdminPage() {
                      <span className="px-3 py-1 rounded text-xs border bg-gray-50 text-gray-500 border-gray-100">
                         Registro: {new Date(company.created_at).toLocaleDateString()}
                      </span>
+                     {/* Mostramos RUC si existe */}
+                     {company.contact_ruc && (
+                       <span className="px-3 py-1 rounded text-xs border bg-purple-50 text-purple-700 border-purple-100">
+                         RUC: {company.contact_ruc}
+                       </span>
+                     )}
                   </div>
-                  {/* ----------------------------------- */}
                   
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 text-sm text-gray-600 bg-gray-50 p-4 rounded-lg">
                     <div className="flex items-center gap-2">
@@ -245,18 +290,23 @@ function SuperAdminPage() {
                         <span>{company.contact_phone}</span>
                       </div>
                     </div>
+                    <div className="flex items-center gap-2">
+                      <HiOutlineLocationMarker className="text-indigo-500 text-lg"/>
+                      <div>
+                        <span className="block font-bold text-xs uppercase text-gray-400">Dirección</span>
+                        <span className="truncate max-w-[200px]" title={company.contact_address}>{company.contact_address}</span>
+                      </div>
+                    </div>
                   </div>
                 </div>
 
                 <div className="mt-4 lg:mt-0 lg:ml-6 flex flex-col gap-3 min-w-[200px]">
-                   {/* --- BOTÓN DE PAGO --- */}
                    <button 
                     onClick={() => handleRegisterPayment(company.id, company.name)}
                     className="w-full py-2 px-4 rounded-lg font-bold text-green-700 bg-green-100 hover:bg-green-200 text-sm border border-green-300 flex items-center justify-center gap-2 transition-colors"
                   >
                     <HiOutlineCash className="text-lg"/> REGISTRAR PAGO
                   </button>
-                  {/* --------------------- */}
 
                   <button 
                     onClick={() => handleSendKeys(company.id, company.name)}
@@ -282,7 +332,6 @@ function SuperAdminPage() {
                 </div>
               </div>
 
-              {/* ... (EL RESTO DEL CÓDIGO DE USUARIOS Y MÓDULOS SIGUE IGUAL) ... */}
               {expandedCompanyId === company.id && (
                 <div className="mb-6 animate-in fade-in slide-in-from-top-2 duration-300">
                   <div className="bg-indigo-50 rounded-xl p-4 border border-indigo-100">
@@ -366,6 +415,12 @@ function SuperAdminPage() {
             </div>
           </div>
         )})}
+
+        {filteredCompanies.length === 0 && (
+          <div className="text-center p-10 bg-white rounded-xl shadow border border-gray-100">
+             <p className="text-gray-400">No se encontraron empresas con ese criterio.</p>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -32,7 +32,11 @@ class Company(CompanyBase):
     admin_name: str | None = None
     contact_phone: str | None = None
     contact_address: str | None = None
-    # --------------------------------------------------
+    
+    # --- NUEVO: Campos para el Buscador ---
+    contact_ruc: str | None = None
+    commercial_name: str | None = None
+    # --------------------------------------
 
     class Config:
         from_attributes = True

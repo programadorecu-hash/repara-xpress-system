@@ -864,7 +864,7 @@ def adjust_inventory_stock(
     # Verificamos PIN y Rol
     if not current_user.hashed_pin or not security.verify_password(adjustment.pin, current_user.hashed_pin):
         raise HTTPException(status_code=403, detail="PIN incorrecto o no establecido")
-    if current_user.role not in ["admin", "inventory_manager"]:
+    if current_user.role not in ["super_admin", "admin", "inventory_manager"]:
         raise HTTPException(status_code=403, detail="No tienes permiso para ajustar el stock.")
 
     try:
@@ -1406,7 +1406,7 @@ def read_purchase_invoices(
 def create_new_purchase_invoice(invoice: schemas.PurchaseInvoiceCreate, location_id: int, db: Session = Depends(get_db), current_user: schemas.User = Depends(security.get_current_user)):
     if not current_user.hashed_pin or not security.verify_password(invoice.pin, current_user.hashed_pin):
         raise HTTPException(status_code=403, detail="PIN incorrecto o no establecido")
-    if current_user.role not in ["admin", "inventory_manager"]:
+    if current_user.role not in ["super_admin", "admin", "inventory_manager"]:
         raise HTTPException(status_code=403, detail="No tienes permiso para registrar compras.")
     
     try:

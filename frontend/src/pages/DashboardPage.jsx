@@ -463,8 +463,8 @@ function DashboardPage() {
 
           {/* 4. Tarjeta de Balance Diario (ESTILO CYAN AESTHETIC) */}
           <Link
-            to={(user?.role === "admin" || user?.role === "inventory_manager") ? "/reporte-financiero" : "#"}
-            onClick={(e) => { if (user?.role !== "admin" && user?.role !== "inventory_manager") e.preventDefault(); }}
+            to={(user?.role === "super_admin" || user?.role === "admin" || user?.role === "inventory_manager") ? "/reporte-financiero" : "#"}
+            onClick={(e) => { if (user?.role !== "super_admin" && user?.role !== "admin" && user?.role !== "inventory_manager") e.preventDefault(); }}
             className="group relative block bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden transition-all duration-300 hover:shadow-lg hover:border-cyan-200"
           >
             {/* Barra lateral de color (Detalle elegante) */}
@@ -521,7 +521,7 @@ function DashboardPage() {
               </div>
 
               {/* Icono flotante al hacer hover (Solo Admin) */}
-              {(user?.role === "admin" || user?.role === "inventory_manager") && (
+              {(user?.role === "super_admin" || user?.role === "admin" || user?.role === "inventory_manager") && (
                  <div className="absolute top-1/2 right-4 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-all duration-300 transform translate-x-2 group-hover:translate-x-0">
                     <HiOutlineArrowRight className="text-gray-300 hover:text-cyan-600 text-2xl" />
                  </div>
