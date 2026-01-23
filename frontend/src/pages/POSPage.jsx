@@ -604,7 +604,8 @@ ${publicLink}`;
               onChange={(e) => setSearchTerm(e.target.value.toUpperCase())}
             />
           </div>
-          <div className="h-96 overflow-y-auto border rounded-lg p-2 bg-gray-50">
+          {/* ALTURA DINÁMICA: 65vh para aprovechar pantalla */}
+          <div className="h-[65vh] overflow-y-auto border rounded-lg p-2 bg-gray-50 custom-scrollbar">
             {/* --- CONTENIDO DINÁMICO DE RESULTADOS (MODIFICADO) --- */}
             {searchMode === "products" && ( // MOSTRAR RESULTADOS DE PRODUCTOS
               <>
@@ -613,73 +614,60 @@ ${publicLink}`;
                     Buscando productos...
                   </p>
                 ) : searchResults.length > 0 ? (
-                  searchResults.map((product) => (
-                    <div
-                      key={`prod-${product.id}`} /* ... Clases y contenido para producto ... */
-                      className="flex items-center justify-between p-3 mb-2 bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-shadow duration-150 cursor-pointer"
-                    >
-                      {/* Copia aquí el diseño de item de producto que ya tenías */}
-                      {/* Sección Izquierda: Imagen e Info */}
-                      <div className="flex items-center space-x-3 flex-grow min-w-0 mr-3">
-                        <img
-                          // Usamos la "agenda" para saber dónde está el almacén
-                          src={`${
-                            import.meta.env.VITE_API_URL ||
-                            "http://localhost:8000"
-                          }${
-                            product.images[0]?.image_url || "/placeholder.png"
-                          }`}
-                          alt={product.name}
-                          className="h-12 w-12 object-cover rounded flex-shrink-0"
-                        />
-                        <div className="min-w-0">
-                          <p className="font-semibold text-base text-secondary truncate">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 p-1">
+                    {searchResults.map((product) => (
+                      <div
+                        key={`prod-${product.id}`}
+                        onClick={() => handleAddToCart(product)}
+                        className="group relative flex flex-col bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden cursor-pointer hover:shadow-lg hover:border-accent transition-all duration-200"
+                        title="Clic para añadir"
+                      >
+                        {/* 1. Imagen Grande (Cuadrada) */}
+                        <div className="aspect-square bg-gray-100 relative overflow-hidden">
+                          <img
+                            src={`${import.meta.env.VITE_API_URL || "http://localhost:8000"}${product.images[0]?.image_url || "/placeholder.png"}`}
+                            alt={product.name}
+                            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+                          />
+                          {/* Badge de Stock */}
+                          <div className={`absolute top-2 right-2 px-2 py-1 rounded-full text-[10px] font-bold shadow-sm backdrop-blur-sm ${product.stock_quantity > 0 ? 'bg-green-100/90 text-green-700' : 'bg-red-100/90 text-red-700'}`}>
+                             {product.stock_quantity} un.
+                          </div>
+                        </div>
+
+                        {/* 2. Información Inferior */}
+                        <div className="p-3 flex flex-col flex-grow">
+                          <h4 className="font-bold text-gray-800 text-sm leading-tight mb-1 line-clamp-2 min-h-[2.5em]">
                             {product.name}
-                          </p>
-                          <p className="text-sm text-gray-500">{product.sku}</p>
-                          <p
-                            className={`text-xs font-bold ${
-                              product.stock_quantity > 0
-                                ? "text-green-600"
-                                : "text-red-600"
-                            }`}
-                          >
-                            Stock Bodega: {product.stock_quantity}
-                          </p>
-                          {product.other_locations_stock &&
-                            product.other_locations_stock.length > 0 && (
-                              <div className="text-xs text-blue-600 mt-1 truncate">
-                                <span className="font-medium">Disp:</span>{" "}
-                                {product.other_locations_stock.map(
-                                  (stockInfo) => (
-                                    <span
-                                      key={stockInfo.location_name}
-                                      className="ml-1"
-                                    >
-                                      {stockInfo.location_name.substring(0, 3)}(
-                                      {stockInfo.quantity})
-                                    </span>
-                                  )
-                                )}
-                              </div>
-                            )}
+                          </h4>
+                          <p className="text-[10px] text-gray-400 font-mono mb-1">{product.sku}</p>
+
+                          {/* --- STOCK INTELIGENTE: Mostrar otras bodegas si aquí es 0 --- */}
+                          {product.stock_quantity === 0 && product.other_locations_stock?.length > 0 && (
+                             <div className="mb-2 bg-blue-50 border border-blue-100 rounded p-1.5 animate-pulse">
+                                <p className="text-[9px] font-extrabold text-blue-600 uppercase mb-0.5">⚠️ Disponible en:</p>
+                                {product.other_locations_stock.slice(0, 3).map((s, i) => (
+                                   <div key={i} className="flex justify-between text-[9px] text-blue-800">
+                                      <span className="truncate max-w-[70%]">{s.location_name}</span>
+                                      <span className="font-bold">{s.quantity} un.</span>
+                                   </div>
+                                ))}
+                             </div>
+                          )}
+                          
+                          <div className="mt-auto flex items-center justify-between">
+                             <span className="text-lg font-black text-secondary">${product.price_3.toFixed(2)}</span>
+                             <button 
+                                className="bg-gray-100 text-accent hover:bg-accent hover:text-white p-2 rounded-full transition-colors shadow-sm"
+                                onClick={(e) => { e.stopPropagation(); handleAddToCart(product); }}
+                             >
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+                             </button>
+                          </div>
                         </div>
                       </div>
-                      {/* Sección Derecha: Precio y Botón Añadir */}
-                      <div className="text-right flex-shrink-0">
-                        <p className="font-bold text-lg text-secondary">
-                          ${product.price_3.toFixed(2)}
-                        </p>
-                        <button
-                          className="mt-1 bg-accent hover:bg-teal-500 text-white font-bold py-1 px-3 rounded-md transition duration-150 text-sm"
-                          title="Añadir al carrito"
-                          onClick={() => handleAddToCart(product)}
-                        >
-                          Añadir
-                        </button>
-                      </div>
-                    </div>
-                  ))
+                    ))}
+                  </div>
                 ) : searchTerm.length >= 2 ? (
                   <p className="text-gray-400 text-center py-4">
                     No se encontraron productos.
