@@ -362,8 +362,7 @@ class Sale(Base):
     
     location = relationship("Location", back_populates="sales")
     work_order = relationship("WorkOrder", back_populates="sale")
-    items = relationship("SaleItem", back_populates="sale")
-
+    items = relationship("SaleItem", back_populates="sale", cascade="all, delete-orphan")
 class SaleItem(Base):
     __tablename__ = "sale_items"
     id = Column(Integer, primary_key=True, index=True)

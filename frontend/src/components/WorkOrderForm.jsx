@@ -258,6 +258,18 @@ const CheckListItem = ({ label, name, value, onChange, disabled }) => (
 // --- COMPONENTE PRINCIPAL DEL FORMULARIO ---
 
 function WorkOrderForm({ orderId, onClose, onSave }) {
+  // Estilo para ocultar flechas en inputs numéricos
+  const noArrowsStyle = `
+    input[type=number]::-webkit-inner-spin-button, 
+    input[type=number]::-webkit-outer-spin-button { 
+      -webkit-appearance: none; 
+      margin: 0; 
+    }
+    input[type=number] {
+      -moz-appearance: textfield;
+    }
+  `;
+
   // --- Estado para el modal de "Entregar Sin Reparar" ---
   const [showUnrepaired, setShowUnrepaired] = useState(false);
   const [unrepairedData, setUnrepairedData] = useState({ fee: 2.00, reason: "Cliente retiró sin reparar", pin: "" });
@@ -511,304 +523,409 @@ function WorkOrderForm({ orderId, onClose, onSave }) {
   });
 
   return (
-    // ARREGLO UX: NO cerrar al hacer click fuera para evitar pérdida de datos
-    <div 
-      className="fixed inset-0 bg-black bg-opacity-60 z-50 flex items-center justify-center p-4"
-      // Quitamos onClick={onClose} aquí
-    >
+    <div className="fixed inset-0 bg-gray-900/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-fade-in">
       <div
-        className="bg-white rounded-lg shadow-xl w-full max-w-4xl text-gray-800 max-h-[95vh] flex flex-col relative"
-        onClick={(e) => e.stopPropagation()} // Evita que el click dentro cierre el modal
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl flex flex-col max-h-[90vh] overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
       >
-        {/* --- NUEVO: Botón X Flotante (Siempre visible) --- */}
-        <button 
-            onClick={onClose} 
-            className="absolute top-3 right-3 z-10 p-2 bg-gray-100 hover:bg-red-100 text-gray-500 hover:text-red-600 rounded-full transition-colors shadow-sm"
-            title="Cerrar ventana"
-        >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-        </button>
-
-        {/* --- NUEVO: Contenedor con Scroll para el contenido --- */}
-        <div className="p-6 overflow-y-auto custom-scrollbar">
-          
-          <div className="mb-6 flex justify-between items-start">
+        
+        {/* HEADER ELEGANTE (Estilo ProductForm) */}
+        <div className="px-8 py-6 border-b border-gray-100 flex justify-between items-start bg-gradient-to-r from-gray-50 to-white">
             <div>
-              <h2 className="text-2xl font-bold text-secondary">
-                {orderId ? `Ver / Editar Orden #${order.work_order_number}` : "Crear Nueva Orden de Trabajo"}
-              </h2>
-              {orderId && order.user && (
-                <p className="text-xs text-gray-400 mt-1">Creada por: <span className="font-semibold">{order.user.email}</span></p>
-              )}
+                <h2 className="text-2xl font-extrabold text-gray-800 tracking-tight">
+                    {orderId ? `Orden #${order.work_order_number}` : "Nueva Orden de Trabajo"}
+                </h2>
+                <p className="text-sm text-gray-500 mt-1">
+                    {orderId && order.user 
+                        ? <>Creada por: <span className="font-semibold text-gray-700">{order.user.email}</span></> 
+                        : "Ingresa los datos del cliente y el equipo."}
+                </p>
             </div>
-            {/* Aquí quitamos el botón viejo para no tener dos */}
-          </div>
+            
+            {/* Botón Cerrar */}
+             <button 
+                onClick={onClose} 
+                className="p-2 bg-white border border-gray-200 text-gray-400 hover:text-red-500 hover:border-red-200 rounded-full transition-all shadow-sm"
+                title="Cerrar ventana"
+            >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+            </button>
+        </div>
 
-        {loading && <p className="text-accent animate-pulse">Procesando...</p>}
-        {error && <p className="bg-red-100 text-red-800 p-3 rounded-lg my-4">{error}</p>}
+        <div className="p-8 overflow-y-auto custom-scrollbar space-y-8">
+
+        {loading && <p className="text-blue-600 font-bold animate-pulse text-center p-2">Procesando...</p>}
+        {error && <p className="bg-red-50 text-red-600 border border-red-100 p-4 rounded-xl text-sm font-medium mb-4">{error}</p>}
 
         <form onSubmit={(e) => e.preventDefault()} className="space-y-4" autoComplete="off">
+          <style>{noArrowsStyle}</style>
           
-          {/* CLIENTE */}
-          <fieldset className="border p-4 rounded-lg">
-            <legend className="text-lg font-semibold px-2 text-gray-700">Datos del Cliente</legend>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              
-              {/* CAMPO NOMBRE (CON BUSCADOR) */}
-              <div className="relative">
-                <input 
-                  type="text" 
-                  name="customer_name" 
-                  value={order.customer_name} 
-                  onChange={handleChange} 
-                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleSearchCustomer('name'); } }}
-                  placeholder="Nombre y Apellido" 
-                  className="w-full p-2 border rounded pr-10" 
-                  required 
-                  disabled={!!orderId} 
-                  autoComplete="off" 
-                />
-                {!orderId && (
-                  <button
-                    type="button"
-                    onClick={() => handleSearchCustomer('name')}
-                    className="absolute right-1 top-1 p-1 bg-blue-100 text-blue-600 rounded hover:bg-blue-200 transition"
-                    title="Buscar por Nombre"
-                  >
-                    <HiOutlineSearch className="w-5 h-5" />
-                  </button>
-                )}
-              </div>
-              
-              {/* CAMPO CÉDULA (CON BUSCADOR) */}
-              <div className="relative">
-                <input 
-                  type="text" 
-                  name="customer_id_card" 
-                  value={order.customer_id_card} 
-                  onChange={handleChange} 
-                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleSearchCustomer('ci'); } }}
-                  placeholder="Cédula" 
-                  className="w-full p-2 border rounded pr-10" 
-                  required 
-                  disabled={!!orderId} 
-                  autoComplete="new-password" 
-                />
-                {!orderId && (
-                  <button
-                    type="button"
-                    onClick={() => handleSearchCustomer('ci')}
-                    className="absolute right-1 top-1 p-1 bg-blue-100 text-blue-600 rounded hover:bg-blue-200 transition"
-                    title="Buscar por Cédula"
-                  >
-                    <HiOutlineSearch className="w-5 h-5" />
-                  </button>
-                )}
-              </div>
-              
-              <input type="text" name="customer_phone" value={order.customer_phone} onChange={handleChange} placeholder="Teléfono" className="p-2 border rounded" required autoComplete="off" />
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
-               <input type="text" name="customer_address" value={order.customer_address || ''} onChange={handleChange} placeholder="Dirección" className="p-2 border rounded md:col-span-2" autoComplete="off" />
-               <input type="email" name="customer_email" value={order.customer_email || ''} onChange={handleChange} placeholder="Correo electrónico" className="p-2 border rounded" autoComplete="off" />
-            </div>
-          </fieldset>
-
-          {/* EQUIPO */}
-          <fieldset className="border p-4 rounded-lg">
-            <legend className="text-lg font-semibold px-2 text-gray-700">Datos del Equipo</legend>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <select name="device_type" value={order.device_type} onChange={handleChange} className="p-2 border rounded" disabled={!!orderId}>
-                <option>Celular</option><option>Tablet</option><option>Laptop</option><option>PC</option><option>Otro</option>
-              </select>
-              <input type="text" name="device_brand" value={order.device_brand} onChange={handleChange} placeholder="Marca" className="p-2 border rounded" required disabled={!!orderId} />
-              <input type="text" name="device_model" value={order.device_model} onChange={handleChange} placeholder="Modelo" className="p-2 border rounded" required disabled={!!orderId} />
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
-               <input type="text" name="device_serial" value={order.device_serial || ""} onChange={handleChange} placeholder="Serie / IMEI" className="p-2 border rounded" disabled={!!orderId} />
-               <input type="text" name="device_password" value={order.device_password || ""} onChange={handleChange} placeholder="PIN / Contraseña" className="p-2 border rounded" autoComplete="new-password" />
-               
-               {/* CAMPO DE PATRÓN INTERACTIVO */}
-               <div className="relative">
-                 <button 
-                   type="button"
-                   onClick={() => setShowPatternModal(true)}
-                   className={`w-full p-2 border rounded text-left flex justify-between items-center ${order.device_unlock_pattern ? "bg-green-50 border-green-300 text-green-700" : "bg-white text-gray-400"}`}
-                 >
-                   <span>{order.device_unlock_pattern ? `Patrón: ${order.device_unlock_pattern}` : "Dibujar Patrón"}</span>
-                   <span className="text-lg">罒</span>
-                 </button>
-                 {/* Input oculto para que se guarde en el estado del formulario */}
-                 <input type="hidden" name="device_unlock_pattern" value={order.device_unlock_pattern || ""} />
-               </div>
-            </div>
-             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-               <input type="text" name="device_account" value={order.device_account || ""} onChange={handleChange} placeholder="Cuenta Google / iCloud" className="p-2 border rounded" autoComplete="new-password" />
-               <input type="text" name="device_account_password" value={order.device_account_password || ""} onChange={handleChange} placeholder="Contraseña de Cuenta" className="p-2 border rounded" autoComplete="new-password" />
-             </div>
-          </fieldset>
-
-          {/* CHECKLIST */}
-          <fieldset className="border p-4 rounded-lg">
-             <legend className="text-lg font-semibold px-2 text-gray-700">Checklist Inicial</legend>
-             <div className="mb-4">
-                <label className="inline-flex items-center text-red-600 font-semibold text-sm cursor-pointer select-none">
-                  <input type="checkbox" name="customer_declined_check" checked={order.customer_declined_check} onChange={handleChange} className="mr-2 h-4 w-4" />
-                  Cliente no desea esperar revisión
-                </label>
+          {/* SECCIÓN 1: DATOS DEL CLIENTE */}
+          <div className="space-y-4">
+             <div className="flex items-center gap-3 mb-2">
+                <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-sm">1</div>
+                <h3 className="text-sm font-bold text-gray-700 uppercase tracking-wide">Datos del Cliente</h3>
              </div>
              
-             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2">
-               <CheckListItem label="¿Equipo enciende?" name="enciende" value={order.device_initial_check.enciende} onChange={handleChecklistChange} disabled={order.customer_declined_check} />
-               {order.device_initial_check.enciende === "si" && (
-                 <>
-                   <CheckListItem label="Cámara" name="camara" value={order.device_initial_check.camara} onChange={handleChecklistChange} disabled={order.customer_declined_check} />
-                   <CheckListItem label="Micrófono" name="microfono" value={order.device_initial_check.microfono} onChange={handleChecklistChange} disabled={order.customer_declined_check} />
-                   <CheckListItem label="Wi-Fi" name="wifi" value={order.device_initial_check.wifi} onChange={handleChecklistChange} disabled={order.customer_declined_check} />
-                   <CheckListItem label="Señal" name="signal" value={order.device_initial_check.signal} onChange={handleChecklistChange} disabled={order.customer_declined_check} />
-                   <CheckListItem label="Carga" name="carga" value={order.device_initial_check.carga} onChange={handleChecklistChange} disabled={order.customer_declined_check} />
-                   <CheckListItem label="Altavoz" name="altavoz" value={order.device_initial_check.altavoz} onChange={handleChecklistChange} disabled={order.customer_declined_check} />
-                   <CheckListItem label="Pantalla Táctil" name="tactil" value={order.device_initial_check.tactil} onChange={handleChecklistChange} disabled={order.customer_declined_check} />
-                   <CheckListItem label="Lectura SIM" name="sim" value={order.device_initial_check.sim} onChange={handleChecklistChange} disabled={order.customer_declined_check} />
-                   <CheckListItem label="Audífonos" name="audifonos" value={order.device_initial_check.audifonos} onChange={handleChecklistChange} disabled={order.customer_declined_check} />
-                 </>
-               )}
-             </div>
-          </fieldset>
-
-          {/* --- FOTOS DEL EQUIPO (REDISEÑADO) --- */}
-          <fieldset className="border p-4 rounded-lg bg-gray-50">
-            <legend className="text-lg font-semibold px-2 text-gray-700">Fotos del Estado Físico (Máx 3)</legend>
-            <div className="flex flex-wrap gap-4 items-center">
-              {/* Renderizamos los 3 slots fijos */}
-              {photoSlots.map((img, idx) => (
-                <PhotoSlot 
-                  key={idx} 
-                  index={idx} 
-                  image={img} 
-                  orderId={orderId} 
-                  onUpload={handleImagesUpdated} 
-                  onView={setViewImage}
-                />
-              ))}
-              
-              {!orderId && <span className="text-xs text-gray-500 bg-white px-2 py-1 rounded border">⚠️ Guarda la orden para habilitar la cámara.</span>}
-            </div>
-          </fieldset>
-          {/* ------------------------------------- */}
-
-          {/* 1. ESTADO FÍSICO (Separado para que no se pegue) */}
-          <fieldset className="border p-4 rounded-lg bg-gray-50 border-gray-200">
-            <legend className="text-lg font-semibold px-2 text-gray-700">Estado del Equipo (Recepción)</legend>
-            <textarea 
-              name="physical_condition" 
-              value={order.physical_condition || ""} 
-              onChange={handleChange} 
-              placeholder="Detalle aquí: Pantalla rayada, golpe en esquina, sin tapa, etc..." 
-              className="w-full p-2 border rounded focus:ring-2 focus:ring-gray-400 outline-none h-20 text-sm bg-white" 
-            />
-            <p className="text-xs text-gray-500 mt-1">
-              * Esta información aparecerá en el recibo impreso.
-            </p>
-          </fieldset>
-
-          {/* 2. DIAGNÓSTICO Y PRESUPUESTO (Con título corregido) */}
-          <fieldset className="border p-4 rounded-lg">
-            <legend className="text-lg font-semibold px-2 text-gray-700">Diagnóstico y Presupuesto</legend>
-            
-            {/* Título agregado */}
-            <label className="font-semibold block mb-2 text-gray-700">Daño o Trabajo a realizar</label>
-            <textarea 
-              name="reported_issue" 
-              value={order.reported_issue} 
-              onChange={handleChange} 
-              placeholder="Describa el problema o trabajo a realizar..." 
-              className="w-full p-2 border rounded mb-4 focus:ring-2 focus:ring-accent outline-none" 
-              required 
-            />
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="font-semibold block mb-1 text-sm">Costo Estimado ($)</label>
-                <input type="number" step="0.01" name="estimated_cost" value={order.estimated_cost} onChange={handleChange} className="w-full p-2 border rounded focus:ring-2 focus:ring-accent outline-none" required />
-              </div>
-              <div>
-                <label className="font-semibold block mb-1 text-sm">Abono Inicial ($)</label>
-                <input type="number" step="0.01" name="deposit_amount" value={order.deposit_amount} onChange={handleChange} className="w-full p-2 border rounded bg-gray-100" disabled={!!orderId} />
-              </div>
-              {!orderId && parseFloat(order.deposit_amount) > 0 && (
-                <div className="md:col-span-2">
-                   <label className="block text-sm font-medium mb-1">Método de Pago (Anticipo)</label>
-                   <select name="deposit_payment_method" value={order.deposit_payment_method} onChange={handleChange} className="w-full p-2 border rounded bg-yellow-50 font-bold">
-                     <option value="EFECTIVO">💵 Efectivo</option>
-                     <option value="TRANSFERENCIA">🏦 Transferencia</option>
-                     <option value="TARJETA">💳 Tarjeta</option>
-                   </select>
-
-                   {/* --- NUEVO: Selector de Banco si es Transferencia --- */}
-                   {order.deposit_payment_method === "TRANSFERENCIA" && (
-                     <div className="mt-2 animate-fade-in">
-                        <label className="block text-xs font-bold text-blue-600 mb-1">Selecciona la Cuenta de Destino:</label>
-                        <select 
-                            name="deposit_bank_account_id" 
-                            value={order.deposit_bank_account_id || ""} 
-                            onChange={handleChange} 
-                            className="w-full p-2 border border-blue-300 rounded bg-blue-50 text-sm"
-                            required
-                        >
-                            <option value="">-- Elige un Banco --</option>
-                            {bankAccounts.map(acc => (
-                                <option key={acc.id} value={acc.id}>{acc.name}</option>
-                            ))}
-                        </select>
-                     </div>
-                   )}
-                   {/* --------------------------------------------------- */}
+             <div className="bg-gray-50/50 p-6 rounded-2xl border border-gray-200/60 shadow-sm grid grid-cols-1 md:grid-cols-3 gap-5 transition-all focus-within:border-blue-300 focus-within:ring-4 focus-within:ring-blue-50/50">
+                
+                {/* CAMPO NOMBRE (CON BUSCADOR) */}
+                <div className="relative">
+                   <label className="block text-xs font-bold text-gray-500 uppercase mb-1.5 ml-1">Nombre del Cliente</label>
+                   <div className="relative">
+                       <input 
+                         type="text" 
+                         name="customer_name" 
+                         value={order.customer_name} 
+                         onChange={handleChange} 
+                         onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleSearchCustomer('name'); } }}
+                         placeholder="Ej: Juan Pérez" 
+                         className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-gray-700 placeholder-gray-400 transition-all shadow-sm pr-10" 
+                         required 
+                         disabled={!!orderId} 
+                         autoComplete="off" 
+                       />
+                       {!orderId && (
+                         <button
+                           type="button"
+                           onClick={() => handleSearchCustomer('name')}
+                           className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-blue-500 hover:bg-blue-50 rounded-lg transition-colors"
+                           title="Buscar por Nombre"
+                         >
+                           <HiOutlineSearch className="w-5 h-5" />
+                         </button>
+                       )}
+                   </div>
                 </div>
-              )}
-            </div>
-          </fieldset>
 
-          {orderId && (
-            <div>
-              <label className="font-semibold text-gray-600 block mb-2">Estado Actual</label>
-              <select name="status" value={order.status} onChange={handleChange} className="w-full p-2 border rounded-lg bg-gray-100 font-medium">
-                <option value="RECIBIDO">Recibido</option>
-                <option value="EN_REVISION">En Revisión</option>
-                <option value="REPARANDO">Reparando</option>
-                <option value="LISTO">Listo</option>
-                <option value="ENTREGADO">Entregado</option>
-                <option value="SIN_REPARACION">Sin Reparación</option>
-              </select>
-            </div>
-          )}
+                {/* CAMPO CÉDULA (CON BUSCADOR) */}
+                <div className="relative">
+                   <label className="block text-xs font-bold text-gray-500 uppercase mb-1.5 ml-1">Cédula / RUC</label>
+                   <div className="relative">
+                       <input 
+                         type="text" 
+                         name="customer_id_card" 
+                         value={order.customer_id_card} 
+                         onChange={handleChange} 
+                         onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleSearchCustomer('ci'); } }}
+                         placeholder="Ej: 171..." 
+                         className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-gray-700 placeholder-gray-400 transition-all shadow-sm pr-10" 
+                         required 
+                         disabled={!!orderId} 
+                         autoComplete="new-password" 
+                       />
+                       {!orderId && (
+                         <button
+                           type="button"
+                           onClick={() => handleSearchCustomer('ci')}
+                           className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-blue-500 hover:bg-blue-50 rounded-lg transition-colors"
+                           title="Buscar por Cédula"
+                         >
+                           <HiOutlineSearch className="w-5 h-5" />
+                         </button>
+                       )}
+                   </div>
+                </div>
 
-          {!orderId && (
-            <div>
-               <label className="font-semibold text-gray-600 block mb-2">Tu PIN de Seguridad</label>
-               <input type="password" name="pin" value={order.pin} onChange={handleChange} className="w-full p-2 border rounded" required placeholder="****" autoComplete="new-password" />
-            </div>
-          )}
+                {/* TELÉFONO */}
+                <div>
+                   <label className="block text-xs font-bold text-gray-500 uppercase mb-1.5 ml-1">Teléfono</label>
+                   <input 
+                     type="text" 
+                     name="customer_phone" 
+                     value={order.customer_phone} 
+                     onChange={handleChange} 
+                     placeholder="Ej: 099..." 
+                     className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-gray-700 placeholder-gray-400 transition-all shadow-sm" 
+                     required 
+                     autoComplete="off" 
+                   />
+                </div>
 
-          <div className="mt-6 flex justify-between items-center border-t pt-4">
-             <button type="button" onClick={handlePrint} disabled={!orderId} className="py-2 px-4 bg-gray-600 text-white font-bold rounded-lg hover:bg-gray-700 disabled:opacity-50 text-sm">🖨️ Imprimir</button>
-             
-             <div className="flex space-x-3">
-               {orderId && (
-                 <button type="button" onClick={() => setShowUnrepaired(true)} className="py-2 px-4 bg-red-100 text-red-700 font-bold rounded-lg hover:bg-red-200 border border-red-300 text-sm">
-                   Entregar s/ Reparar
-                 </button>
-               )}
-               <button type="button" onClick={onClose} className="py-2 px-4 bg-gray-200 rounded-lg hover:bg-gray-300 text-sm font-medium">Cancelar</button>
-               <button type="submit" onClick={handleSaveAndContinue} disabled={loading} className="py-2 px-6 bg-accent text-white font-bold rounded-lg hover:bg-teal-600 shadow-md text-sm">
-                 {orderId ? "Actualizar Orden" : "Guardar Orden"}
-               </button>
+                {/* DIRECCIÓN */}
+                <div className="md:col-span-2">
+                   <label className="block text-xs font-bold text-gray-500 uppercase mb-1.5 ml-1">Dirección</label>
+                   <input 
+                     type="text" 
+                     name="customer_address" 
+                     value={order.customer_address || ''} 
+                     onChange={handleChange} 
+                     placeholder="Ej: Av. Amazonas y..." 
+                     className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-gray-700 placeholder-gray-400 transition-all shadow-sm" 
+                     autoComplete="off" 
+                   />
+                </div>
+
+                {/* EMAIL */}
+                <div>
+                   <label className="block text-xs font-bold text-gray-500 uppercase mb-1.5 ml-1">Email (Opcional)</label>
+                   <input 
+                     type="email" 
+                     name="customer_email" 
+                     value={order.customer_email || ''} 
+                     onChange={handleChange} 
+                     placeholder="correo@ejemplo.com" 
+                     className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-gray-700 placeholder-gray-400 transition-all shadow-sm" 
+                     autoComplete="off" 
+                   />
+                </div>
+
              </div>
           </div>
+
+          {/* SECCIÓN 2: DATOS DEL EQUIPO */}
+          <div className="space-y-4 pt-2">
+             <div className="flex items-center gap-3 mb-2">
+                <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold text-sm">2</div>
+                <h3 className="text-sm font-bold text-gray-700 uppercase tracking-wide">Datos del Equipo</h3>
+             </div>
+
+             <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm space-y-6">
+                
+                {/* FILA 1: Identificación Básica */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                    <div>
+                       <label className="block text-xs font-bold text-gray-500 uppercase mb-1.5 ml-1">Tipo</label>
+                       <select name="device_type" value={order.device_type} onChange={handleChange} className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-sm font-medium shadow-sm" disabled={!!orderId}>
+                         <option>Celular</option><option>Tablet</option><option>Laptop</option><option>PC</option><option>Otro</option>
+                       </select>
+                    </div>
+                    <div>
+                       <label className="block text-xs font-bold text-gray-500 uppercase mb-1.5 ml-1">Marca</label>
+                       <input type="text" name="device_brand" value={order.device_brand} onChange={handleChange} placeholder="Ej: SAMSUNG" className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-gray-700 uppercase transition-all shadow-sm" required disabled={!!orderId} />
+                    </div>
+                    <div>
+                       <label className="block text-xs font-bold text-gray-500 uppercase mb-1.5 ml-1">Modelo</label>
+                       <input type="text" name="device_model" value={order.device_model} onChange={handleChange} placeholder="Ej: A52" className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-gray-700 uppercase transition-all shadow-sm" required disabled={!!orderId} />
+                    </div>
+                </div>
+
+                {/* FILA 2: Seguridad y Acceso */}
+                <div className="p-5 bg-indigo-50/50 rounded-xl border border-indigo-100 grid grid-cols-1 md:grid-cols-3 gap-5">
+                    <div>
+                       <label className="block text-xs font-bold text-indigo-400 uppercase mb-1.5 ml-1">Serie / IMEI</label>
+                       <input type="text" name="device_serial" value={order.device_serial || ""} onChange={handleChange} placeholder="Opcional" className="w-full px-4 py-2.5 bg-white border border-indigo-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-gray-600 font-mono text-sm shadow-sm" disabled={!!orderId} />
+                    </div>
+                    
+                    <div>
+                       <label className="block text-xs font-bold text-indigo-400 uppercase mb-1.5 ml-1">Contraseña / PIN</label>
+                       <input type="text" name="device_password" value={order.device_password || ""} onChange={handleChange} placeholder="****" className="w-full px-4 py-2.5 bg-white border border-indigo-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-gray-800 font-bold tracking-widest shadow-sm" autoComplete="new-password" />
+                    </div>
+
+                    {/* BOTÓN PATRÓN MEJORADO */}
+                    <div>
+                       <label className="block text-xs font-bold text-indigo-400 uppercase mb-1.5 ml-1">Patrón de Desbloqueo</label>
+                       <div className="relative">
+                         <button 
+                           type="button"
+                           onClick={() => setShowPatternModal(true)}
+                           className={`w-full px-4 py-2.5 border rounded-xl text-left flex justify-between items-center transition-all shadow-sm ${order.device_unlock_pattern ? "bg-teal-50 border-teal-300 text-teal-700 font-bold" : "bg-white border-indigo-200 text-gray-400 hover:bg-indigo-50"}`}
+                         >
+                           <span className="text-sm">{order.device_unlock_pattern ? "Patrón Guardado ✓" : "Dibujar Patrón"}</span>
+                           <span className="text-lg opacity-60">罒</span>
+                         </button>
+                         <input type="hidden" name="device_unlock_pattern" value={order.device_unlock_pattern || ""} />
+                       </div>
+                    </div>
+                </div>
+
+                {/* FILA 3: Cuentas Vinculadas */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                    <div>
+                       <label className="block text-xs font-bold text-gray-400 uppercase mb-1.5 ml-1">Cuenta Vinculada (Google/iCloud)</label>
+                       <input type="text" name="device_account" value={order.device_account || ""} onChange={handleChange} placeholder="usuario@gmail.com" className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:border-indigo-300 outline-none text-sm transition-all" autoComplete="new-password" />
+                    </div>
+                    <div>
+                       <label className="block text-xs font-bold text-gray-400 uppercase mb-1.5 ml-1">Contraseña de Cuenta</label>
+                       <input type="text" name="device_account_password" value={order.device_account_password || ""} onChange={handleChange} placeholder="••••••" className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:border-indigo-300 outline-none text-sm transition-all" autoComplete="new-password" />
+                    </div>
+                </div>
+
+             </div>
+          </div>
+
+          {/* SECCIÓN 3: CHECKLIST INICIAL */}
+          <div className="space-y-4 pt-2">
+             <div className="flex items-center gap-3 mb-2">
+                <div className="w-8 h-8 rounded-full bg-gray-100 text-gray-500 flex items-center justify-center font-bold text-sm">3</div>
+                <h3 className="text-sm font-bold text-gray-700 uppercase tracking-wide">Estado Inicial (Checklist)</h3>
+             </div>
+             
+             <div className="bg-gray-50 p-6 rounded-2xl border border-gray-100 shadow-sm">
+                 <div className="mb-4 flex items-center p-3 bg-red-50 border border-red-100 rounded-xl">
+                    <input type="checkbox" name="customer_declined_check" checked={order.customer_declined_check} onChange={handleChange} className="w-5 h-5 text-red-600 rounded focus:ring-red-500 border-gray-300" />
+                    <label className="ml-3 text-sm font-bold text-red-700">El cliente no desea esperar la revisión</label>
+                 </div>
+                 
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-3">
+                    <CheckListItem label="¿Equipo enciende?" name="enciende" value={order.device_initial_check.enciende} onChange={handleChecklistChange} disabled={order.customer_declined_check} />
+                    {order.device_initial_check.enciende === "si" && (
+                        <>
+                           <CheckListItem label="Cámara" name="camara" value={order.device_initial_check.camara} onChange={handleChecklistChange} disabled={order.customer_declined_check} />
+                           <CheckListItem label="Micrófono" name="microfono" value={order.device_initial_check.microfono} onChange={handleChecklistChange} disabled={order.customer_declined_check} />
+                           <CheckListItem label="Wi-Fi" name="wifi" value={order.device_initial_check.wifi} onChange={handleChecklistChange} disabled={order.customer_declined_check} />
+                           <CheckListItem label="Señal" name="signal" value={order.device_initial_check.signal} onChange={handleChecklistChange} disabled={order.customer_declined_check} />
+                           <CheckListItem label="Carga" name="carga" value={order.device_initial_check.carga} onChange={handleChecklistChange} disabled={order.customer_declined_check} />
+                           <CheckListItem label="Altavoz" name="altavoz" value={order.device_initial_check.altavoz} onChange={handleChecklistChange} disabled={order.customer_declined_check} />
+                           <CheckListItem label="Pantalla Táctil" name="tactil" value={order.device_initial_check.tactil} onChange={handleChecklistChange} disabled={order.customer_declined_check} />
+                           <CheckListItem label="Lectura SIM" name="sim" value={order.device_initial_check.sim} onChange={handleChecklistChange} disabled={order.customer_declined_check} />
+                           <CheckListItem label="Audífonos" name="audifonos" value={order.device_initial_check.audifonos} onChange={handleChecklistChange} disabled={order.customer_declined_check} />
+                        </>
+                    )}
+                 </div>
+             </div>
+          </div>
+
+          {/* SECCIÓN 4: ESTADO FÍSICO Y FOTOS */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4">
+             
+             {/* FOTOS */}
+             <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm flex flex-col">
+                <div className="flex justify-between items-center mb-4">
+                    <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest">Evidencia Fotográfica</h3>
+                    <span className="text-[10px] bg-gray-100 text-gray-500 px-2 py-1 rounded-full">Máx 3</span>
+                </div>
+                <div className="flex gap-3 justify-center items-center flex-1">
+                    {photoSlots.map((img, idx) => (
+                       <PhotoSlot key={idx} index={idx} image={img} orderId={orderId} onUpload={handleImagesUpdated} onView={setViewImage} />
+                    ))}
+                </div>
+                {!orderId && <p className="text-[10px] text-center text-gray-400 mt-3">⚠️ Guarda la orden para habilitar cámara</p>}
+             </div>
+
+             {/* TEXTO ESTADO FÍSICO */}
+             <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
+                <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Estado Físico (Recepción)</label>
+                <textarea 
+                  name="physical_condition" 
+                  value={order.physical_condition || ""} 
+                  onChange={handleChange} 
+                  placeholder="Detalle rayones, golpes, fisuras..." 
+                  className="w-full p-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-gray-200 outline-none text-sm bg-gray-50 h-32 resize-none" 
+                />
+             </div>
+          </div>
+
+          {/* SECCIÓN 5: DIAGNÓSTICO Y PRESUPUESTO */}
+          <div className="space-y-4 pt-4">
+             <div className="flex items-center gap-3 mb-2">
+                <div className="w-8 h-8 rounded-full bg-green-100 text-green-600 flex items-center justify-center font-bold text-sm">4</div>
+                <h3 className="text-sm font-bold text-gray-700 uppercase tracking-wide">Diagnóstico y Finanzas</h3>
+             </div>
+
+             <div className="bg-green-50/50 p-6 rounded-2xl border border-green-100 shadow-sm space-y-6">
+                
+                {/* PROBLEMA REPORTADO */}
+                <div>
+                   <label className="block text-xs font-bold text-green-800 uppercase mb-1.5 ml-1">Daño Reportado / Trabajo a Realizar</label>
+                   <textarea 
+                     name="reported_issue" 
+                     value={order.reported_issue} 
+                     onChange={handleChange} 
+                     placeholder="Describa el problema detalladamente..." 
+                     className="w-full px-4 py-3 bg-white border border-green-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none text-gray-700 placeholder-gray-400 transition-all shadow-sm" 
+                     required 
+                     rows="2"
+                   />
+                </div>
+
+                {/* DINERO */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {/* COSTO */}
+                    <div className="relative">
+                        <label className="block text-xs font-bold text-green-700 uppercase mb-1.5 ml-1">Costo Estimado</label>
+                        <div className="relative">
+                            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-green-600 font-bold text-lg">$</span>
+                            <input type="number" step="0.01" name="estimated_cost" value={order.estimated_cost} onChange={handleChange} className="w-full pl-8 pr-4 py-3 bg-white border border-green-300 rounded-xl focus:ring-4 focus:ring-green-100 outline-none font-bold text-2xl text-green-800 shadow-sm" required placeholder="0.00" />
+                        </div>
+                    </div>
+
+                    {/* ABONO */}
+                    <div className="relative">
+                        <label className="block text-xs font-bold text-green-700 uppercase mb-1.5 ml-1">Abono Inicial</label>
+                        <div className="relative">
+                            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 text-lg">$</span>
+                            <input type="number" step="0.01" name="deposit_amount" value={order.deposit_amount} onChange={handleChange} className="w-full pl-8 pr-4 py-3 bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-200 outline-none font-bold text-xl text-gray-700 shadow-sm" disabled={!!orderId} placeholder="0.00" />
+                        </div>
+                    </div>
+                </div>
+
+                {/* METODO PAGO ABONO (Solo si hay abono y es nueva orden) */}
+                {!orderId && parseFloat(order.deposit_amount) > 0 && (
+                    <div className="bg-white p-4 rounded-xl border border-green-200 animate-fade-in">
+                        <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Método de Pago del Abono</label>
+                        <div className="flex gap-4 flex-wrap">
+                            <select name="deposit_payment_method" value={order.deposit_payment_method} onChange={handleChange} className="flex-1 px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg outline-none font-medium text-sm">
+                                <option value="EFECTIVO">💵 Efectivo</option>
+                                <option value="TRANSFERENCIA">🏦 Transferencia</option>
+                                <option value="TARJETA">💳 Tarjeta</option>
+                            </select>
+                            
+                            {order.deposit_payment_method === "TRANSFERENCIA" && (
+                                <select name="deposit_bank_account_id" value={order.deposit_bank_account_id || ""} onChange={handleChange} className="flex-1 px-4 py-2 bg-blue-50 border border-blue-200 text-blue-700 rounded-lg outline-none font-medium text-sm" required>
+                                    <option value="">-- Destino --</option>
+                                    {bankAccounts.map(acc => <option key={acc.id} value={acc.id}>{acc.name}</option>)}
+                                </select>
+                            )}
+                        </div>
+                    </div>
+                )}
+             </div>
+          </div>
+
+          {/* ESTADO Y PIN (Footer Area de Form) */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4">
+             {orderId ? (
+                 <div>
+                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1.5 ml-1">Estado de la Orden</label>
+                    <select name="status" value={order.status} onChange={handleChange} className="w-full px-4 py-3 bg-gray-800 text-white font-bold rounded-xl border border-gray-700 outline-none focus:ring-4 focus:ring-gray-600 transition-shadow">
+                        <option value="RECIBIDO">📥 Recibido</option>
+                        <option value="EN_REVISION">🧐 En Revisión</option>
+                        <option value="REPARANDO">🔧 Reparando</option>
+                        <option value="LISTO">✅ Listo</option>
+                        <option value="ENTREGADO">🚀 Entregado</option>
+                        <option value="SIN_REPARACION">❌ Sin Reparación</option>
+                    </select>
+                 </div>
+             ) : (
+                 <div>
+                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1.5 ml-1">Tu PIN de Seguridad</label>
+                    <input type="password" name="pin" value={order.pin} onChange={handleChange} className="w-full px-4 py-3 bg-white border border-red-200 rounded-xl focus:ring-2 focus:ring-red-500 outline-none text-center font-bold tracking-[0.5em] text-gray-800 placeholder-red-100" required placeholder="****" autoComplete="new-password" />
+                 </div>
+             )}
+          </div>
+
         </form>
-        
+        </div> {/* --- FIN DEL CONTENEDOR CON SCROLL (Cierre corregido) --- */}
+
+        {/* FOOTER FLOTANTE (FUERA DEL SCROLL) */}
+        <div className="p-6 border-t border-gray-100 bg-gray-50 flex justify-between items-center rounded-b-2xl">
+            {/* Botón Imprimir */}
+            <button type="button" onClick={handlePrint} disabled={!orderId} className="flex items-center gap-2 px-5 py-2.5 bg-white border border-gray-300 text-gray-700 font-bold rounded-xl hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm">
+                <span className="text-xl">🖨️</span> <span className="hidden sm:inline">Imprimir</span>
+            </button>
+
+            <div className="flex gap-3">
+                {orderId && (
+                    <button type="button" onClick={() => setShowUnrepaired(true)} className="px-4 py-2.5 bg-red-50 text-red-600 border border-red-200 font-bold rounded-xl hover:bg-red-100 transition-colors text-sm">
+                        Entregar s/ Reparar
+                    </button>
+                )}
+                
+                <button type="button" onClick={onClose} className="px-6 py-2.5 bg-white border border-gray-200 text-gray-600 font-bold rounded-xl hover:bg-gray-100 transition-colors shadow-sm">
+                    Cancelar
+                </button>
+                
+                <button type="button" onClick={handleSaveAndContinue} disabled={loading} className="px-8 py-2.5 bg-gradient-to-r from-indigo-600 to-blue-600 text-white font-bold rounded-xl hover:from-indigo-700 hover:to-blue-700 shadow-lg shadow-blue-200 transition-all active:scale-95 flex items-center gap-2">
+                    <HiOutlineCloudUpload className="text-xl"/>
+                    {orderId ? "Guardar Cambios" : "Crear Orden"}
+                </button>
+            </div>
+        </div>
+
+        {/* --- MODALES AUXILIARES (REDIBUJADOS IGUAL QUE ANTES) --- */}
         {/* Modal "Entregar sin reparar" */}
         {showUnrepaired && (
           <div className="fixed inset-0 bg-black bg-opacity-70 z-[60] flex items-center justify-center p-4">
@@ -873,8 +990,6 @@ function WorkOrderForm({ orderId, onClose, onSave }) {
             </div>
           </div>
         )}
-        
-        </div> {/* --- FIN DEL CONTENEDOR CON SCROLL --- */}
       </div>
 
       {/* --- VISOR DE IMAGEN (LIGHTBOX CON ZOOM TÁCTICO) --- */}

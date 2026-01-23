@@ -1560,6 +1560,7 @@ def create_sale(db: Session, sale: schemas.SaleCreate, user_id: int, location_id
         # 4. Guardar detalles de pago en el JSON
         payment_details_json = [p.model_dump() for p in sale.payments]
 
+        # CREACIÓN SEGURA DE LA VENTA (FIX ERROR 500)
         db_sale = models.Sale(
             subtotal_amount=subtotal_amount,
             tax_amount=tax_amount,
@@ -1578,12 +1579,18 @@ def create_sale(db: Session, sale: schemas.SaleCreate, user_id: int, location_id
 
             user_id=user_id,
             location_id=location_id,
-            company_id=company_id, # <--- ASIGNACIÓN
-            work_order_id=sale.work_order_id,
-            items=sale_items_to_create
+            company_id=company_id, 
+            work_order_id=sale.work_order_id
+            # items=sale_items_to_create  <-- RETIRADO: No los guardamos aquí para evitar el error de ID nulo
         )
         db.add(db_sale)
-        db.flush()
+        db.flush() # ¡CRÍTICO! Aquí obtenemos el ID de la venta (db_sale.id)
+
+        # --- AHORA SÍ, GUARDAMOS LOS ÍTEMS VINCULADOS A LA VENTA ---
+        for item_obj in sale_items_to_create:
+            item_obj.sale_id = db_sale.id # Le pegamos la etiqueta de la venta
+            db.add(item_obj) # Lo mandamos a la base de datos
+        # -----------------------------------------------------------
 
         # 5. Mover inventario
         for item in sale.items:
