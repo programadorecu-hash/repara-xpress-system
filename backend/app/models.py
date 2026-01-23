@@ -127,10 +127,20 @@ class Product(Base):
     # Vinculación con Empresa
     company_id = Column(Integer, ForeignKey("companies.id"), nullable=True)
 
-    # Datos principales
+    # Datos principales (Identidad)
     sku = Column(String, index=True, nullable=False)
-    name = Column(String, index=True, nullable=False)
+    name = Column(String, index=True, nullable=False) # Nombre Generado Automáticamente
     description = Column(String, nullable=True)
+    
+    # --- NUEVO: ADN DEL PRODUCTO (ATRIBUTOS ESTRUCTURADOS) ---
+    product_type = Column(String, index=True, nullable=True) # Ej: PANTALLA, CABLE, MICA
+    brand = Column(String, index=True, nullable=True)       # Ej: SAMSUNG
+    model = Column(String, index=True, nullable=True)       # Ej: A32
+    color = Column(String, nullable=True)                   # Ej: AZUL
+    compatibility = Column(String, nullable=True)           # Ej: A52/A72
+    condition = Column(String, nullable=True)               # Ej: NUEVO, SEMI-NUEVO
+    # ---------------------------------------------------------
+
     price_1 = Column(Float)
     price_2 = Column(Float)
     price_3 = Column(Float)
@@ -155,10 +165,7 @@ class Product(Base):
     company = relationship("Company", back_populates="products")
 
     # REGLA DE INTEGRIDAD: El SKU debe ser único DENTRO de cada empresa.
-    # Esto evita duplicados accidentales, pero permite que dos empresas distintas usen el mismo SKU.
     __table_args__ = (UniqueConstraint('sku', 'company_id', name='_sku_company_uc'),)
-    # ------------------------------------
-
 class Category(Base):
     __tablename__ = "categories"
     id = Column(Integer, primary_key=True, index=True)

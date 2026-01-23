@@ -23,17 +23,25 @@ function ProductForm({ productToEdit, onSave, onClose }) {
 
   // Estado para almacenar los datos del producto que se está creando o editando.
  const [product, setProduct] = useState({
-   sku: "",
+    sku: "",
     name: "",
     description: "",
     price_1: 0,
     price_2: 0,
     price_3: 0,
-    average_cost: 0, // <-- Añadimos el estado para el costo
+    average_cost: 0,
     category_id: null,
+    supplier_id: null,
     is_active: true,
-    is_public: false, // <--- NUEVO ESTADO POR DEFECTO
+    is_public: false,
     images: [],
+    // --- NUEVO: ATRIBUTOS ESTRUCTURADOS ---
+    product_type: "", // <--- EL QUÉ (Pantalla, Cable, Mica)
+    brand: "",
+    model: "",
+    color: "",
+    compatibility: "",
+    condition: "NUEVO"
   });
 
   // Estados para la gestión de categorías y proveedores.
@@ -126,12 +134,66 @@ function ProductForm({ productToEdit, onSave, onClose }) {
         category_id: productToEdit.category?.id || null,
         supplier_id: productToEdit.supplier?.id || null, 
         images: productToEdit.images || [],
-        // --- ARREGLO ERROR REACT: Asegurar que sea booleano (true/false) ---
-        is_public: !!productToEdit.is_public, 
-        // -------------------------------------------------------------------
+        is_public: !!productToEdit.is_public,
+        // --- CARGAR ATRIBUTOS ---
+        product_type: productToEdit.product_type || "",
+        brand: productToEdit.brand || "",
+        model: productToEdit.model || "",
+        color: productToEdit.color || "",
+        compatibility: productToEdit.compatibility || "",
+        condition: productToEdit.condition || "NUEVO"
       });
     }
   }, [productToEdit]);
+  // --- CEREBRO: GENERADOR DE SKU Y NOMBRE ---
+  useEffect(() => {
+    // Si estamos editando, NO tocamos nada (para no cambiar SKUs históricos)
+    if (productToEdit) return;
+
+    // 1. Obtener código de categoría
+    const catObj = categories.find(c => c.id === parseInt(product.category_id));
+    const catCode = catObj ? catObj.name.substring(0, 3).toUpperCase() : "GEN";
+
+    // 2. Limpiar atributos
+    const clean = (str) => (str || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+    
+    const typeCode = clean(product.product_type).substring(0, 3); // Ej: PAN (Pantalla)
+    const brandCode = clean(product.brand).substring(0, 3);
+    const modelCode = clean(product.model).substring(0, 4);
+    const colorCode = clean(product.color).substring(0, 3);
+    const condCode = clean(product.condition).substring(0, 1);
+
+    // 3. GENERAR SKU: CAT-TIP-MAR-MOD
+    let autoSku = `${catCode}`;
+    if (typeCode) autoSku += `-${typeCode}`; // Agregamos el Tipo al SKU
+    if (brandCode) autoSku += `-${brandCode}`;
+    if (modelCode) autoSku += `-${modelCode}`;
+    if (colorCode) autoSku += `-${colorCode}`;
+    if (condCode) autoSku += `-${condCode}`;
+
+    // Si falta info, añadimos timestamp para evitar duplicados
+    if (autoSku.length < 8) autoSku += `-${Date.now().toString().slice(-4)}`;
+
+    // 4. GENERAR NOMBRE: TIPO + MARCA + MODELO + COLOR + CONDICION
+    let autoName = "";
+    // OJO: Ya no ponemos la Categoría primero, ponemos el TIPO (es más específico)
+    if (product.product_type) autoName += `${product.product_type} `; 
+    if (product.brand) autoName += `${product.brand} `;
+    if (product.model) autoName += `${product.model} `;
+    if (product.compatibility) autoName += `(Para ${product.compatibility}) `;
+    if (product.color) autoName += `${product.color} `;
+    if (product.condition && product.condition !== "NUEVO") autoName += `[${product.condition}]`;
+
+    // Fallback: Si no puso Tipo, usamos la Categoría como respaldo para que no quede vacío
+    if (!product.product_type && catObj) autoName = `${catObj.name} ` + autoName;
+
+    setProduct(prev => ({
+        ...prev,
+        sku: autoSku,
+        name: autoName.trim() || ""
+    }));
+  }, [product.product_type, product.brand, product.model, product.color, product.condition, product.category_id, product.compatibility]);
+
   // Maneja los cambios en los campos del formulario.
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -385,497 +447,353 @@ function ProductForm({ productToEdit, onSave, onClose }) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-60 z-40 flex items-center justify-center">
+    <div className="fixed inset-0 bg-gray-900/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-fade-in">
       <div
-        className="bg-white p-8 rounded-lg shadow-xl w-full max-w-2xl text-gray-800 overflow-y-auto max-h-[90vh]"
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl flex flex-col max-h-[90vh] overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex justify-between items-center mb-6">
-            <h2 className="text-2xl font-bold text-secondary">
-            {productToEdit ? "Editar" : "Crear"} Producto
-            </h2>
-            {/* TOGGLE MODO BLITZ (Solo al crear) */}
-            {!productToEdit && (
-                <div className="flex items-center gap-2 bg-yellow-100 px-3 py-1 rounded-full border border-yellow-300">
-                    <label className="text-sm font-bold text-yellow-800 cursor-pointer select-none" htmlFor="blitzToggle">
-                        ⚡ Modo Rápido
-                    </label>
-                    <input 
-                        id="blitzToggle"
-                        type="checkbox" 
-                        checked={isBlitzMode} 
-                        onChange={(e) => setIsBlitzMode(e.target.checked)}
-                        className="w-4 h-4 text-yellow-600 focus:ring-yellow-500 border-gray-300 rounded"
-                    />
+        
+        {/* HEADER ELEGANTE */}
+        <div className="px-8 py-6 border-b border-gray-100 flex justify-between items-start bg-gradient-to-r from-gray-50 to-white">
+            <div>
+                <h2 className="text-2xl font-extrabold text-gray-800 tracking-tight">
+                    {productToEdit ? "Editar Producto" : "Nuevo Producto"}
+                </h2>
+                <p className="text-sm text-gray-500 mt-1">
+                    {productToEdit ? "Modifica los detalles del ítem." : "Define los atributos y el sistema generará el SKU."}
+                </p>
+            </div>
+            
+            <div className="flex flex-col items-end gap-3">
+                {/* PREVISUALIZACIÓN DE SKU */}
+                <div className="bg-indigo-50 px-4 py-2 rounded-xl border border-indigo-100 text-right shadow-sm">
+                    <span className="block text-[10px] text-indigo-400 font-bold uppercase tracking-wider">SKU Generado</span>
+                    <span className="font-mono text-lg font-black text-indigo-700 tracking-tight">
+                        {product.sku || "..."}
+                    </span>
                 </div>
-            )}
+
+                {/* TOGGLE MODO BLITZ */}
+                {!productToEdit && (
+                    <label className="flex items-center gap-2 cursor-pointer group bg-white px-3 py-1.5 rounded-lg border border-gray-200 hover:border-yellow-300 transition-all shadow-sm">
+                        <input 
+                            type="checkbox" 
+                            checked={isBlitzMode} 
+                            onChange={(e) => setIsBlitzMode(e.target.checked)}
+                            className="w-4 h-4 text-yellow-500 focus:ring-yellow-400 border-gray-300 rounded"
+                        />
+                        <span className="text-xs font-bold text-gray-600 group-hover:text-yellow-600 transition-colors">⚡ Modo Rápido</span>
+                    </label>
+                )}
+            </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {/* --- CODIGO DEL FORMULARIO --- */}
-          {/* FORMULARIO EN INVENTARIOS PARA CREAR O EDITAR NUEVO PRODUCTO Y AÑADIR STOCK INICIAL*/}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="font-semibold">SKU</label>
-              <input
-                type="text"
-                name="sku"
-                value={product.sku}
-                onChange={handleChange}
-                className="w-full p-2 border rounded "
-                required
-              />
-            </div>
-            <div>
-              <label className="font-semibold">Nombre</label>
-              <input
-                type="text"
-                name="name"
-                value={product.name}
-                onChange={handleChange}
-                className="w-full p-2 border rounded "
-                required
-              />
-            </div>
-          </div>
-          {/* Descripción solo visible si NO es modo Blitz */}
-          {!isBlitzMode && (
-            <div>
-                <label className="font-semibold">Descripción</label>
-                <textarea
-                name="description"
-                value={product.description || ""}
-                onChange={handleChange}
-                className="w-full p-2 border rounded "
-                />
-            </div>
-          )}
-          <style>{noArrowsStyle}</style>
+        <div className="p-8 overflow-y-auto custom-scrollbar space-y-8">
+            <form onSubmit={handleSubmit}>
+              <style>{noArrowsStyle}</style>
 
-          {/* Fila de Precios de Venta (REORDENADA LÓGICAMENTE) */}
-          <div className={`grid grid-cols-1 ${isBlitzMode ? 'md:grid-cols-1' : 'md:grid-cols-3'} gap-4`}>
-            {/* PRECIO 3: Precio Final PVP (El más alto) */}
-            <div>
-              <label className="font-bold text-gray-700 text-sm">Precio Final (PVP)</label>
-              <div className="relative">
-                <span className="absolute left-3 top-2 text-gray-400">$</span>
-                <input
-                  type="number"
-                  step="0.01"
-                  name="price_3"
-                  // [ARREGLO] Si es 0, mostramos vacío para que puedas escribir
-                  value={product.price_3 === 0 ? "" : product.price_3}
-                  onChange={handleChange}
-                  className="w-full p-2 pl-6 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none font-bold text-gray-800"
-                  placeholder="0.00"
-                />
-              </div>
-            </div>
-
-            {/* PRECIOS SECUNDARIOS: Ocultos en modo Blitz para ir rápido */}
-            {!isBlitzMode && (
-                <>
-                    {/* PRECIO 2: Descuento */}
-                    <div>
-                    <label className="font-semibold text-gray-600 text-sm">Con Descuento</label>
-                    <div className="relative">
-                        <span className="absolute left-3 top-2 text-gray-400">$</span>
-                        <input
-                        type="number"
-                        step="0.01"
-                        name="price_2"
-                        value={product.price_2 === 0 ? "" : product.price_2}
-                        onChange={handleChange}
-                        className="w-full p-2 pl-6 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
-                        placeholder="0.00"
+              {/* SECCIÓN 1: DEFINICIÓN DEL PRODUCTO */}
+              <div className="space-y-4">
+                 <div className="flex items-center gap-3 mb-2">
+                    <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-sm">1</div>
+                    <h3 className="text-sm font-bold text-gray-700 uppercase tracking-wide">Identidad del Producto</h3>
+                 </div>
+                 
+                 <div className="bg-gray-50/50 p-6 rounded-2xl border border-gray-200/60 shadow-sm grid grid-cols-1 md:grid-cols-6 gap-5 transition-all focus-within:border-blue-300 focus-within:ring-4 focus-within:ring-blue-50/50">
+                    
+                    {/* TIPO DE PRODUCTO (FULL WIDTH) */}
+                    <div className="md:col-span-6">
+                       <label className="block text-xs font-bold text-gray-500 uppercase mb-1.5 ml-1">¿Qué es? (Tipo)</label>
+                       <input 
+                            type="text" 
+                            name="product_type" 
+                            value={product.product_type || ""} 
+                            onChange={handleChange} 
+                            placeholder="Ej: PANTALLA, CABLE, PARLANTE..." 
+                            className="w-full px-4 py-3 bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none font-bold text-blue-900 placeholder-gray-300 transition-all text-sm uppercase shadow-sm" 
+                            autoFocus={!productToEdit} 
                         />
                     </div>
+
+                    {/* MARCA */}
+                    <div className="md:col-span-2">
+                       <label className="block text-xs font-bold text-gray-500 uppercase mb-1.5 ml-1">Marca</label>
+                       <input type="text" name="brand" value={product.brand || ""} onChange={handleChange} placeholder="Ej: SAMSUNG" className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-sm uppercase transition-all shadow-sm" />
                     </div>
 
-                    {/* PRECIO 1: PRECIO DISTRIBUIDOR (El que sale en la web pública) */}
-                    <div>
-                    <label className="font-bold text-blue-600 text-sm">Precio para Distribuidor (Web)</label>
-                    <div className="relative">
-                        <span className="absolute left-3 top-2 text-gray-400">$</span>
-                        <input
-                        type="number"
-                        step="0.01"
-                        name="price_1"
-                        value={product.price_1 === 0 ? "" : product.price_1}
-                        onChange={handleChange}
-                        className="w-full p-2 pl-6 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
-                        placeholder="0.00"
-                        />
+                    {/* MODELO */}
+                    <div className="md:col-span-2">
+                       <label className="block text-xs font-bold text-gray-500 uppercase mb-1.5 ml-1">Modelo</label>
+                       <input type="text" name="model" value={product.model || ""} onChange={handleChange} placeholder="Ej: A32" className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-sm uppercase transition-all shadow-sm" />
                     </div>
+
+                    {/* COLOR */}
+                    <div className="md:col-span-2">
+                       <label className="block text-xs font-bold text-gray-500 uppercase mb-1.5 ml-1">Color</label>
+                       <input type="text" name="color" value={product.color || ""} onChange={handleChange} placeholder="Ej: NEGRO" className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-sm uppercase transition-all shadow-sm" />
                     </div>
-                </>
-            )}
-          </div>
 
-          {/* Campo de Costo Promedio (Oculto en Blitz) */}
-          {!isBlitzMode && (
-            <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 mt-2">
-                <div className="flex justify-between items-center mb-1">
-                    <label className="font-bold text-gray-700 text-sm">Costo Promedio (Interno)</label>
-                    {!canEditCost && <span className="text-xs text-red-500 bg-red-50 px-2 py-1 rounded">Solo Admin</span>}
-                </div>
-                <p className="text-xs text-gray-500 mb-2">
-                Costo real de compra. Se actualiza automáticamente con las facturas.
-                </p>
-                <div className="relative">
-                    <span className="absolute left-3 top-2 text-gray-500">$</span>
-                    <input
-                    type="number"
-                    step="0.0001" // Más precisión para costos
-                    name="average_cost"
-                    value={product.average_cost === 0 ? "" : product.average_cost}
-                    onChange={handleChange}
-                    disabled={!canEditCost}
-                    className={`w-full p-2 pl-6 border rounded outline-none ${!canEditCost ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : 'bg-white border-gray-300 focus:ring-2 focus:ring-blue-500'}`}
-                    placeholder="0.00"
-                    />
-                </div>
-            </div>
-          )}
+                    {/* SEGUNDA FILA DE ATRIBUTOS */}
+                    <div className="md:col-span-3">
+                       <label className="block text-xs font-bold text-gray-500 uppercase mb-1.5 ml-1">Compatibilidad</label>
+                       <input type="text" name="compatibility" value={product.compatibility || ""} onChange={handleChange} placeholder="Ej: A52 / A72 (Opcional)" className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-sm uppercase transition-all shadow-sm" />
+                    </div>
+                    
+                    <div className="md:col-span-3">
+                       <label className="block text-xs font-bold text-gray-500 uppercase mb-1.5 ml-1">Condición</label>
+                       <div className="relative">
+                            <select name="condition" value={product.condition || "NUEVO"} onChange={handleChange} className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-sm appearance-none shadow-sm cursor-pointer">
+                                <option value="NUEVO">✨ NUEVO</option>
+                                <option value="USADO">🔄 USADO / SEMI</option>
+                                <option value="GENERICO">📦 GENÉRICO</option>
+                            </select>
+                            <div className="absolute inset-y-0 right-0 flex items-center px-3 pointer-events-none text-gray-500">
+                                <svg className="w-4 h-4 fill-current" viewBox="0 0 20 20"><path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" fillRule="evenodd"></path></svg>
+                            </div>
+                       </div>
+                    </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* SECCIÓN CATEGORÍA */}
-            <div>
-                <label className="font-semibold">Categoría</label>
-                <div className="flex items-center space-x-2">
-                <select
-                    name="category_id"
-                    value={product.category_id || ""}
-                    onChange={handleChange}
-                    className="w-full p-2 border rounded "
-                >
-                    <option value="">Sin Categoría</option>
-                    {categories.map((cat) => (
-                    <option key={cat.id} value={cat.id}>
-                        {cat.name}
-                    </option>
-                    ))}
-                </select>
-                <button
-                    type="button"
-                    onClick={() => setIsCreatingCategory(true)}
-                    className="px-3 py-2 bg-gray-200 rounded hover:bg-gray-300"
-                    title="Nueva Categoría"
-                >
-                    +
-                </button>
-                </div>
-            </div>
-
-            {/* SECCIÓN PROVEEDOR */}
-            <div>
-                <label className="font-semibold">Proveedor (Origen)</label>
-                <div className="flex items-center space-x-2">
-                    <select
-                        name="supplier_id"
-                        value={product.supplier_id || ""}
-                        onChange={handleChange}
-                        className="w-full p-2 border rounded"
-                    >
-                        <option value="">-- Seleccionar Proveedor --</option>
-                        {suppliers.map((sup) => (
-                        <option key={sup.id} value={sup.id}>
-                            {sup.name}
-                        </option>
-                        ))}
-                    </select>
-                    <button
-                        type="button"
-                        onClick={() => setIsCreatingSupplier(true)}
-                        className="px-3 py-2 bg-gray-200 rounded hover:bg-gray-300 font-bold"
-                        title="Nuevo Proveedor"
-                    >
-                        +
-                    </button>
-                </div>
-            </div>
-          </div>
-
-          {/* FORMULARIO RÁPIDO PARA NUEVO PROVEEDOR */}
-          {isCreatingSupplier && (
-            <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg mt-2">
-              <label className="font-semibold text-blue-800 text-sm">
-                Nombre del Nuevo Proveedor
-              </label>
-              <div className="flex items-center space-x-2 mt-2">
-                <input
-                  type="text"
-                  value={newSupplierName}
-                  // Nombre en mayúsculas
-                  onChange={(e) => setNewSupplierName(e.target.value.toUpperCase())}
-                  className="w-full p-2 border rounded bg-white"
-                  placeholder="Ej: DISTRIBUIDORA XYZ"
-                  autoFocus
-                />
-                <button
-                  type="button"
-                  onClick={handleCreateSupplier}
-                  className="py-2 px-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-bold shadow-sm"
-                >
-                  Guardar
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setIsCreatingSupplier(false)}
-                  className="py-2 px-4 text-gray-500 hover:text-red-500 font-bold"
-                >
-                  X
-                </button>
+                    {/* NOMBRE GENERADO (VISUALIZACIÓN) */}
+                    <div className="md:col-span-6 mt-2">
+                        <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1 ml-1">Vista Previa del Nombre</label>
+                        <div className="w-full p-3 bg-gray-100 rounded-xl border border-gray-200 text-gray-600 font-bold text-sm tracking-wide">
+                            {product.name || "..."}
+                        </div>
+                    </div>
+                 </div>
               </div>
-            </div>
-          )}
-          
-          {/* SECCIÓN CREAR CATEGORÍA (Condicional) */}
-          {isCreatingCategory && (
-            <div className="p-4 bg-gray-100 rounded-lg">
-              <label className="font-semibold">
-                Nombre de la Nueva Categoría
-              </label>
-              <div className="flex items-center space-x-2 mt-2">
-                <input
-                  type="text"
-                  value={newCategoryName}
-                  // Categoría en mayúsculas
-                  onChange={(e) => setNewCategoryName(e.target.value.toUpperCase())}
-                  className="w-full p-2 border rounded"
-                  placeholder="Ej: Accesorios de Celular"
-                />
-                <button
-                  type="button"
-                  onClick={handleCreateCategory}
-                  className="py-2 px-4 bg-accent text-white rounded-lg"
-                >
-                  Guardar
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setIsCreatingCategory(false)}
-                  className="py-2 px-4"
-                >
-                  X
-                </button>
-              </div>
-            </div>
-          )}
-          <div className="flex flex-col sm:flex-row sm:items-center gap-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
-            {/* Checkbox Activo (Interno) */}
-            <div className="flex items-center">
-              <input
-                type="checkbox"
-                name="is_active"
-                checked={product.is_active}
-                onChange={handleChange}
-                className="h-5 w-5 text-blue-600 rounded focus:ring-blue-500 border-gray-300"
-              />
-              <label className="ml-2 font-semibold text-gray-700">Activo (Interno)</label>
-            </div>
 
-            {/* Checkbox Público (Externo) */}
-            <div className="flex items-center">
-              <div className="relative flex items-start">
-                <div className="flex h-5 items-center">
-                  <input
-                    id="is_public"
-                    name="is_public"
-                    type="checkbox"
-                    checked={product.is_public}
-                    onChange={handleChange}
-                    className="h-5 w-5 text-green-600 rounded focus:ring-green-500 border-gray-300"
-                  />
-                </div>
-                <div className="ml-2 text-sm">
-                  <label htmlFor="is_public" className="font-bold text-gray-800 flex items-center gap-1 cursor-pointer">
-                    <HiOutlineGlobeAlt className="w-5 h-5 text-green-600" />
-                    Publicar en Catálogo Web
-                  </label>
-                  <p className="text-gray-500 text-xs">Visible para otros técnicos en el buscador.</p>
-                </div>
-              </div>
-            </div>
-          </div>
-          {/* --- FIN DEL CÓDIGO RESTAURADO --- */}
+              {/* SECCIÓN 2: PRECIOS (VERDE) */}
+              <div className="space-y-4 pt-4">
+                 <div className="flex items-center gap-3 mb-2">
+                    <div className="w-8 h-8 rounded-full bg-green-100 text-green-600 flex items-center justify-center font-bold text-sm">2</div>
+                    <h3 className="text-sm font-bold text-gray-700 uppercase tracking-wide">Precios y Finanzas</h3>
+                 </div>
 
-          <div className="mt-6 flex justify-end space-x-4">
+                 <div className="bg-green-50/50 p-6 rounded-2xl border border-green-100 shadow-sm grid grid-cols-1 md:grid-cols-3 gap-6">
+                    {/* PVP (EL IMPORTANTE) */}
+                    <div className="relative group">
+                        <label className="block text-xs font-bold text-green-700 uppercase mb-1.5 ml-1">Precio Público (PVP)</label>
+                        <div className="relative">
+                            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-green-600 font-bold text-lg">$</span>
+                            <input 
+                                type="number" step="0.01" name="price_3" 
+                                value={product.price_3 === 0 ? "" : product.price_3} 
+                                onChange={handleChange} 
+                                className="w-full pl-8 pr-4 py-3 bg-white border border-green-300 rounded-xl focus:ring-4 focus:ring-green-100 focus:border-green-500 outline-none font-bold text-2xl text-green-800 placeholder-green-200/50 shadow-sm transition-all" 
+                                placeholder="0.00" 
+                            />
+                        </div>
+                    </div>
+
+                    {!isBlitzMode && (
+                        <>
+                            <div>
+                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1.5 ml-1">Precio Taller</label>
+                                <div className="relative">
+                                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">$</span>
+                                    <input 
+                                        type="number" step="0.01" name="price_2" 
+                                        value={product.price_2 === 0 ? "" : product.price_2} 
+                                        onChange={handleChange} 
+                                        className="w-full pl-8 pr-4 py-3 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-gray-200 outline-none text-gray-700 placeholder-gray-300 transition-all shadow-sm" 
+                                        placeholder="0.00" 
+                                    />
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-blue-500 uppercase mb-1.5 ml-1">Precio Web</label>
+                                <div className="relative">
+                                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">$</span>
+                                    <input 
+                                        type="number" step="0.01" name="price_1" 
+                                        value={product.price_1 === 0 ? "" : product.price_1} 
+                                        onChange={handleChange} 
+                                        className="w-full pl-8 pr-4 py-3 bg-white border border-blue-200 rounded-xl focus:ring-2 focus:ring-blue-100 outline-none text-blue-800 font-semibold placeholder-gray-300 transition-all shadow-sm" 
+                                        placeholder="0.00" 
+                                    />
+                                </div>
+                            </div>
+                        </>
+                    )}
+
+                    {/* COSTO (Solo visible si no es Blitz) */}
+                    {!isBlitzMode && (
+                        <div className="md:col-span-3 pt-4 mt-2 border-t border-green-200/50 flex flex-col md:flex-row gap-4 items-center">
+                            <div className="flex-1 w-full">
+                                <label className="flex items-center gap-2 text-xs font-bold text-gray-400 uppercase mb-1.5 ml-1">
+                                    Costo Promedio
+                                    {!canEditCost && <span className="bg-red-50 text-red-500 text-[10px] px-1.5 py-0.5 rounded border border-red-100">LOCKED</span>}
+                                </label>
+                                <div className="relative">
+                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
+                                    <input 
+                                        type="number" step="0.0001" name="average_cost" 
+                                        value={product.average_cost === 0 ? "" : product.average_cost} 
+                                        onChange={handleChange} 
+                                        disabled={!canEditCost}
+                                        className={`w-full pl-6 pr-3 py-2 border rounded-lg text-sm outline-none transition-all ${!canEditCost ? 'bg-gray-100 text-gray-400 cursor-not-allowed border-gray-200' : 'bg-white border-gray-300 focus:border-blue-400 focus:ring-2 focus:ring-blue-50'}`} 
+                                        placeholder="0.00" 
+                                    />
+                                </div>
+                            </div>
+                            
+                            {/* PROVEEDOR */}
+                            <div className="flex-1 w-full">
+                                <label className="block text-xs font-bold text-gray-400 uppercase mb-1.5 ml-1">Proveedor</label>
+                                <div className="flex gap-2">
+                                    <select name="supplier_id" value={product.supplier_id || ""} onChange={handleChange} className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-50 shadow-sm">
+                                        <option value="">-- Seleccionar --</option>
+                                        {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                                    </select>
+                                    <button type="button" onClick={() => setIsCreatingSupplier(true)} className="px-3 py-2 bg-blue-50 text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors font-bold">+</button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                 </div>
+              </div>
+
+              {/* SECCIÓN 3: CLASIFICACIÓN Y EXTRAS */}
+              {!isBlitzMode && (
+                  <div className="space-y-4 pt-4">
+                     <div className="flex items-center gap-3 mb-2">
+                        <div className="w-8 h-8 rounded-full bg-gray-100 text-gray-500 flex items-center justify-center font-bold text-sm">3</div>
+                        <h3 className="text-sm font-bold text-gray-700 uppercase tracking-wide">Clasificación</h3>
+                     </div>
+                     
+                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-gray-50 p-6 rounded-2xl border border-gray-100 shadow-sm">
+                        {/* CATEGORÍA */}
+                        <div>
+                            <label className="block text-xs font-bold text-gray-500 uppercase mb-1.5 ml-1">Categoría</label>
+                            <div className="flex gap-2">
+                                <select name="category_id" value={product.category_id || ""} onChange={handleChange} className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent shadow-sm">
+                                    <option value="">-- General --</option>
+                                    {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                </select>
+                                <button type="button" onClick={() => setIsCreatingCategory(true)} className="px-4 py-2.5 bg-indigo-50 text-indigo-600 border border-indigo-200 rounded-xl hover:bg-indigo-100 transition-colors font-bold">+</button>
+                            </div>
+                        </div>
+
+                        {/* DESCRIPCIÓN */}
+                        <div>
+                            <label className="block text-xs font-bold text-gray-500 uppercase mb-1.5 ml-1">Detalles Adicionales</label>
+                            <textarea name="description" value={product.description || ""} onChange={handleChange} rows="1" className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none shadow-sm" placeholder="Ej: Incluye cargador..."></textarea>
+                        </div>
+                     </div>
+                  </div>
+              )}
+
+              {/* SWITCHES DE VISIBILIDAD */}
+              <div className="flex flex-col sm:flex-row gap-4 pt-2">
+                 <label className="flex-1 flex items-center p-4 bg-gray-50 rounded-xl border border-gray-200 cursor-pointer hover:bg-gray-100 transition-colors">
+                    <input type="checkbox" name="is_active" checked={product.is_active} onChange={handleChange} className="w-5 h-5 text-indigo-600 rounded focus:ring-indigo-500 border-gray-300" />
+                    <div className="ml-3">
+                        <span className="block text-sm font-bold text-gray-700">Producto Activo</span>
+                        <span className="block text-xs text-gray-400">Disponible para vender en POS</span>
+                    </div>
+                 </label>
+
+                 <label className={`flex-1 flex items-center p-4 rounded-xl border cursor-pointer transition-all ${product.is_public ? 'bg-teal-50 border-teal-200' : 'bg-gray-50 border-gray-200 hover:bg-gray-100'}`}>
+                    <input type="checkbox" name="is_public" checked={product.is_public} onChange={handleChange} className="w-5 h-5 text-teal-600 rounded focus:ring-teal-500 border-gray-300" />
+                    <div className="ml-3">
+                        <span className={`block text-sm font-bold ${product.is_public ? 'text-teal-800' : 'text-gray-700'}`}>
+                            <HiOutlineGlobeAlt className="inline mr-1 text-lg mb-0.5"/> Publicar en Web
+                        </span>
+                        <span className={`block text-xs ${product.is_public ? 'text-teal-600' : 'text-gray-400'}`}>Visible en el buscador global</span>
+                    </div>
+                 </label>
+              </div>
+
+              {/* MODALES FLOTANTES (CATEGORÍA / PROVEEDOR) */}
+              {isCreatingCategory && (
+                <div className="absolute inset-0 bg-white/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 rounded-2xl animate-fade-in">
+                    <div className="bg-white p-6 rounded-2xl shadow-2xl border border-gray-100 w-full max-w-sm">
+                        <h4 className="font-bold text-gray-800 mb-4 text-center">Nueva Categoría</h4>
+                        <input autoFocus type="text" value={newCategoryName} onChange={e => setNewCategoryName(e.target.value.toUpperCase())} className="w-full p-3 border border-gray-300 rounded-xl mb-4 text-center font-bold uppercase" placeholder="NOMBRE..."/>
+                        <div className="flex gap-2">
+                            <button onClick={() => setIsCreatingCategory(false)} className="flex-1 py-3 bg-gray-100 text-gray-600 rounded-xl font-bold hover:bg-gray-200">Cancelar</button>
+                            <button onClick={handleCreateCategory} className="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 shadow-lg shadow-indigo-200">Crear</button>
+                        </div>
+                    </div>
+                </div>
+              )}
+
+              {isCreatingSupplier && (
+                <div className="absolute inset-0 bg-white/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 rounded-2xl animate-fade-in">
+                    <div className="bg-white p-6 rounded-2xl shadow-2xl border border-gray-100 w-full max-w-sm">
+                        <h4 className="font-bold text-gray-800 mb-4 text-center">Nuevo Proveedor</h4>
+                        <input autoFocus type="text" value={newSupplierName} onChange={e => setNewSupplierName(e.target.value.toUpperCase())} className="w-full p-3 border border-gray-300 rounded-xl mb-4 text-center font-bold uppercase" placeholder="NOMBRE EMPRESA..."/>
+                        <div className="flex gap-2">
+                            <button onClick={() => setIsCreatingSupplier(false)} className="flex-1 py-3 bg-gray-100 text-gray-600 rounded-xl font-bold hover:bg-gray-200">Cancelar</button>
+                            <button onClick={handleCreateSupplier} className="flex-1 py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 shadow-lg shadow-blue-200">Crear</button>
+                        </div>
+                    </div>
+                </div>
+              )}
+            </form>
+        </div>
+
+        {/* --- FOOTER FLOTANTE (BOTONES DE ACCIÓN) --- */}
+        <div className="p-6 border-t border-gray-100 bg-gray-50 flex justify-end gap-3 rounded-b-2xl">
             <button
               type="button"
               onClick={onClose}
-              className="py-2 px-4 bg-gray-200 rounded-lg hover:bg-gray-300"
+              className="px-6 py-3 bg-white text-gray-600 border border-gray-200 rounded-xl font-bold hover:bg-gray-100 hover:text-gray-800 transition shadow-sm"
             >
               Cancelar
             </button>
             <button
-              type="submit"
-              className="py-2 px-4 bg-accent text-white font-bold rounded-lg hover:bg-teal-600"
+              onClick={handleSubmit} // El botón dispara el submit del form manualmente
+              className="px-8 py-3 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white rounded-xl font-bold shadow-lg shadow-indigo-200 transition transform active:scale-95 flex items-center gap-2"
             >
-              Guardar Producto
+              <HiOutlineCloudUpload className="text-xl"/>
+              {productToEdit ? "Guardar Cambios" : "Crear Producto"}
             </button>
-          </div>
-        </form>
+        </div>
 
+        {/* --- GALERÍA DE IMÁGENES (SOLO SI EXISTE) --- */}
         {productToEdit && (
-          <div className="mt-8 border-t pt-6">
-            <h3 className="text-xl font-bold text-secondary mb-4">
-              Galería de Imágenes
-            </h3>
-            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-4 mb-4">
-              {product.images.map((image) => (
-                <div key={image.id} className="relative group">
-                  <img
-                    // Usamos la "agenda" para saber dónde está el almacén
-                    src={`${
-                      import.meta.env.VITE_API_URL || "http://localhost:8000"
-                    }${image.image_url}`}
-                    alt={product.name}
-                    className="w-full h-24 object-cover rounded-lg shadow-md"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => handleImageDelete(image.id)}
-                    className="absolute top-0 right-0 bg-red-500 text-white rounded-full h-6 w-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                    title="Eliminar imagen"
-                  >
-                    &times;
-                  </button>
-                </div>
-              ))}
-            </div>
-
-            <div className="p-5 bg-gray-50 rounded-xl border border-gray-200">
-              <label className="font-bold text-gray-700 block mb-4 text-center">
-                Añadir Nueva Imagen
-              </label>
-
-              {/* Input Oculto (La tubería invisible) */}
-              <input
-                type="file"
-                accept="image/*"
-                ref={fileInputRef} // Conectamos el control remoto
-                onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
-                className="hidden" // ¡Invisible!
-              />
-
-              {!selectedFile ? (
-                // OPCIÓN A: NO HAY ARCHIVO SELECCIONADO -> MOSTRAR BOTONES GRANDES
-                <div className="grid grid-cols-2 gap-4">
-                  {/* Botón 1: Cámara */}
-                  <button
-                    type="button"
-                    onClick={openCamera}
-                    className="flex flex-col items-center justify-center p-6 bg-white border-2 border-dashed border-gray-300 rounded-xl hover:border-accent hover:bg-teal-50 transition-all group"
-                  >
-                    <div className="bg-teal-100 p-3 rounded-full mb-2 group-hover:bg-teal-200 transition-colors">
-                        <HiOutlineCamera className="w-8 h-8 text-accent" />
-                    </div>
-                    <span className="font-bold text-gray-600 group-hover:text-accent">Tomar Foto</span>
-                  </button>
-
-                  {/* Botón 2: Galería / Archivos */}
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current.click()} // Clic al input oculto
-                    className="flex flex-col items-center justify-center p-6 bg-white border-2 border-dashed border-gray-300 rounded-xl hover:border-blue-500 hover:bg-blue-50 transition-all group"
-                  >
-                    <div className="bg-blue-100 p-3 rounded-full mb-2 group-hover:bg-blue-200 transition-colors">
-                        <HiOutlinePhotograph className="w-8 h-8 text-blue-600" />
-                    </div>
-                    <span className="font-bold text-gray-600 group-hover:text-blue-600">Subir Archivo</span>
-                  </button>
-                </div>
-              ) : (
-                // OPCIÓN B: ARCHIVO SELECCIONADO -> MOSTRAR PREVISUALIZACIÓN Y CONFIRMAR
-                <div className="bg-white p-4 rounded-xl border border-blue-200 shadow-sm flex items-center justify-between animate-fade-in">
-                  <div className="flex items-center gap-3 overflow-hidden">
-                    <div className="bg-blue-100 p-2 rounded-lg">
-                        <HiOutlinePhotograph className="w-6 h-6 text-blue-600" />
-                    </div>
-                    <div className="min-w-0">
-                        <p className="text-sm font-bold text-gray-800 truncate max-w-[150px]">{selectedFile.name}</p>
-                        <p className="text-xs text-green-600 font-semibold">Listo para subir</p>
-                    </div>
-                  </div>
-                  
-                  <div className="flex gap-2">
-                    <button
-                        type="button"
-                        onClick={() => setSelectedFile(null)}
-                        className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition"
-                        title="Cancelar"
-                    >
-                        <HiOutlineTrash className="w-5 h-5" />
-                    </button>
-                    <button
-                        type="button"
-                        onClick={() => handleImageUpload()}
-                        disabled={isUploading}
-                        className="flex items-center gap-2 py-2 px-4 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 shadow-md transition-all active:scale-95 disabled:bg-gray-400"
-                    >
-                        {isUploading ? "..." : <><HiOutlineCloudUpload className="w-5 h-5"/> Subir</>}
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* MODAL DE CÁMARA (Solo visible si se activa) */}
-              {isCameraOpen && (
-                  <div
-                    className="fixed inset-0 bg-black bg-opacity-80 z-50 flex items-center justify-center p-4"
-                    onClick={closeCamera}
-                  >
-                    <div
-                      className="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-4 overflow-hidden"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <h4 className="text-lg font-bold text-gray-800 mb-3 text-center">
-                        Capturar Foto
-                      </h4>
-
-                      {cameraError && (
-                        <div className="bg-red-100 text-red-700 p-3 rounded-lg mb-3 text-sm text-center">
-                          {cameraError}
+            <div className="px-8 pb-8 pt-2 bg-gray-50">
+                <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">Evidencia Fotográfica</h3>
+                <div className="grid grid-cols-4 sm:grid-cols-6 gap-3">
+                    {product.images.map((image) => (
+                        <div key={image.id} className="relative group aspect-square bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden cursor-pointer hover:shadow-md transition-all">
+                            <img src={`${import.meta.env.VITE_API_URL || "http://localhost:8000"}${image.image_url}`} alt="Prod" className="w-full h-full object-cover" />
+                            <button onClick={() => handleImageDelete(image.id)} className="absolute top-1 right-1 bg-white/90 text-red-500 rounded-full p-1.5 shadow-sm opacity-0 group-hover:opacity-100 transition-all hover:bg-red-50">
+                                <HiOutlineTrash/>
+                            </button>
                         </div>
-                      )}
-
-                      <div className="bg-black rounded-xl overflow-hidden shadow-inner aspect-[4/3] relative">
-                        <video
-                          ref={videoRef}
-                          autoPlay
-                          playsInline
-                          muted
-                          className="w-full h-full object-cover"
-                        />
-                      </div>
-
-                      {/* Canvas oculto */}
-                      <canvas ref={canvasRef} className="hidden" />
-
-                      <div className="grid grid-cols-2 gap-4 mt-6">
-                        <button
-                          type="button"
-                          onClick={closeCamera}
-                          className="py-3 px-4 bg-gray-100 text-gray-700 font-bold rounded-xl hover:bg-gray-200 transition"
-                        >
-                          Cancelar
-                        </button>
-                        <button
-                          type="button"
-                          onClick={takePhotoAndUpload}
-                          className="py-3 px-4 bg-accent text-white font-bold rounded-xl hover:bg-teal-600 shadow-lg flex justify-center items-center gap-2"
-                        >
-                          <HiOutlineCamera className="w-5 h-5" />
-                          Capturar
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                )}
+                    ))}
+                    
+                    {/* Botón Subir Foto */}
+                    <button onClick={() => fileInputRef.current.click()} className="flex flex-col items-center justify-center aspect-square bg-white border-2 border-dashed border-indigo-200 rounded-xl hover:bg-indigo-50/50 hover:border-indigo-400 transition-all group">
+                        <div className="p-2 bg-indigo-50 text-indigo-500 rounded-full group-hover:bg-indigo-100 group-hover:text-indigo-600 transition-colors mb-1">
+                            <HiOutlineCamera className="text-xl"/>
+                        </div>
+                        <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-wide">Añadir</span>
+                    </button>
+                </div>
             </div>
-          </div>
         )}
+
+        {/* INPUTS OCULTOS Y MODALES DE CÁMARA */}
+        <input type="file" accept="image/*" ref={fileInputRef} onChange={(e) => { setSelectedFile(e.target.files[0]); handleImageUpload(e.target.files[0]); }} className="hidden" />
+        
+        {isCameraOpen && (
+            <div className="fixed inset-0 bg-black z-[60] flex flex-col">
+                <div className="flex-1 bg-black relative">
+                    <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-contain" />
+                </div>
+                <div className="h-24 bg-black flex items-center justify-between px-8 pb-4">
+                    <button onClick={closeCamera} className="text-white text-sm font-bold">Cancelar</button>
+                    <button onClick={takePhotoAndUpload} className="w-16 h-16 bg-white rounded-full border-4 border-gray-300 shadow-lg active:scale-90 transition-transform"></button>
+                    <div className="w-10"></div> {/* Espaciador */}
+                </div>
+                <canvas ref={canvasRef} className="hidden" />
+            </div>
+        )}
+
       </div>
     </div>
   );

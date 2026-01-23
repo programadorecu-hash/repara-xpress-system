@@ -106,9 +106,14 @@ def get_products(db: Session, company_id: int, skip: int = 0, limit: int = 100, 
     if search:
         search_term = f"%{search.lower()}%"
         base_query = base_query.filter(
-            (func.lower(models.Product.name).like(search_term)) |
-            (func.lower(models.Product.sku).like(search_term)) |
-            (func.lower(models.Product.description).like(search_term))
+            or_(
+                func.lower(models.Product.name).like(search_term),
+                func.lower(models.Product.sku).like(search_term),
+                func.lower(models.Product.product_type).like(search_term), # Buscar por Tipo (Pantalla, Cable...)
+                func.lower(models.Product.brand).like(search_term), 
+                func.lower(models.Product.model).like(search_term), 
+                func.lower(models.Product.description).like(search_term)
+            )
         )
 
     # Ejecutar la primera consulta para obtener los productos y stock local
@@ -501,11 +506,14 @@ def search_global_parts(db: Session, query: str, limit: int = 50):
         models.Company.is_active == True, # <--- Único requisito: Que la empresa pague su mensualidad
         models.Product.is_active == True, # El producto debe existir
         models.Product.is_public == True, # <--- FILTRO VITAL: El técnico decidió hacerlo público
-        # Búsqueda flexible en nombre o descripción
+        # Búsqueda flexible en nombre, descripción, marca o modelo
         or_(
             func.lower(models.Product.name).like(search_term),
             func.lower(models.Product.description).like(search_term),
-            func.lower(models.Product.sku).like(search_term)
+            func.lower(models.Product.sku).like(search_term),
+            func.lower(models.Product.product_type).like(search_term),
+            func.lower(models.Product.brand).like(search_term),
+            func.lower(models.Product.model).like(search_term)
         )
     ).limit(limit).all()
 

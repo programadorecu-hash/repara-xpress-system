@@ -93,19 +93,25 @@ class ProductBase(BaseModel):
     sku: str
     name: str
     description: str | None = None
+    
+    # --- NUEVO: ATRIBUTOS ---
+    product_type: str | None = None
+    brand: str | None = None
+    model: str | None = None
+    color: str | None = None
+    compatibility: str | None = None
+    condition: str | None = None
+    # ------------------------
+
     price_1: float
     price_2: float
     price_3: float
-    # Hacemos explícito que este campo es parte del formulario base
     average_cost: float = 0.0 
     is_active: bool = True
-    
-    # --- CORRECCIÓN ERROR 500: Aceptamos None para productos viejos ---
     is_public: bool | None = False 
-    # ------------------------------------------------------------------
 
     category_id: int | None = None
-    supplier_id: int | None = None # <--- NUEVO CAMPO
+    supplier_id: int | None = None
     
 class ProductImageBase(BaseModel):
     image_url: str
