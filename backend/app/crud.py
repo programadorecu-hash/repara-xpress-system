@@ -1482,48 +1482,59 @@ def create_sale(db: Session, sale: schemas.SaleCreate, user_id: int, location_id
             db.add(new_customer)
         # --- FIN LÓGICA CLIENTE INTELIGENTE ---
 
-        # --- SOLUCIÓN AL PROBLEMA DEL DOBLE INGRESO ---
-        # Si esta venta es el cierre de una orden, debemos ANULAR la venta del anticipo 
-        # para que la nueva venta la reemplace completamente.
-        if sale.work_order_id:
-            db_work_order = get_work_order(db, work_order_id=sale.work_order_id)
-            
-            # Verificamos si la orden ya tiene una venta asociada (el anticipo)
-            if db_work_order and db_work_order.sale:
-                # ¡AQUÍ ESTÁ LA SOLUCIÓN! 
-                # Eliminamos la venta anterior (el anticipo) de la base de datos
-                # para que no cuente doble en el reporte financiero.
-                # El dinero del anticipo se vuelve a registrar en esta nueva venta como "ANTICIPO".
-                db.delete(db_work_order.sale)
-                db.flush() # Aplicamos la eliminación antes de crear la nueva
-
-            if db_work_order and (db_work_order.deposit_amount or 0) > 0:
-                real_total = db_work_order.final_cost if db_work_order.final_cost is not None else db_work_order.estimated_cost
-                pending_balance = real_total - db_work_order.deposit_amount
+        # --- SOLUCIÓN ROBUSTA: CONSOLIDACIÓN DE ORDEN Y VENTA ---
+            # Si esta venta cierra una orden, debemos fusionar el historial.
+            if sale.work_order_id:
+                db_work_order = get_work_order(db, work_order_id=sale.work_order_id)
                 
-                amount_paying_now = sum(p.amount for p in sale.payments)
+                # 1. Si la orden ya tenía una venta de abono registrada, la borramos
+                # para reemplazarla por esta "Venta Maestra" que incluye todo.
+                if db_work_order and db_work_order.sale:
+                    db.delete(db_work_order.sale)
+                    db.flush() 
 
-                if abs(amount_paying_now - pending_balance) < 0.02:
+                # 2. Lógica de Fusión de Pagos (Si hubo abono)
+                if db_work_order and (db_work_order.deposit_amount or 0) > 0:
+                    # Costo total real de la reparación
+                    real_repair_total = db_work_order.final_cost if db_work_order.final_cost is not None else db_work_order.estimated_cost
+                    # Lo que faltaba por pagar solo de la reparación
+                    repair_pending_balance = real_repair_total - db_work_order.deposit_amount
                     
-                    if sale.items:
-                        sale.items[0].unit_price = real_total
+                    # A. ENCONTRAR Y ACTUALIZAR EL ÍTEM DE REPARACIÓN
+                    # Buscamos en el carrito cuál es el ítem que corresponde a la reparación.
+                    # Lógica: Es el ítem que no es producto (product_id=None) y cuyo precio se parece al saldo pendiente.
+                    repair_item_found = False
+                    for item in sale.items:
+                        # Si es un servicio (product_id None) y su precio es cercano al saldo pendiente
+                        if item.product_id is None and abs(item.unit_price - repair_pending_balance) < 0.05:
+                            # ¡Lo encontramos! Actualizamos su precio al VALOR TOTAL (no solo el saldo)
+                            item.unit_price = real_repair_total
+                            # Recalculamos el total de la venta sumando el abono que faltaba
+                            repair_item_found = True
+                            break
+                    
+                    # Si no lo encontramos por precio (caso raro), asumimos que es el primer servicio de la lista
+                    if not repair_item_found:
+                        for item in sale.items:
+                            if item.product_id is None:
+                                item.unit_price += db_work_order.deposit_amount # Le sumamos el abono al precio
+                                break
 
-                    current_method = sale.payments[0].method if sale.payments else "EFECTIVO"
+                    # B. INYECTAR EL PAGO "ANTICIPO"
+                    # No importa cuántos métodos de pago use ahora (micas en efectivo, saldo en tarjeta),
+                    # el abono siempre debe agregarse como un pago histórico.
                     
-                    new_payments = []
-                    new_payments.append(schemas.PaymentDetail(
+                    current_payments = sale.payments
+                    
+                    deposit_payment = schemas.PaymentDetail(
                         method="ANTICIPO",
                         amount=db_work_order.deposit_amount,
-                        reference="Abono previo"
-                    ))
-                    new_payments.append(schemas.PaymentDetail(
-                        method=current_method,
-                        amount=amount_paying_now,
-                        reference="Cancelación de saldo"
-                    ))
+                        reference="Abono previo (Histórico)"
+                    )
                     
-                    sale.payments = new_payments
-                    sale.payment_method = "MIXTO" 
+                    # Lo ponemos primero en la lista
+                    sale.payments = [deposit_payment] + current_payments
+                    sale.payment_method = "MIXTO"
         # ---------------------------------------------------
 
         # 1. Calcular totales y PREPARAR ITEMS CON COSTO

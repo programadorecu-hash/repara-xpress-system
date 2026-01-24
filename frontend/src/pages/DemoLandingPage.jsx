@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import Joyride, { STATUS } from "react-joyride"; // <--- IMPORTACIÓN DEL TOUR
 import {
   HiOutlineCurrencyDollar,
   HiOutlineArrowCircleDown,
@@ -19,8 +20,22 @@ import {
   HiDocumentText,
   HiPresentationChartLine,
   HiSparkles,
-  HiOfficeBuilding // <--- ¡AQUÍ ESTÁ EL INVITADO QUE FALTABA!
+  HiOfficeBuilding,
+  HiCreditCard,      // <--- NUEVO
+  HiSwitchHorizontal
 } from "react-icons/hi";
+
+// Función auxiliar para obtener la fecha actual formateada
+const getCurrentDateText = () => {
+  const date = new Date();
+  const months = [
+    "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+    "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
+  ];
+  const monthName = months[date.getMonth()];
+  const year = date.getFullYear();
+  return `${monthName} ${year}`;
+};
 
 // --- DATOS FALSOS (EL "MAQUILLAJE") ---
 const FAKE_SUMMARY = {
@@ -30,9 +45,21 @@ const FAKE_SUMMARY = {
 };
 
 const FAKE_SALES = [
-  { id: 1024, customer_name: "Juan Pérez", total_amount: 45.00, user: { email: "tu@taller.com" }, location: { name: "Matriz" }, items: [{ id: 1, quantity: 1, description: "Pantalla Samsung A32 Original" }], payment_method: "EFECTIVO" },
-  { id: 1023, customer_name: "María López", total_amount: 12.50, user: { email: "tu@taller.com" }, location: { name: "Matriz" }, items: [{ id: 2, quantity: 1, description: "Protector Hidrogel Mate" }], payment_method: "TRANSFERENCIA" },
-  { id: 1022, customer_name: "Carlos Ruiz", total_amount: 156.00, user: { email: "tu@taller.com" }, location: { name: "Matriz" }, items: [{ id: 3, quantity: 1, description: "Cambio Display iPhone 11" }], payment_method: "TARJETA" },
+  { id: 1040, customer_name: "Andrés V.", total_amount: 20.00, user: { email: "tu@taller.com" }, location: { name: "Matriz" }, items: [{ description: "Mica Privacidad iPhone 13" }], payment_method: "EFECTIVO" },
+  { id: 1039, customer_name: "Kevin J.", total_amount: 10.00, user: { email: "tu@taller.com" }, location: { name: "Matriz" }, items: [{ description: "Cable Lightning 1m" }], payment_method: "EFECTIVO" },
+  { id: 1038, customer_name: "Diana R.", total_amount: 20.00, user: { email: "tu@taller.com" }, location: { name: "Matriz" }, items: [{ description: "Revisión Software Xiaomi" }], payment_method: "TRANSFERENCIA" },
+  { id: 1037, customer_name: "Miguel A.", total_amount: 5.00, user: { email: "tu@taller.com" }, location: { name: "Matriz" }, items: [{ description: "Protector Lente Cámara" }], payment_method: "EFECTIVO" },
+  { id: 1036, customer_name: "Elena D.", total_amount: 30.00, user: { email: "tu@taller.com" }, location: { name: "Matriz" }, items: [{ description: "Cambio Batería J7 Prime" }], payment_method: "TARJETA" },
+  { id: 1035, customer_name: "Andrés G.", total_amount: 8.00, user: { email: "tu@taller.com" }, location: { name: "Matriz" }, items: [{ description: "Soporte Magnético Auto" }], payment_method: "EFECTIVO" },
+  { id: 1034, customer_name: "Lucía C.", total_amount: 5.00, user: { email: "tu@taller.com" }, location: { name: "Matriz" }, items: [{ description: "Chip Prepago Claro" }], payment_method: "EFECTIVO" },
+  { id: 1033, customer_name: "Jorge V.", total_amount: 25.00, user: { email: "tu@taller.com" }, location: { name: "Matriz" }, items: [{ description: "Reparación Pin Carga A10" }], payment_method: "EFECTIVO" },
+  { id: 1032, customer_name: "Luis T.", total_amount: 10.00, user: { email: "tu@taller.com" }, location: { name: "Matriz" }, items: [{ description: "Mica Hidrogel Mate" }], payment_method: "EFECTIVO" },
+  { id: 1031, customer_name: "Sofía B.", total_amount: 15.00, user: { email: "tu@taller.com" }, location: { name: "Matriz" }, items: [{ description: "Case Silicona iPhone 11" }], payment_method: "TARJETA" },
+  { id: 1030, customer_name: "Pedro M.", total_amount: 15.00, user: { email: "tu@taller.com" }, location: { name: "Matriz" }, items: [{ description: "Mantenimiento Preventivo" }], payment_method: "EFECTIVO" },
+  { id: 1029, customer_name: "Ana S.", total_amount: 12.00, user: { email: "tu@taller.com" }, location: { name: "Matriz" }, items: [{ description: "Audífonos Básicos Sony" }], payment_method: "EFECTIVO" },
+  { id: 1028, customer_name: "Carlos R.", total_amount: 25.00, user: { email: "tu@taller.com" }, location: { name: "Matriz" }, items: [{ description: "Cargador Samsung 25W" }], payment_method: "TRANSFERENCIA" },
+  { id: 1027, customer_name: "María L.", total_amount: 8.50, user: { email: "tu@taller.com" }, location: { name: "Matriz" }, items: [{ description: "Cable USB-C Reforzado" }], payment_method: "EFECTIVO" },
+  { id: 1026, customer_name: "Juan P.", total_amount: 5.00, user: { email: "tu@taller.com" }, location: { name: "Matriz" }, items: [{ description: "Mica Vidrio 9D A32" }], payment_method: "EFECTIVO" },
 ];
 
 const FAKE_ORDERS = [
@@ -97,12 +124,10 @@ const StatusBadge = ({ status }) => {
   return <span className={`px-2 py-1 text-xs font-semibold rounded-full ${colorClass}`}>{status.replace("_", " ")}</span>;
 };
 
-// Agregamos HiChartBar arriba en los imports si falta, pero aquí usamos HiPresentationChartLine que ya importaste
 const FakeSidebar = ({ onTrap }) => {
   const menuItems = [
     { icon: <HiHome />, label: "Inicio" },
     { icon: <HiTemplate />, label: "Inventario" },
-    // CORRECCIÓN: Usamos los nombres reales importados (Outline)
     { icon: <HiOutlineShoppingCart />, label: "Punto de Venta" },
     { icon: <HiOutlineCog />, label: "Órdenes Taller" },
     { icon: <HiOutlineCash />, label: "Caja y Bancos" },
@@ -140,14 +165,79 @@ const FakeSidebar = ({ onTrap }) => {
 
 // --- PÁGINA PRINCIPAL ---
 function DemoLandingPage() {
+  const navigate = useNavigate();
   const [showTrap, setShowTrap] = useState(false);
-  const totalBalance = FAKE_SUMMARY.total_sales - FAKE_SUMMARY.total_expenses;
+  
+  // --- ESTADO DEL TOUR ---
+  const [runTour, setRunTour] = useState(true);
+  
+  // Pasos del Tour
+  const tourSteps = [
+    {
+      target: '.price-list-button', // Apunta a la clase del botón
+      content: (
+        <div className="text-left">
+          <h3 className="font-bold text-lg mb-2">¡COMPRA Y <strong>VENDE</strong> TUS REPUESTOS! 🔍</h3>
+          <p className="text-sm text-gray-600">
+            Aquí puedes COMPRAR o <strong>VENDER</strong> cualquier <strong>REPUESTO</strong> que necesites O TENGAS en tu servicio técnico.
+          </p>
+        </div>
+      ),
+      disableBeacon: true,
+      disableOverlayClose: true,
+      hideCloseButton: true,
+      spotlightClicks: false, // Bloquea clics en el botón
+      placement: 'bottom',
+    }
+  ];
 
   const handleTrap = () => setShowTrap(true);
+
+  // Callback del Tour
+  const handleJoyrideCallback = (data) => {
+    const { status } = data;
+    if ([STATUS.FINISHED, STATUS.SKIPPED].includes(status)) {
+      setRunTour(false);
+    }
+  };
+
+  const totalBalance = FAKE_SUMMARY.total_sales - FAKE_SUMMARY.total_expenses;
 
   return (
     <div className="flex h-screen bg-gray-50 overflow-hidden font-sans">
       
+      {/* --- EL COMPONENTE TOUR --- */}
+      <Joyride
+        steps={tourSteps}
+        run={runTour}
+        continuous={true}
+        showProgress={false}
+        showSkipButton={false}
+        callback={handleJoyrideCallback}
+        styles={{
+          options: {
+            arrowColor: '#fff',
+            backgroundColor: '#fff',
+            overlayColor: 'rgba(0, 0, 0, 0.85)',
+            primaryColor: '#3b82f6',
+            textColor: '#333',
+            zIndex: 1000,
+          },
+          buttonNext: {
+            backgroundColor: '#10b981',
+            fontSize: '14px',
+            fontWeight: 'bold',
+            padding: '10px 20px',
+            borderRadius: '8px',
+            color: '#fff',
+            animation: 'joyride-pulse 2s infinite' // <--- ¡AQUÍ ESTÁ LA MAGIA!
+          }
+        }}
+        locale={{ 
+          last: "¡ENTENDIDO!",
+        }}
+      />
+
       {/* Fake Sidebar */}
       <FakeSidebar onTrap={handleTrap} />
 
@@ -167,7 +257,7 @@ function DemoLandingPage() {
           {/* Top Bar (Usuario Fake) */}
           <div className="flex justify-between items-center mb-8">
             <div>
-              <h1 className="text-2xl font-bold text-gray-800">Hola, Futuro Gerente 👋</h1>
+              <h1 className="text-2xl font-bold text-gray-800">Hola, técnico PRO 👋</h1>
               <p className="text-gray-500 text-sm">Así se ve un día productivo en tu taller.</p>
             </div>
             <div className="hidden md:flex items-center gap-3">
@@ -177,6 +267,18 @@ function DemoLandingPage() {
               </div>
             </div>
           </div>
+
+          {/* --- BOTÓN GANCHO CON CLASE PARA EL TOUR --- */}
+          <div className="mb-8">
+            <button
+              onClick={() => navigate("/catalogo-repuestos")}
+              className="price-list-button w-full md:w-auto bg-gradient-to-r from-yellow-400 to-yellow-500 hover:from-yellow-500 hover:to-yellow-600 text-blue-900 font-extrabold py-4 px-8 rounded-xl shadow-lg transform hover:scale-105 transition-all duration-300 flex items-center justify-center space-x-3 group mx-auto md:mx-0"
+            >
+              <span className="text-2xl filter drop-shadow-sm">🔍</span>
+              <span className="uppercase tracking-wide text-lg">Lista de Precios {getCurrentDateText()}</span>
+            </button>
+          </div>
+          {/* ------------------------------------------- */}
 
           {/* --- DASHBOARD CLONADO --- */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -204,29 +306,70 @@ function DemoLandingPage() {
                 </button>
               </div>
 
-              {/* Ventas Perdidas (Visual) */}
-              <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 opacity-70">
-                <h2 className="text-lg font-bold text-gray-800 mb-2">VENTAS PERDIDAS</h2>
-                <div className="flex gap-2">
-                  <input disabled placeholder="Producto..." className="w-full p-2 bg-gray-50 rounded border" />
-                  <button onClick={handleTrap} className="bg-gray-200 text-gray-500 px-4 rounded font-bold">Guardar</button>
+              {/* Ventas de Hoy (FEED DE ÉXITO) */}
+              <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col h-[600px]">
+                <div className="flex justify-between items-center mb-6">
+                  <h2 className="text-xl font-extrabold text-gray-800 flex items-center gap-2">
+                    <span className="text-2xl">💰</span> Ventas de Hoy
+                  </h2>
+                  <span className="bg-emerald-100 text-emerald-700 text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider">
+                    En vivo
+                  </span>
                 </div>
-              </div>
+                
+                {/* Contenedor con Scroll */}
+                <div className="flex-1 overflow-y-auto pr-2 space-y-3 custom-scrollbar">
+                  {FAKE_SALES.map((sale) => {
+                    // Lógica visual según pago
+                    let icon = <HiOutlineCash className="w-6 h-6" />;
+                    let iconBg = "bg-emerald-100 text-emerald-600";
+                    
+                    if (sale.payment_method === "TARJETA") {
+                      icon = <HiCreditCard className="w-6 h-6" />;
+                      iconBg = "bg-purple-100 text-purple-600";
+                    } else if (sale.payment_method === "TRANSFERENCIA") {
+                      icon = <HiSwitchHorizontal className="w-6 h-6" />;
+                      iconBg = "bg-blue-100 text-blue-600";
+                    }
 
-              {/* Ventas de Hoy */}
-              <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-                <h2 className="text-xl font-bold text-gray-800 mb-4">Ventas de Hoy</h2>
-                <div className="space-y-0">
-                  {FAKE_SALES.map((sale) => (
-                    <div key={sale.id} className="border-b border-gray-50 py-3 last:border-0 hover:bg-gray-50 transition-colors px-2 rounded-lg cursor-pointer" onClick={handleTrap}>
-                      <div className="flex justify-between items-center">
-                        <p className="font-bold text-gray-800">{sale.customer_name}</p>
-                        <p className="font-bold text-emerald-600">+ ${sale.total_amount.toFixed(2)}</p>
+                    return (
+                      <div 
+                        key={sale.id} 
+                        onClick={handleTrap}
+                        className="group flex items-center justify-between p-4 bg-white border border-gray-100 rounded-2xl hover:shadow-lg hover:border-emerald-200 transition-all duration-300 cursor-pointer transform hover:-translate-y-1"
+                      >
+                        {/* Izquierda: Icono y Datos */}
+                        <div className="flex items-center gap-4">
+                          <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shadow-sm ${iconBg} group-hover:scale-110 transition-transform duration-300`}>
+                            {icon}
+                          </div>
+                          <div>
+                            <h4 className="font-bold text-gray-800 group-hover:text-emerald-700 transition-colors">
+                              {sale.customer_name}
+                            </h4>
+                            <p className="text-xs text-gray-400 font-medium mt-0.5 flex items-center gap-1">
+                              <span className="w-1.5 h-1.5 rounded-full bg-gray-300 group-hover:bg-emerald-400"></span>
+                              {sale.items[0].description}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Derecha: Dinero */}
+                        <div className="text-right">
+                          <p className="font-black text-emerald-600 text-lg tracking-tight group-hover:scale-105 transition-transform origin-right">
+                            +${sale.total_amount.toFixed(2)}
+                          </p>
+                          <span className="text-[10px] font-bold text-gray-300 uppercase tracking-wider group-hover:text-gray-500">
+                            {sale.payment_method}
+                          </span>
+                        </div>
                       </div>
-                      <p className="text-xs text-gray-400 mt-1">1x {sale.items[0].description} • {sale.payment_method}</p>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
+                
+                {/* Degradado inferior para indicar más contenido */}
+                <div className="h-6 bg-gradient-to-t from-white to-transparent mt-[-24px] pointer-events-none relative z-10"></div>
               </div>
 
             </div>
@@ -294,7 +437,7 @@ function DemoLandingPage() {
 
               {/* Órdenes Activas */}
               <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-                <h2 className="text-xl font-bold text-gray-800 mb-4">Taller: En Proceso</h2>
+                <h2 className="text-xl font-bold text-gray-800 mb-4"><strong>SERVICIO TÉCNICO:</strong> ESTADO</h2>
                 <div className="space-y-3">
                   <div className="flex items-center justify-between bg-gray-50 p-2 rounded-lg border-l-4 border-blue-500">
                     <span className="text-xs font-bold text-gray-500 uppercase">Matriz</span>

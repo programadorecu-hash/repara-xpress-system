@@ -56,3 +56,19 @@ body {
   background-size: 200% 200%;
   animation: aurora 10s ease infinite;
 }
+
+/* --- ANIMACIÓN PULSO PARA EL TOUR (JOYRIDE) --- */
+@keyframes joyride-pulse {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); /* Verde Esmeralda Sólido */
+  }
+  70% {
+    transform: scale(1.05); /* Crece un poquito */
+    box-shadow: 0 0 0 15px rgba(16, 185, 129, 0); /* El anillo se expande y desvanece */
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+  }
+}
