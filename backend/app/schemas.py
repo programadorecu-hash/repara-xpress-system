@@ -21,6 +21,11 @@ class Company(CompanyBase):
     created_at: datetime
     
     modules: dict | None = None
+    
+    # --- NUEVO: Lista de reseñas ---
+    # Usamos comillas para decir "búscalo más tarde", porque se define más abajo
+    reviews: List["CompanyReviewRead"] = []
+    # -------------------------------
 
     # --- NUEVO: Datos de Facturación ---
     next_payment_due: datetime | None = None
@@ -66,24 +71,35 @@ class PublicProductSearchResult(BaseModel):
     company_address: str | None = None
     company_phone: str | None = None # Para el botón de WhatsApp
     last_updated: datetime
+    
+    # --- NUEVO: ID de la empresa para poder ir a su perfil y calificar ---
+    company_id: int 
+    # -------------------------------------------------------------------
+
+    # --- NUEVO: Lista de hasta 3 fotos del producto ---
+    images: List[str] = []
+    # --------------------------------------------------
 
     class Config:
         from_attributes = True
 # -------------------------------------------------------------
 
-# --- NUEVO SCHEMA: RESULTADO DE BÚSQUEDA PÚBLICA (Trivago) ---
-class PublicProductSearchResult(BaseModel):
-    product_name: str
-    price: float # Precio de venta al público
-    stock_status: str # "Disponible", "Pocas Unidades", "Agotado"
-    company_name: str # Quién lo vende (Ej: "Importadora Xavacces")
-    company_address: str | None = None
-    company_phone: str | None = None # Para el botón de WhatsApp
-    last_updated: datetime
+# --- NUEVOS SCHEMAS PARA RESEÑAS (REVIEWS) ---
+class CompanyReviewBase(BaseModel):
+    rating: int
+    comment: str
 
+class CompanyReviewCreate(CompanyReviewBase):
+    company_id: int # ID de la empresa a calificar
+
+class CompanyReviewRead(CompanyReviewBase):
+    id: int
+    user_name: str # Mostraremos el nombre del usuario, no su ID
+    created_at: datetime
+    
     class Config:
         from_attributes = True
-# -------------------------------------------------------------
+# ---------------------------------------------
 
 class CategoryBase(BaseModel):
     name: str
@@ -992,4 +1008,5 @@ PurchaseInvoiceRead.model_rebuild()
 SaleBase.model_rebuild()
 WorkOrder.model_rebuild()
 TransferRead.model_rebuild() # Agregamos esto para que Pydantic lea las relaciones
+Company.model_rebuild()      # <--- AGREGAR ESTA LÍNEA: Conecta las reseñas con la empresa
 

@@ -38,12 +38,10 @@ class Company(Base):
     settings = relationship("CompanySettings", back_populates="company", uselist=False) 
     # Relación inversa: Una empresa tiene muchos productos
     products = relationship("Product", back_populates="company")
+    
+    # --- NUEVO: Reseñas recibidas por la empresa ---
+    reviews = relationship("CompanyReview", back_populates="company", cascade="all, delete-orphan")
 
-    # Relaciones: Una empresa tiene muchos usuarios y configuraciones
-    users = relationship("User", back_populates="company")
-    settings = relationship("CompanySettings", back_populates="company", uselist=False) 
-    # Relación inversa: Una empresa tiene muchos productos
-    products = relationship("Product", back_populates="company")
 
 class User(Base):
     __tablename__ = "users"
@@ -80,6 +78,9 @@ class User(Base):
     purchase_invoices = relationship("PurchaseInvoice", back_populates="user")
     # --- NUEVO: Relación con Gastos ---
     expenses = relationship("Expense", back_populates="user")
+    
+    # --- NUEVO: Reseñas escritas por este usuario ---
+    reviews = relationship("CompanyReview", back_populates="user")
 
 class Location(Base):
     __tablename__ = "locations"
@@ -712,6 +713,31 @@ class TransferItem(Base):
     def product_name(self):
         return self.product.name if self.product else f"Producto ID {self.product_id}"
     # ---------------------------------------------
+
+# --- NUEVA TABLA: RESEÑAS DE EMPRESAS (MARKETPLACE) ---
+class CompanyReview(Base):
+    __tablename__ = "company_reviews"
+    id = Column(Integer, primary_key=True, index=True)
+    
+    # Quién califica (Usuario registrado)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    
+    # A quién califica (Empresa/Distribuidor)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False)
+    
+    # La calificación (1 a 5 estrellas)
+    rating = Column(Integer, nullable=False) 
+    
+    # El comentario
+    comment = Column(String, nullable=False)
+    
+    # Cuándo se hizo
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    # Relaciones
+    user = relationship("User", back_populates="reviews")
+    company = relationship("Company", back_populates="reviews")
+# ------------------------------------------------------
 
 
     # ... (código existente de otras clases)

@@ -1,8 +1,15 @@
-import React, { createContext, useState, useEffect } from 'react';
+// Agregamos 'useContext' a la lista de importaciones
+import React, { createContext, useState, useEffect, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 
 export const AuthContext = createContext(null);
+
+// --- NUEVO: La "Llave Maestra" (Hook) para usar la autenticación en cualquier lado ---
+export const useAuth = () => {
+  return useContext(AuthContext);
+};
+// ------------------------------------------------------------------------------------
 
 export function AuthProvider({ children }) {
   const [token, setToken] = useState(localStorage.getItem('accessToken'));

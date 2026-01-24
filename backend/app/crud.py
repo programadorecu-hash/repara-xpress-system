@@ -501,7 +501,8 @@ def search_global_parts(db: Session, query: str, limit: int = 50):
     # Buscamos productos directamente en CUALQUIER empresa activa
     products = db.query(models.Product).join(models.Company).options(
         joinedload(models.Product.stock_entries), # Para ver si hay stock
-        joinedload(models.Product.company).joinedload(models.Company.settings) # Para datos de contacto
+        joinedload(models.Product.company).joinedload(models.Company.settings), # Para datos de contacto
+        joinedload(models.Product.images) # <--- IMPORTANTE: Cargar las fotos
     ).filter(
         models.Company.is_active == True, # <--- Único requisito: Que la empresa pague su mensualidad
         models.Product.is_active == True, # El producto debe existir
@@ -530,6 +531,10 @@ def search_global_parts(db: Session, query: str, limit: int = 50):
 
         # Datos de contacto de la empresa
         company_settings = p.company.settings if p.company.settings else None
+
+        # Obtener las primeras 3 URLs de imágenes
+        # (La base de datos ya guarda la versión optimizada de mejor calidad disponible)
+        top_images = [img.image_url for img in p.images[:3]]
         
         # --- LÓGICA DE NOMBRE COMERCIAL ---
         # Priorizamos el nombre configurado en settings. 
@@ -549,7 +554,15 @@ def search_global_parts(db: Session, query: str, limit: int = 50):
             company_name=display_name, 
             company_address=address,
             company_phone=phone,
-            last_updated=datetime.now() # Fecha referencia
+            last_updated=datetime.now(), # Fecha referencia
+            
+            # --- CORRECCIÓN: Agregamos el ID que faltaba ---
+            company_id=p.company.id,
+            # -----------------------------------------------
+            
+            # --- NUEVO: Enviamos la lista de fotos ---
+            images=top_images
+            # -----------------------------------------
         ))
     
     # Ordenar por precio (del más barato al más caro) para que sea útil
@@ -3315,3 +3328,60 @@ def saas_register_payment(db: Session, company_id: int, months: int, plan_type: 
     db.refresh(company)
     return company
 # -------------------------------------------------
+
+# ===================================================================
+# --- MARKETPLACE: SISTEMA DE CALIFICACIONES (RESEÑAS) ---
+# ===================================================================
+
+def create_company_review(db: Session, review: schemas.CompanyReviewCreate, user_id: int):
+    """
+    Guarda o actualiza una reseña de un usuario hacia una empresa.
+    """
+    # 1. Seguridad: Evitar que se califique a sí mismo
+    user = db.query(models.User).get(user_id)
+    if user.company_id == review.company_id:
+        raise ValueError("No puedes calificar a tu propia empresa.")
+
+    # 2. Verificar si ya existe una reseña de este usuario para esta empresa
+    existing_review = db.query(models.CompanyReview).filter(
+        models.CompanyReview.company_id == review.company_id,
+        models.CompanyReview.user_id == user_id
+    ).first()
+
+    if existing_review:
+        # Si ya existe, actualizamos la opinión (Upsert)
+        existing_review.rating = review.rating
+        existing_review.comment = review.comment
+        db_review = existing_review
+    else:
+        # Si no existe, creamos una nueva
+        db_review = models.CompanyReview(
+            user_id=user_id,
+            company_id=review.company_id,
+            rating=review.rating,
+            comment=review.comment
+        )
+        db.add(db_review)
+    
+    db.commit()
+    db.refresh(db_review)
+    
+    # 3. TRUCO DE MAGIA: Preparar datos para Pydantic
+    # El frontend espera un campo "user_name", pero la base de datos tiene una relación "user".
+    # Cargamos el usuario y le pegamos una etiqueta temporal con el nombre para que Pydantic no falle.
+    db.refresh(db_review, attribute_names=['user'])
+    # Usamos el nombre completo o el email si no tiene nombre
+    user_display_name = db_review.user.full_name if db_review.user.full_name else db_review.user.email
+    # Pegamos la etiqueta al objeto antes de devolverlo
+    setattr(db_review, "user_name", user_display_name)
+    
+    return db_review
+
+def get_company_public_profile(db: Session, company_id: int):
+    """
+    Obtiene la empresa con sus configuraciones y TODAS sus reseñas cargadas.
+    """
+    return db.query(models.Company).options(
+        joinedload(models.Company.settings), # Datos de contacto
+        selectinload(models.Company.reviews).joinedload(models.CompanyReview.user) # Reseñas + Nombres de usuarios
+    ).filter(models.Company.id == company_id).first()

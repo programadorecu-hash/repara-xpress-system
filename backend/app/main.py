@@ -2575,6 +2575,57 @@ def print_transfer_manifest(
 # ---------------------------------------------------
 
 # ===================================================================
+# --- ENDPOINTS MARKETPLACE (RESEÑAS Y PERFIL PÚBLICO) ---
+# ===================================================================
+
+@app.post("/companies/{company_id}/reviews", response_model=schemas.CompanyReviewRead)
+def submit_company_review(
+    company_id: int,
+    review: schemas.CompanyReviewBase, # Recibimos rating y comentario
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(security.get_current_user) # Requiere estar logueado
+):
+    """
+    Permite a un usuario registrado calificar a una empresa distribuidora.
+    """
+    # Completamos el esquema con el ID de la empresa de la URL
+    review_create = schemas.CompanyReviewCreate(
+        rating=review.rating,
+        comment=review.comment,
+        company_id=company_id
+    )
+    
+    try:
+        return crud.create_company_review(db, review=review_create, user_id=current_user.id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.get("/companies/{company_id}/public-profile", response_model=schemas.Company)
+def get_company_profile(
+    company_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    Obtiene el perfil público de la empresa (Nombre, Info y Reseñas).
+    No requiere login para VER, pero sí para COMENTAR.
+    """
+    company = crud.get_company_public_profile(db, company_id)
+    if not company:
+        raise HTTPException(status_code=404, detail="Empresa no encontrada")
+    
+    # TRUCO DE MAGIA 2: Mapear nombres de usuarios en las reseñas para la lectura
+    # Recorremos las reseñas y aseguramos que el campo 'user_name' tenga datos
+    if company.reviews:
+        for rev in company.reviews:
+            if rev.user:
+                name = rev.user.full_name if rev.user.full_name else rev.user.email
+                setattr(rev, "user_name", name)
+            else:
+                setattr(rev, "user_name", "Usuario Anónimo")
+                
+    return company
+
+# ===================================================================
 # --- TAREA PROGRAMADA: CIERRE AUTOMÁTICO DE TURNOS (23:55) ---
 # ===================================================================
 

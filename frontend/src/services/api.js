@@ -206,3 +206,14 @@ export async function registerPayment(companyId, months, planType) {
   });
   return data;
 }
+
+// ===== API: Marketplace (Reseñas y Perfiles) =====
+export async function submitCompanyReview(companyId, { rating, comment }) {
+  const { data } = await apiClient.post(`/companies/${companyId}/reviews`, { rating, comment });
+  return data;
+}
+
+export async function getCompanyPublicProfile(companyId) {
+  const { data } = await apiClient.get(`/companies/${companyId}/public-profile`);
+  return data;
+}
