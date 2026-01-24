@@ -1,4 +1,12 @@
+/* Importamos Roboto con varios pesos (light, normal, medium, bold, black) */
+@import url('https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700;900&display=swap');
+
 @tailwind base;
+
+/* Clase de utilidad para usar la fuente */
+.font-roboto {
+  font-family: 'Roboto', sans-serif;
+}
 @tailwind components;
 @tailwind utilities;
 

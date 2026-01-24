@@ -45,6 +45,7 @@ import PasswordRecoveryPage from "./pages/PasswordRecoveryPage.jsx";
 import ProfilePage from "./pages/ProfilePage.jsx"; 
 import PublicCatalogPage from "./pages/PublicCatalogPage.jsx"; 
 import TransfersPage from "./pages/TransfersPage.jsx"; 
+import DemoLandingPage from "./pages/DemoLandingPage.jsx"; // <--- IMPORTACIÓN
 
 // Esta es la "Guardia" que revisa si la caja fuerte está configurada
 function SetupGuard() {
@@ -64,7 +65,7 @@ function SetupGuard() {
     const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
     // Permitimos acceso a las rutas públicas sin chequeo de setup
-    const publicRoutes = ["/register", "/recuperar-clave", "/catalogo-repuestos"];
+    const publicRoutes = ["/register", "/recuperar-clave", "/catalogo-repuestos", "/demo"];
     if (publicRoutes.includes(window.location.pathname)) {
         setIsSetupComplete(true); 
         return;
@@ -82,7 +83,7 @@ function SetupGuard() {
           }
         } else {
           // Bloqueamos acceso si no está configurado, EXCEPTO para las rutas públicas
-          const publicPaths = ["/register", "/recuperar-clave", "/catalogo-repuestos"];
+          const publicPaths = ["/register", "/recuperar-clave", "/catalogo-repuestos", "/demo"];
           if (!publicPaths.includes(window.location.pathname)) {
              navigate("/setup");
           }
@@ -147,6 +148,10 @@ function SetupGuard() {
         {/* --- NUEVO: RUTA DEL CATÁLOGO PÚBLICO --- */}
         <Route path="/catalogo-repuestos" element={<PublicCatalogPage />} />
         {/* ---------------------------------------- */}
+
+        {/* --- NUEVO: RUTA LANDING DEMO (EL CLON DEL DASHBOARD) --- */}
+        <Route path="/demo" element={<DemoLandingPage />} />
+        {/* -------------------------------------------------------- */}
 
         <Route path="/setup" element={<SetupPage />} />
         

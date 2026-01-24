@@ -5,6 +5,19 @@ import { AuthContext } from "../context/AuthContext.jsx";
 
 import { useSearchParams } from "react-router-dom"; // Importar hook para leer URL
 
+// Función auxiliar para obtener la fecha actual formateada
+const getCurrentDateText = () => {
+  const date = new Date();
+  // Array de meses en español
+  const months = [
+    "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+    "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
+  ];
+  const monthName = months[date.getMonth()];
+  const year = date.getFullYear();
+  return `${monthName} ${year}`; // Ej: "Febrero 2026"
+};
+
 function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -74,7 +87,7 @@ function LoginPage() {
 
   return (
     // El JSX del formulario se mantiene igual que antes
-    <div className="flex items-center justify-center min-h-screen bg-primary px-4"> 
+    <div className="flex items-center justify-center min-h-screen bg-primary px-4 font-roboto"> 
       {/* Agregado 'px-4' arriba para que en celulares la caja no toque los bordes */}
       <div className="p-8 bg-white rounded-lg shadow-lg w-full max-w-md border">
         <h2 className="text-3xl font-bold text-center text-secondary mb-6">
@@ -149,7 +162,7 @@ function LoginPage() {
             className="w-full bg-gradient-to-r from-yellow-400 to-yellow-500 hover:from-yellow-500 hover:to-yellow-600 text-blue-900 font-extrabold py-4 px-6 rounded-xl shadow-lg transform hover:scale-105 transition-all duration-300 flex items-center justify-center space-x-2 group mb-6"
           >
             <span className="text-2xl">🔍</span>
-            <span className="uppercase tracking-wide">Lista de Precios Febrero 2026</span>
+            <span className="uppercase tracking-wide">Lista de Precios {getCurrentDateText()}</span>
           </button>
 
           {/* Enlace de Registro (Más discreto) */}

@@ -29,6 +29,9 @@ import os
 import uuid
 import random # <--- Importamos random para generar el código
 import string # <--- Importamos string para letras y números
+import smtplib # <--- NUEVO: El cartero
+from email.mime.text import MIMEText # <--- NUEVO: La carta
+from email.mime.multipart import MIMEMultipart # <--- NUEVO: El sobre
 
 # --- Helpers para nombres de carpeta/archivo por producto ---
 import re
@@ -1722,14 +1725,12 @@ def request_password_recovery(
     1. Busca al usuario por email.
     2. Genera un código de 6 dígitos.
     3. Lo guarda en la BD.
-    4. SIMULA el envío de correo (lo imprime en consola).
+    4. Envía un correo REAL usando Gmail.
     """
     # Buscamos al usuario (Admin o Empleado)
     user = crud.get_user_by_email(db, email=request.email)
     if not user:
-        # Por seguridad, no decimos si el email existe o no, pero aquí para dev:
-        # Retornamos éxito falso para no dar pistas a hackers, o un error genérico.
-        # En este caso, daremos un mensaje genérico.
+        # Por seguridad, no decimos si el email existe o no
         return {"message": "Si el correo existe, se ha enviado un código."}
 
     # Generar código de 6 dígitos
@@ -1739,14 +1740,44 @@ def request_password_recovery(
     user.recovery_code = code
     db.commit()
 
-    # --- SIMULACIÓN DE ENVÍO DE CORREO ---
-    print("==========================================")
-    print(f"📧 EMAIL SIMULADO PARA: {request.email}")
-    print(f"🔑 CÓDIGO DE RECUPERACIÓN: {code}")
-    print("==========================================")
-    # ----------------------------------------
+    # --- ENVÍO DE CORREO REAL (GMAIL) ---
+    try:
+        smtp_server = "smtp.gmail.com"
+        smtp_port = 587
+        sender_email = "programador.ecu@gmail.com"
+        sender_password = "sjvg bgag xdkp zlaa"
+        
+        msg = MIMEMultipart()
+        msg['From'] = sender_email
+        msg['To'] = request.email
+        msg['Subject'] = "Recuperación de Contraseña - Repara Xpress"
 
-    return {"message": "Código enviado. Revise su correo (o la consola del servidor)."}
+        body = f"""
+        Hola,
+        
+        Has solicitado restablecer tu contraseña.
+        Tu código de recuperación es:
+        
+        {code}
+        
+        Si no fuiste tú, ignora este mensaje.
+        """
+        msg.attach(MIMEText(body, 'plain'))
+
+        server = smtplib.SMTP(smtp_server, smtp_port)
+        server.starttls()
+        server.login(sender_email, sender_password)
+        server.sendmail(sender_email, request.email, msg.as_string())
+        server.quit()
+        
+        print(f"✅ Correo de recuperación enviado a {request.email}")
+        
+    except Exception as e:
+        print(f"❌ Error enviando correo: {e}")
+        # En caso de error (ej: sin internet), imprimimos en consola para que no te quedes trabado en pruebas
+        print(f"🔑 [RESPALDO CONSOLA] CÓDIGO: {code}")
+
+    return {"message": "Código enviado. Revise su correo."}
 
 @app.post("/password-recovery/confirm")
 def confirm_password_recovery(
