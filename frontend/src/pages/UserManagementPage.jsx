@@ -268,6 +268,26 @@ function UserManagementPage() {
               className="mt-1 w-full rounded-lg border px-3 py-2"
             />
           </div>
+
+          {/* --- SELECTOR DE ROL (RESTAURADO) --- */}
+          <div className="md:col-span-2">
+            <label className="block text-sm font-semibold text-gray-700">Rol / Permisos</label>
+            <select
+              name="role"
+              value={editFormState.role}
+              onChange={handleEditFormChange}
+              className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 bg-white"
+            >
+              <option value="warehouse_operator">Empleado (Vendedor/Técnico)</option>
+              <option value="inventory_manager">Gerente (Inventario)</option>
+              <option value="admin">Administrador (Socio)</option>
+            </select>
+            <p className="text-xs text-gray-500 mt-1">
+              ⚠️ Cuidado: Cambiar a 'Administrador' da control total sobre la empresa.
+            </p>
+          </div>
+          {/* ------------------------------------ */}
+
           <div className="flex items-center pt-4">
             <input
               type="checkbox"
