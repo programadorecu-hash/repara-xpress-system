@@ -91,6 +91,10 @@ function POSPage() {
   
   // --- Estado para WhatsApp ---
   const [companyInfo, setCompanyInfo] = useState(null);
+
+  // --- ESTADOS PARA VENTA MANUAL (NUEVO) ---
+  const [showManualModal, setShowManualModal] = useState(false);
+  // -----------------------------------------
   
   // Cargar configuración al iniciar
   useEffect(() => {
@@ -183,6 +187,26 @@ function POSPage() {
     }
   };
   // --- FIN NUEVA FUNCIÓN ---
+
+  // --- FUNCIÓN PARA AÑADIR ITEM MANUAL AL CARRITO (NUEVO) ---
+  const addManualItemToCart = (description, price, quantity) => {
+    const newItem = {
+      isWorkOrder: false,
+      isManual: true, // Marca para saber que es manual
+      product_id: null, // IMPORTANTE: Null para que el backend NO toque el inventario
+      description: description.toUpperCase(),
+      quantity: Number(quantity),
+      // Fijamos todos los precios iguales porque es un precio manual único
+      price_1: Number(price),
+      price_2: Number(price),
+      price_3: Number(price),
+      selected_price_level: 1, 
+      unit_price: Number(price), 
+    };
+    setCart((prevCart) => [...prevCart, newItem]);
+    setShowManualModal(false); // Cerramos el modal
+  };
+  // ----------------------------------------------------------
 
   // --- FUNCIÓN ADAPTADA: AÑADIR PRODUCTO O COBRO DE ORDEN ---
   const handleAddToCart = (itemToAdd, itemType = "product") => {
@@ -564,30 +588,48 @@ ${publicLink}`;
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Columna Izquierda: Búsqueda y Resultados */}
         <div className="lg:col-span-2 bg-white p-6 rounded-xl shadow-md border">
-          {/* --- TABS DE BÚSQUEDA (NUEVO) --- */}
-          <div className="flex border-b mb-4">
-            <button
-              onClick={() => setSearchMode("products")}
-              className={`py-2 px-4 font-semibold ${
-                searchMode === "products"
-                  ? "border-b-2 border-accent text-accent"
-                  : "text-gray-500 hover:text-gray-700"
-              }`}
-            >
-              Productos
-            </button>
-            <button
-              onClick={() => setSearchMode("workorders")}
-              className={`py-2 px-4 font-semibold ${
-                searchMode === "workorders"
-                  ? "border-b-2 border-accent text-accent"
-                  : "text-gray-500 hover:text-gray-700"
-              }`}
-            >
-              Órdenes Listas
-            </button>
+          
+          {/* CABECERA CON BOTÓN MANUAL (MODIFICADO) */}
+          <div className="flex justify-between items-center mb-4 border-b pb-2">
+            {/* TABS IZQUIERDA */}
+            <div className="flex space-x-4">
+              <button
+                onClick={() => setSearchMode("products")}
+                className={`py-2 px-2 font-semibold ${
+                  searchMode === "products"
+                    ? "border-b-2 border-accent text-accent"
+                    : "text-gray-500 hover:text-gray-700"
+                }`}
+              >
+                Productos
+              </button>
+              <button
+                onClick={() => setSearchMode("workorders")}
+                className={`py-2 px-2 font-semibold ${
+                  searchMode === "workorders"
+                    ? "border-b-2 border-accent text-accent"
+                    : "text-gray-500 hover:text-gray-700"
+                }`}
+              >
+                Órdenes Listas
+              </button>
+            </div>
+
+            {/* BOTÓN ITEM MANUAL (SOLO ADMINS/GERENTES) */}
+            {user && ["super_admin", "admin", "inventory_manager"].includes(user.role) && (
+              <button
+                onClick={() => setShowManualModal(true)}
+                className="bg-purple-600 hover:bg-purple-700 text-white text-sm font-bold py-1.5 px-3 rounded shadow flex items-center gap-1 transition-colors"
+                title="Vender algo que no está en inventario"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                </svg>
+                VENTA MANUAL
+              </button>
+            )}
           </div>
-          {/* --- FIN TABS --- */}
+          {/* --- FIN CABECERA --- */}
 
           <h2 className="text-xl font-bold text-secondary mb-4">
             {searchMode === "products"
@@ -1258,7 +1300,8 @@ ${publicLink}`;
       {/* --- MODAL DE SELECCIÓN DE CLIENTES (CUANDO HAY VARIOS) --- */}
       {showCustomerModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 z-[70] flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-md overflow-hidden">
+           {/* ... Contenido del modal cliente que ya tienes ... */}
+           <div className="bg-white rounded-lg shadow-xl w-full max-w-md overflow-hidden">
             <div className="bg-gray-100 px-4 py-3 border-b flex justify-between items-center">
               <h3 className="font-bold text-gray-700">Seleccionar Cliente</h3>
               <button onClick={() => setShowCustomerModal(false)} className="text-gray-500 hover:text-gray-700 font-bold text-xl">&times;</button>
@@ -1293,8 +1336,104 @@ ${publicLink}`;
         </div>
       )}
 
+      {/* --- MODAL DE ITEM MANUAL (NUEVO) --- */}
+      {showManualModal && (
+        <ManualItemModal 
+          onClose={() => setShowManualModal(false)}
+          onAdd={addManualItemToCart}
+        />
+      )}
+
     </> // --- CORRECCIÓN: Cierre del Fragment ---
   );
 }
+
+// --- COMPONENTE AUXILIAR: MODAL ITEM MANUAL ---
+function ManualItemModal({ onClose, onAdd }) {
+  const [desc, setDesc] = useState("");
+  const [qty, setQty] = useState(1);
+  const [price, setPrice] = useState("");
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (!desc.trim()) return alert("La descripción es obligatoria");
+    if (!price || Number(price) <= 0) return alert("El precio debe ser mayor a 0");
+    if (qty < 1) return alert("La cantidad debe ser al menos 1");
+
+    onAdd(desc, price, qty);
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-60 z-[80] flex items-center justify-center p-4 backdrop-blur-sm">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm overflow-hidden transform transition-all scale-100">
+        <div className="bg-purple-600 px-6 py-4 flex justify-between items-center">
+          <h3 className="font-bold text-white text-lg">Agregar Item Manual</h3>
+          <button onClick={onClose} className="text-white hover:text-gray-200 text-2xl leading-none">&times;</button>
+        </div>
+        
+        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          <div className="bg-yellow-50 border-l-4 border-yellow-400 p-3 text-xs text-yellow-800 mb-4">
+            <p className="font-bold">⚠️ Atención:</p>
+            Este item <strong>NO descontará inventario</strong>. Úsalo para servicios o productos no registrados.
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Descripción del Producto/Servicio</label>
+            <input 
+              type="text" 
+              autoFocus
+              className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none uppercase"
+              placeholder="EJ: INSTALACIÓN DE OFFICE"
+              value={desc}
+              onChange={(e) => setDesc(e.target.value.toUpperCase())}
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Cantidad</label>
+              <input 
+                type="number" 
+                min="1"
+                className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-purple-500 outline-none"
+                value={qty}
+                onChange={(e) => setQty(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Precio Unit. ($)</label>
+              <input 
+                type="number" 
+                step="0.01"
+                min="0.01"
+                className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-purple-500 outline-none"
+                placeholder="0.00"
+                value={price}
+                onChange={(e) => setPrice(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="pt-2 flex gap-3">
+            <button 
+              type="button" 
+              onClick={onClose}
+              className="flex-1 py-2 px-4 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 font-medium"
+            >
+              Cancelar
+            </button>
+            <button 
+              type="submit"
+              className="flex-1 py-2 px-4 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-bold shadow-md transition-colors"
+            >
+              Agregar al Carrito
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+// ----------------------------------------------
 
 export default POSPage;
