@@ -2283,6 +2283,22 @@ def toggle_tenant_modules(
         # Si falla (ej. columna modules no existe), avisamos
         print(f"Error actualizando módulos: {e}")
         raise HTTPException(status_code=500, detail="Error interno. Verifique si la base de datos soporta módulos.")
+    
+
+@app.patch("/super-admin/companies/{company_id}/freeze")
+def toggle_company_freeze_endpoint(
+    company_id: int,
+    freeze_data: schemas.CompanyFreezeUpdate,
+    db: Session = Depends(get_db),
+    _role: None = Depends(security.require_role(["super_admin"]))
+):
+    """Congela o descongela una empresa (Punto de Restauración)."""
+    company = crud.toggle_company_freeze(db, company_id, freeze_data.frozen)
+    if not company:
+        raise HTTPException(status_code=404, detail="Empresa no encontrada")
+    
+    state = "CONGELADA ❄️" if freeze_data.frozen else "DESCONGELADA 🔥"
+    return {"message": f"Empresa {state}. Se restaurará a este punto cada noche."}
 
 
 
@@ -2731,20 +2747,51 @@ def get_company_profile(
 # --- TAREA PROGRAMADA: CIERRE AUTOMÁTICO DE TURNOS (23:55) ---
 # ===================================================================
 
-def run_auto_close_shifts():
-    """Esta función es la que ejecuta el Reloj Automático."""
-    print("⏰ [CRON JOB] Iniciando cierre automático de turnos...")
-    # Creamos una sesión de base de datos "desechable" solo para esta tarea
+def run_scheduled_tasks():
+    """Ejecuta tareas de mantenimiento: Cierre de turnos y Restauración de Empresas Congeladas."""
+    print("⏰ [CRON JOB] Iniciando tareas programadas nocturnas...")
     db = SessionLocal()
     try:
+        # 1. Cerrar turnos olvidados
         count = crud.auto_close_all_open_shifts(db)
         print(f"✅ [CRON JOB] Turnos cerrados automáticamente: {count}")
+
+        # 2. RESTAURAR EMPRESAS CONGELADAS
+        # Buscamos TODAS las empresas que tengan una fecha de congelamiento
+        frozen_companies = db.query(models.Company).filter(models.Company.demo_frozen_at != None).all()
+        
+        if frozen_companies:
+            print(f"❄️ [CRON JOB] Se encontraron {len(frozen_companies)} empresas congeladas. Iniciando restauración...")
+            for comp in frozen_companies:
+                crud.reset_demo_company_data(db, company_id=comp.id)
+        else:
+            print("ℹ️ [CRON JOB] Ninguna empresa está congelada hoy.")
+
     except Exception as e:
-        print(f"❌ [CRON JOB] Error cerrando turnos: {e}")
+        print(f"❌ [CRON JOB] Error en tareas nocturnas: {e}")
     finally:
-        db.close() # ¡Muy importante cerrar la sesión!
+        db.close()
 
 # Configuramos el planificador para que corra a las 23:55 todos los días
 scheduler = BackgroundScheduler()
-scheduler.add_job(run_auto_close_shifts, 'cron', hour=23, minute=55)
+scheduler.add_job(run_scheduled_tasks, 'cron', hour=23, minute=55)
 scheduler.start()
+
+# --- NUEVO ENDPOINT MANUAL: REINICIO DE EMERGENCIA ---
+@app.post("/super-admin/reset-demo-now")
+def trigger_demo_reset(
+    db: Session = Depends(get_db),
+    _role: None = Depends(security.require_role(["super_admin"]))
+):
+    """
+    Botón manual para que el Super Admin limpie la Demo inmediatamente.
+    """
+    demo_company = db.query(models.Company).filter(models.Company.name.ilike("Demo")).first()
+    if not demo_company:
+        raise HTTPException(status_code=404, detail="No existe una empresa llamada 'Demo'.")
+    
+    success = crud.reset_demo_company_data(db, company_id=demo_company.id)
+    if not success:
+        raise HTTPException(status_code=500, detail="Falló el reinicio. Revisa la consola del servidor.")
+        
+    return {"message": f"La empresa '{demo_company.name}' ha sido reiniciada a su estado base."}

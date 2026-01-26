@@ -3488,6 +3488,136 @@ def get_company_public_profile(db: Session, company_id: int):
         selectinload(models.Company.reviews).joinedload(models.CompanyReview.user) # Reseñas + Nombres de usuarios
     ).filter(models.Company.id == company_id).first()
 
+
+
+# ===================================================================
+# --- HERRAMIENTA DE REINICIO DEMO (CONGELAMIENTO) ---
+# ===================================================================
+def toggle_company_freeze(db: Session, company_id: int, frozen: bool):
+    """Activa o desactiva el punto de restauración."""
+    company = db.query(models.Company).filter(models.Company.id == company_id).first()
+    if not company:
+        return None
+    
+    if frozen:
+        # Congelamos en el tiempo actual
+        company.demo_frozen_at = func.now()
+    else:
+        # Descongelamos (Ya no se borrará nada automáticamente)
+        company.demo_frozen_at = None
+        
+    db.commit()
+    db.refresh(company)
+    return company
+
+def reset_demo_company_data(db: Session, company_id: int):
+    """
+    ¡EL BOTÓN DE RESTAURACIÓN!
+    Devuelve la empresa al estado exacto en que fue congelada.
+    """
+    try:
+        company = db.query(models.Company).filter(models.Company.id == company_id).first()
+        if not company or not company.demo_frozen_at:
+            print(f"ℹ️ La empresa {company_id} no está congelada. No se requiere limpieza.")
+            return False
+
+        frozen_point = company.demo_frozen_at
+        print(f"❄️ RESTAURANDO empresa {company.name} al punto: {frozen_point}...")
+
+        # 1. REVERTIR STOCK (Lo más importante)
+        # Buscamos todos los movimientos de inventario hechos DESPUÉS del congelamiento
+        movements_to_revert = db.query(models.InventoryMovement).join(models.Location).filter(
+            models.Location.company_id == company_id,
+            models.InventoryMovement.timestamp > frozen_point
+        ).all()
+
+        for mov in movements_to_revert:
+            # Buscamos el stock actual de ese producto en esa ubicación
+            stock = db.query(models.Stock).filter(
+                models.Stock.product_id == mov.product_id,
+                models.Stock.location_id == mov.location_id
+            ).first()
+            
+            if stock:
+                # INVERTIMOS el movimiento para volver al pasado.
+                stock.quantity -= mov.quantity_change 
+        
+        db.flush()
+
+        # 2. BORRAR DATOS CREADOS DESPUÉS DEL CONGELAMIENTO
+        # Usamos synchronize_session=False para borrado rápido masivo
+        
+        # A. Movimientos de inventario "futuros"
+        db.query(models.InventoryMovement).filter(
+            models.InventoryMovement.location.has(company_id=company_id),
+            models.InventoryMovement.timestamp > frozen_point
+        ).delete(synchronize_session=False)
+
+        # B. Items de Venta y Ventas
+        db.query(models.SaleItem).filter(
+            models.SaleItem.sale.has(company_id=company_id),
+            models.SaleItem.sale.has(models.Sale.created_at > frozen_point)
+        ).delete(synchronize_session=False)
+        
+        db.query(models.Sale).filter(
+            models.Sale.company_id == company_id,
+            models.Sale.created_at > frozen_point
+        ).delete(synchronize_session=False)
+
+        # C. Órdenes de Trabajo (Fotos, Notas, Orden)
+        # Primero borramos las notas nuevas
+        db.query(models.WorkOrderNote).filter(
+            models.WorkOrderNote.location.has(company_id=company_id),
+            models.WorkOrderNote.created_at > frozen_point
+        ).delete(synchronize_session=False)
+
+        # Luego las órdenes nuevas (Las fotos se borran en cascada o quedan huérfanas, 
+        # para limpieza total de archivos se requeriría un script extra, pero la data desaparece de la BD)
+        db.query(models.WorkOrder).filter(
+            models.WorkOrder.company_id == company_id,
+            models.WorkOrder.created_at > frozen_point
+        ).delete(synchronize_session=False)
+
+        # D. Gastos y Caja
+        db.query(models.Expense).filter(
+            models.Expense.company_id == company_id,
+            models.Expense.created_at > frozen_point
+        ).delete(synchronize_session=False)
+        
+        db.query(models.CashTransaction).filter(
+            models.CashTransaction.account.has(company_id=company_id),
+            models.CashTransaction.timestamp > frozen_point
+        ).delete(synchronize_session=False)
+
+        # E. Turnos y Logs
+        db.query(models.Shift).filter(
+            models.Shift.location.has(company_id=company_id),
+            models.Shift.start_time > frozen_point
+        ).delete(synchronize_session=False)
+        
+        db.query(models.LostSaleLog).filter(
+            models.LostSaleLog.location.has(company_id=company_id),
+            models.LostSaleLog.timestamp > frozen_point
+        ).delete(synchronize_session=False)
+
+        # F. CLIENTES NUEVOS (¡¡¡AQUÍ ESTÁ LA PRIVACIDAD!!!)
+        # Borramos cualquier cliente que se haya creado DESPUÉS de congelar
+        db.query(models.Customer).filter(
+            models.Customer.company_id == company_id,
+            models.Customer.created_at > frozen_point
+        ).delete(synchronize_session=False)
+
+        db.commit()
+        print(f"✨ RESTAURACIÓN COMPLETADA: {company.name} ha vuelto a su estado original (Clientes y Ventas limpiados).")
+        return True
+
+    except Exception as e:
+        print(f"❌ Error restaurando empresa: {e}")
+        db.rollback()
+        return False
+
+
+
 # ===================================================================
 # --- GESTIÓN DE FACTURACIÓN ELECTRÓNICA (SRI ECUADOR) ---
 # ===================================================================

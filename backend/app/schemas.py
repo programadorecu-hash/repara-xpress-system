@@ -30,6 +30,9 @@ class Company(CompanyBase):
     # --- NUEVO: Datos de Facturación ---
     next_payment_due: datetime | None = None
     last_payment_date: datetime | None = None
+    
+    # --- NUEVO: Estado de Congelamiento ---
+    demo_frozen_at: datetime | None = None
     # -----------------------------------
 
     # --- NUEVO: Datos de Contacto y Dueño (Rayos X) ---
@@ -61,6 +64,11 @@ class UserStatusUpdate(BaseModel):
 class CompanyDistributorUpdate(BaseModel):
     is_distributor: bool
 # ----------------------------------------------------
+
+# --- NUEVO SCHEMA: INTERRUPTOR DE CONGELAMIENTO ---
+class CompanyFreezeUpdate(BaseModel):
+    frozen: bool # True = Congelar AHORA, False = Descongelar
+# --------------------------------------------------
 
 # --- NUEVO SCHEMA: RESULTADO DE BÚSQUEDA PÚBLICA (Trivago) ---
 class PublicProductSearchResult(BaseModel):

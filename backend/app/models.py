@@ -31,6 +31,10 @@ class Company(Base):
     
     # Fecha del último pago registrado
     last_payment_date = Column(DateTime(timezone=True), nullable=True)
+    
+    # --- NUEVO: CONGELAMIENTO (MODO DEMO/SHOWROOM) ---
+    # Si tiene fecha, el sistema borrará todo lo creado DESPUÉS de esta fecha cada noche.
+    demo_frozen_at = Column(DateTime(timezone=True), nullable=True)
     # -----------------------------------
 
     # Relaciones: Una empresa tiene muchos usuarios y configuraciones
