@@ -448,6 +448,10 @@ class SaleCreate(SaleBase):
     # Hacemos payment_method opcional aquí porque lo calcularemos nosotros.
     payment_method: str = "MIXTO" 
     payments: List[PaymentDetail] 
+    
+    # --- NUEVO: Trigger para Facturación Electrónica ---
+    issue_electronic_invoice: bool = False
+    # --------------------------------------------------
 # --- FIN CAMBIO PAGOS MIXTOS ---
 
 class CashAccountCreate(CashAccountBase):
@@ -651,6 +655,13 @@ class SaleItem(SaleItemBase):
 class Sale(SaleBase):
     id: int
     public_id: str | None = None # <--- NUEVO
+    
+    # --- CAMPOS SRI (LECTURA) ---
+    sri_auth_status: str | None = None
+    sri_access_key: str | None = None
+    sri_error_message: str | None = None
+    # ----------------------------
+
     created_at: datetime
     subtotal_amount: float
     tax_amount: float

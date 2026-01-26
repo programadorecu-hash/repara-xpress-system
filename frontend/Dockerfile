@@ -7,8 +7,8 @@ WORKDIR /app
 # 2) Copiamos package.json y lockfiles primero (cache de dependencias)
 COPY package*.json ./
 
-# 3) Instala dependencias. Usa npm ci si hay lockfile; sino, npm install
-RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
+# 3) Instala dependencias. Forzamos la instalación aunque haya conflictos de versiones menores (como React 18 vs 19)
+RUN if [ -f package-lock.json ]; then npm ci --legacy-peer-deps; else npm install --legacy-peer-deps; fi
 
 # 4) Copiamos el resto del código
 COPY . .

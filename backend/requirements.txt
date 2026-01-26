@@ -27,3 +27,8 @@ APScheduler==3.10.4
 # LIBRERÍAS PARA EXCEL (REPORTES)
 pandas
 openpyxl
+
+# --- HERRAMIENTAS PARA FACTURACIÓN ELECTRÓNICA SRI ECUADOR ---
+lxml==5.1.0          # Para crear el archivo XML de la factura
+cryptography==42.0.2 # Para manejar la firma electrónica (.p12)
+zeep==4.2.1          # Para conectarse a los servidores del SRI (Web Services)

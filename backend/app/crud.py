@@ -20,7 +20,7 @@ from email.mime.text import MIMEText # <--- El papel de la carta
 from email.mime.multipart import MIMEMultipart # <--- El sobre
 from datetime import timedelta # <--- Para calcular fecha de expiración
 
-from . import models, schemas, security
+from . import models, schemas, security, sri_utils # <--- AÑADIDO: sri_utils
 from fastapi import HTTPException # <--- NUEVO: Para enviar mensajes de error claros
 
 # --- HELPER DE CÁLCULO DE TOTALES (VENTA) ---
@@ -1695,6 +1695,97 @@ def create_sale(db: Session, sale: schemas.SaleCreate, user_id: int, location_id
 
         db.commit()
         db.refresh(db_sale)
+
+        # =======================================================================
+        # --- AUTOMATIZACIÓN FACTURACIÓN ELECTRÓNICA SRI (DISPARADOR) ---
+        # =======================================================================
+        if sale.issue_electronic_invoice:
+            print(f"🔄 Iniciando proceso de facturación electrónica para Venta #{db_sale.id}...")
+            try:
+                # 1. Obtener credenciales y configuración de la empresa
+                sri_config = get_sri_config(db, company_id)
+                company_settings = get_company_settings(db, company_id)
+                
+                if not sri_config:
+                    db_sale.sri_auth_status = "ERROR_CONFIG"
+                    db_sale.sri_error_message = "La empresa no tiene configurada la firma electrónica."
+                else:
+                    # 2. Preparar datos limpios para el generador XML
+                    venta_data = {
+                        "cliente_nombre": db_sale.customer_name,
+                        "cliente_id": db_sale.customer_ci,
+                        "cliente_email": db_sale.customer_email or "consumidor@final.com",
+                        "cliente_direccion": db_sale.customer_address or "Ciudad",
+                        "subtotal": db_sale.subtotal_amount,
+                        "total": db_sale.total_amount,
+                        "items": []
+                    }
+                    
+                    for item in db_sale.items:
+                        venta_data["items"].append({
+                            "nombre": item.description,
+                            "cantidad": item.quantity,
+                            "precio": item.unit_price
+                        })
+
+                    # 3. Generar Clave de Acceso (La cédula de identidad de la factura)
+                    # Usamos el ID de la venta como secuencial simple (relleno a 9 dígitos)
+                    secuencial = str(db_sale.id).zfill(9)
+                    now = datetime.now()
+                    
+                    clave_acceso = sri_utils.generar_clave_acceso(
+                        fecha=now,
+                        tipo_comprobante="01", # 01 = Factura
+                        ruc=sri_config["ruc"],
+                        ambiente=sri_config["env"],
+                        serie=f"{sri_config['establishment']}{sri_config['emission_point']}",
+                        numero=secuencial,
+                        codigo_numerico="12345678" # En producción usar random.randint(10000000, 99999999)
+                    )
+
+                    # Completar configuración para el generador XML
+                    sri_config.update({
+                        "razon_social": company_settings.name,
+                        "direccion": company_settings.address or "Matriz",
+                        "clave_acceso": clave_acceso,
+                        "secuencial": secuencial,
+                        "fecha_emision": now.strftime("%d/%m/%Y")
+                    })
+
+                    # 4. CICLO DE VIDA DEL DOCUMENTO: Crear -> Firmar -> Enviar
+                    print("   ↳ Generando XML...")
+                    xml_raw = sri_utils.crear_xml_factura(venta_data, sri_config)
+                    
+                    print("   ↳ Firmando digitalmente...")
+                    xml_signed = sri_utils.firmar_xml(xml_raw, sri_config["signature_path"], sri_config["password"])
+                    
+                    print("   ↳ Enviando al SRI...")
+                    respuesta_sri = sri_utils.enviar_comprobante_sri(xml_signed, ambiente=sri_config["env"])
+
+                    # 5. Guardar el veredicto en la base de datos
+                    db_sale.sri_access_key = clave_acceso
+                    db_sale.sri_auth_status = respuesta_sri["status"]
+                    db_sale.sri_auth_date = now
+                    
+                    if respuesta_sri["status"] != "RECIBIDA":
+                        detalles = respuesta_sri.get("detalles", [])
+                        msg = " | ".join(detalles) if detalles else respuesta_sri.get("mensaje")
+                        db_sale.sri_error_message = msg
+                        print(f"⚠️ SRI Rechazado: {msg}")
+                    else:
+                        print("✅ Factura Autorizada por SRI")
+
+                # Guardamos los cambios del estado SRI (sin afectar la venta original)
+                db.commit()
+
+            except Exception as e:
+                print(f"❌ Error CRÍTICO en proceso SRI: {e}")
+                # No fallamos la venta, el cliente ya pagó. Solo marcamos el error interno.
+                db_sale.sri_auth_status = "ERROR_INTERNO"
+                db_sale.sri_error_message = str(e)
+                db.commit()
+        # =======================================================================
+
         return db_sale
 
     except ValueError as e:
@@ -3396,3 +3487,156 @@ def get_company_public_profile(db: Session, company_id: int):
         joinedload(models.Company.settings), # Datos de contacto
         selectinload(models.Company.reviews).joinedload(models.CompanyReview.user) # Reseñas + Nombres de usuarios
     ).filter(models.Company.id == company_id).first()
+
+# ===================================================================
+# --- GESTIÓN DE FACTURACIÓN ELECTRÓNICA (SRI ECUADOR) ---
+# ===================================================================
+
+def update_sri_settings(db: Session, company_id: int, signature_path: str | None = None, password: str | None = None, env: str = "1"):
+    """
+    Actualiza la información técnica necesaria para firmar facturas del SRI.
+    - env: '1' para Pruebas (test), '2' para Producción (real).
+    """
+    db_settings = get_company_settings(db, company_id=company_id)
+    
+    if db_settings:
+        if signature_path:
+            db_settings.sri_signature_path = signature_path
+        if password:
+            # Guardamos la clave de la firma (.p12)
+            db_settings.sri_signature_password = password
+            
+        db_settings.sri_env = env
+        # Al configurar estos datos, dejamos lista la posibilidad de activar facturación
+        db_settings.is_electronic_billing_active = True
+        
+        db.commit()
+        db.refresh(db_settings)
+        
+    return db_settings
+
+def get_sri_config(db: Session, company_id: int):
+    """
+    Recupera solo los datos necesarios para realizar el proceso de firma y envío.
+    """
+    settings = db.query(models.CompanySettings).filter(models.CompanySettings.company_id == company_id).first()
+    if not settings or not settings.is_electronic_billing_active:
+        return None
+        
+    return {
+        "ruc": settings.ruc,
+        "env": settings.sri_env,
+        "signature_path": settings.sri_signature_path,
+        "password": settings.sri_signature_password,
+        "establishment": settings.sri_establishment_code,
+        "emission_point": settings.sri_emission_point_code
+    }
+
+def retry_failed_invoices(db: Session, company_id: int):
+    """
+    Busca todas las ventas del DÍA ACTUAL que intentaron facturarse pero fallaron,
+    y vuelve a ejecutar el proceso de envío al SRI una por una.
+    """
+    # 1. Definir rango: Solo hoy (para evitar reintentar cosas viejas accidentalmente)
+    # Si quisieras más días, cambia esta lógica, pero por seguridad empezamos con hoy.
+    today = date.today()
+    
+    # 2. Buscar ventas fallidas
+    # Criterio: Tienen estado devuelto/error Y NO son notas de venta simples (NONE)
+    failed_sales = db.query(models.Sale).filter(
+        models.Sale.company_id == company_id,
+        func.date(models.Sale.created_at) == today,
+        models.Sale.sri_auth_status.notin_(["RECIBIDA", "AUTORIZADO", "NONE"])
+    ).all()
+    
+    results = {
+        "processed": 0,
+        "success": 0,
+        "failed": 0,
+        "details": []
+    }
+    
+    # 3. Configuración SRI
+    sri_config = get_sri_config(db, company_id)
+    company_settings = get_company_settings(db, company_id)
+    
+    if not sri_config:
+        raise ValueError("No hay firma electrónica configurada para reintentar.")
+
+    print(f"🔄 Reintentando {len(failed_sales)} facturas fallidas...")
+
+    for sale in failed_sales:
+        results["processed"] += 1
+        try:
+            # --- REUTILIZAMOS LA LÓGICA DE CREATE_SALE (MODO RESCATE) ---
+            
+            # A. Preparar datos
+            venta_data = {
+                "cliente_nombre": sale.customer_name,
+                "cliente_id": sale.customer_ci,
+                "cliente_email": sale.customer_email or "consumidor@final.com",
+                "cliente_direccion": sale.customer_address or "Ciudad",
+                "subtotal": sale.subtotal_amount,
+                "total": sale.total_amount,
+                "items": []
+            }
+            for item in sale.items:
+                venta_data["items"].append({
+                    "nombre": item.description,
+                    "cantidad": item.quantity,
+                    "precio": item.unit_price
+                })
+
+            # B. Generar Clave (Usamos la misma fecha de hoy para no complicar el secuencial)
+            secuencial = str(sale.id).zfill(9)
+            now = datetime.now()
+            
+            clave_acceso = sri_utils.generar_clave_acceso(
+                fecha=now,
+                tipo_comprobante="01", 
+                ruc=sri_config["ruc"],
+                ambiente=sri_config["env"],
+                serie=f"{sri_config['establishment']}{sri_config['emission_point']}",
+                numero=secuencial,
+                codigo_numerico="12345678"
+            )
+
+            sri_config_temp = sri_config.copy()
+            sri_config_temp.update({
+                "razon_social": company_settings.name,
+                "direccion": company_settings.address or "Matriz",
+                "clave_acceso": clave_acceso,
+                "secuencial": secuencial,
+                "fecha_emision": now.strftime("%d/%m/%Y")
+            })
+
+            # C. Proceso Técnico
+            xml_raw = sri_utils.crear_xml_factura(venta_data, sri_config_temp)
+            xml_signed = sri_utils.firmar_xml(xml_raw, sri_config["signature_path"], sri_config["password"])
+            respuesta_sri = sri_utils.enviar_comprobante_sri(xml_signed, ambiente=sri_config["env"])
+
+            # D. Actualizar Venta
+            sale.sri_access_key = clave_acceso
+            sale.sri_auth_status = respuesta_sri["status"]
+            sale.sri_auth_date = now
+            
+            if respuesta_sri["status"] == "RECIBIDA":
+                sale.sri_error_message = None # Limpiamos error previo
+                results["success"] += 1
+                results["details"].append(f"Venta #{sale.id}: RECIBIDA")
+            else:
+                detalles = respuesta_sri.get("detalles", [])
+                msg = " | ".join(detalles) if detalles else respuesta_sri.get("mensaje")
+                sale.sri_error_message = msg
+                results["failed"] += 1
+                results["details"].append(f"Venta #{sale.id}: FALLÓ - {msg}")
+
+            db.commit() # Guardamos cada intento individualmente
+
+        except Exception as e:
+            results["failed"] += 1
+            sale.sri_error_message = f"Error Crítico: {str(e)}"
+            db.commit()
+            results["details"].append(f"Venta #{sale.id}: CRÍTICO - {str(e)}")
+
+    return results

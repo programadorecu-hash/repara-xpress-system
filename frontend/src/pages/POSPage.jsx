@@ -429,6 +429,10 @@ function POSPage() {
       // --------------------------------------------------------------------
       pin: saleDataFromModal.pin,
       
+      // --- NUEVO: TRIGGER FACTURACIÓN SRI ---
+      issue_electronic_invoice: saleDataFromModal.issue_electronic_invoice || false,
+      // -------------------------------------
+
       // --- NUEVO: CAPTURAR GARANTÍA DEL MODAL ---
       warranty_terms: saleDataFromModal.warranty_terms, 
       // ------------------------------------------

@@ -2161,6 +2161,77 @@ def upload_company_logo(
     logo_url = f"/uploads/company/{filename}"
     return crud.update_company_logo(db, logo_url, company_id=current_user.company_id)
 
+# ===================================================================
+# --- ENDPOINTS FACTURACIÓN ELECTRÓNICA (SRI) ---
+# ===================================================================
+
+@app.post("/company/sri-signature")
+async def upload_sri_signature(
+    file: UploadFile = File(...),
+    password: str = Form(...),
+    env: str = Form("1"),  # '1' = Pruebas, '2' = Producción
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(security.get_current_user),
+    _role: None = Depends(security.require_role(["super_admin", "admin"]))
+):
+    """
+    Sube el archivo de firma electrónica (.p12) y guarda la contraseña.
+    """
+    if not current_user.company_id:
+        raise HTTPException(status_code=400, detail="Usuario sin empresa.")
+
+    # 1. Validar extensión
+    if not file.filename.endswith(".p12"):
+        raise HTTPException(
+            status_code=400,
+            detail="Solo se permiten archivos de firma .p12"
+        )
+
+    # 2. Crear carpeta de seguridad para firmas (fuera del alcance público)
+    base_dir = "/code/signatures"
+    company_dir = os.path.join(base_dir, str(current_user.company_id))
+    os.makedirs(company_dir, exist_ok=True)
+
+    file_path = os.path.join(company_dir, "firma.p12")
+
+    # 3. Guardar archivo físicamente
+    contents = await file.read()
+    with open(file_path, "wb") as buffer:
+        buffer.write(contents)
+
+    # 4. Actualizar configuración en la Base de Datos
+    crud.update_sri_settings(
+        db,
+        company_id=current_user.company_id,
+        signature_path=file_path,
+        password=password,
+        env=env
+    )
+
+    return {"message": "Firma electrónica configurada correctamente."}
+
+@app.post("/sales/retry-sri-failures")
+def retry_sri_failures_endpoint(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(security.get_current_user),
+    _role: None = Depends(security.require_role(["super_admin", "admin", "inventory_manager"]))
+):
+    """
+    Intenta reenviar todas las facturas fallidas del día actual.
+    """
+    if not current_user.company_id:
+        raise HTTPException(status_code=400, detail="Usuario sin empresa.")
+        
+    try:
+        results = crud.retry_failed_invoices(db, current_user.company_id)
+        return results
+    except ValueError as e:
+        # Capturamos errores de configuración (ej: Falta firma) y enviamos alerta 400
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        # Errores técnicos reales
+        print(f"Error en reintento masivo: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 # ===================================================================
 # --- ENDPOINTS SUPER ADMIN (PANEL DE CONTROL) ---

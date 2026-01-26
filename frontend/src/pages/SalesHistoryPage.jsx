@@ -6,7 +6,8 @@ import ModalForm from '../components/ModalForm.jsx';
 import { 
     HiOutlineSearch, HiOutlinePrinter, HiOutlineRefresh, 
     HiOutlineReceiptRefund, HiOutlineExclamation,
-    HiOutlineChatAlt2 // Icono para WhatsApp
+    HiOutlineChatAlt2, // Icono para WhatsApp
+    HiOutlineCloudUpload, HiOutlineCheckCircle, HiOutlineXCircle // <-- NUEVOS ICONOS
 } from 'react-icons/hi';
 
 // Función para obtener la fecha de hoy en formato 'YYYY-MM-DD'
@@ -273,6 +274,28 @@ ${publicLink}`;
     }
   };
 
+  // --- FUNCIÓN: REINTENTO MASIVO SRI ---
+  const [isRetrying, setIsRetrying] = useState(false);
+
+  const handleRetrySri = async () => {
+    if (!window.confirm("¿Deseas intentar reenviar todas las facturas fallidas DE HOY al SRI?")) return;
+    
+    setIsRetrying(true);
+    try {
+      const { data } = await api.post('/sales/retry-sri-failures');
+      alert(`Proceso finalizado:\n✅ Enviadas: ${data.success}\n❌ Fallidas: ${data.failed}\n\nRevisa la tabla para ver detalles.`);
+      fetchSales(); // Recargar tabla para ver los nuevos semáforos
+    } catch (error) {
+      console.error(error);
+      // CORRECCIÓN: Leemos el mensaje exacto del servidor (ej: "No hay firma")
+      const msg = error.response?.data?.detail || "Error al ejecutar el reintento masivo.";
+      alert(msg);
+    } finally {
+      setIsRetrying(false);
+    }
+  };
+  // -------------------------------------
+
   return (
     <div className="bg-white p-6 rounded-xl shadow-md border space-y-6">
       <div className="flex items-center justify-between">
@@ -340,7 +363,21 @@ ${publicLink}`;
         >
           <HiOutlinePrinter className="inline mr-1" /> Reporte
         </button>
-        {/* ---------------------------- */}
+        
+        {/* --- BOTÓN DE PÁNICO SRI --- */}
+        {user?.role !== 'viewer' && (
+           <button 
+             type="button"
+             onClick={handleRetrySri}
+             disabled={isRetrying}
+             className="py-2 px-4 bg-indigo-600 text-white font-bold rounded hover:bg-indigo-700 ml-auto flex items-center gap-2 shadow-sm"
+             title="Reintentar facturas fallidas de hoy"
+           >
+             <HiOutlineCloudUpload className={`w-5 h-5 ${isRetrying ? 'animate-bounce' : ''}`} />
+             {isRetrying ? "Procesando..." : "Reintentar SRI"}
+           </button>
+        )}
+        {/* --------------------------- */}
       </form>
 
       {/* Resumen */}
@@ -397,6 +434,7 @@ ${publicLink}`;
               <th className="py-3 px-4 text-left">Fecha</th>
               <th className="py-3 px-4 text-left">Cliente</th>
               <th className="py-3 px-4 text-left">Vendedor</th>
+              <th className="py-3 px-4 text-center">Estado SRI</th>
               <th className="py-3 px-4 text-right">Total</th>
               <th className="py-3 px-4 text-center">Acciones</th>
             </tr>
@@ -412,7 +450,30 @@ ${publicLink}`;
                   <div className="font-medium">{sale.customer_name}</div>
                   <div className="text-xs text-gray-500">{sale.customer_ci}</div>
                 </td>
-                <td className="py-3 px-4">{sale.user.email}</td>
+                <td className="py-3 px-4 text-xs text-gray-500 truncate max-w-[100px]" title={sale.user.email}>{sale.user.email}</td>
+                <td className="py-3 px-4 text-center">
+                  {(() => {
+                    const status = sale.sri_auth_status || "NONE";
+                    if (status === "RECIBIDA" || status === "AUTORIZADO") {
+                      return <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-bold bg-green-100 text-green-800" title="Factura Autorizada"><HiOutlineCheckCircle className="w-4 h-4 mr-1"/> OK</span>;
+                    } else if (status === "NONE") {
+                      return <span className="text-gray-400 text-xs">-</span>;
+                    } else {
+                      // Error o Devuelta
+                      return (
+                        <div className="group relative inline-block">
+                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-bold bg-red-100 text-red-800 cursor-help">
+                            <HiOutlineXCircle className="w-4 h-4 mr-1"/> Error
+                          </span>
+                          {/* Tooltip con el error real */}
+                          <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 w-48 bg-gray-800 text-white text-xs rounded p-2 opacity-0 group-hover:opacity-100 transition-opacity z-10 pointer-events-none">
+                            {sale.sri_error_message || "Error desconocido"}
+                          </div>
+                        </div>
+                      );
+                    }
+                  })()}
+                </td>
                 <td className="py-3 px-4 text-right font-bold">${sale.total_amount.toFixed(2)}</td>
                 <td className="py-3 px-4 flex justify-center gap-2">
                   <button 

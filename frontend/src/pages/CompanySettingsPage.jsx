@@ -1,9 +1,16 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { getCompanySettings, updateCompanySettings, uploadCompanyLogo } from '../services/api';
 import apiClient from '../services/api'; // <--- Importamos apiClient para las llamadas extra
-import { HiOutlineOfficeBuilding, HiOutlineUpload, HiOutlineSave, HiOutlineGlobeAlt } from 'react-icons/hi';
+import { HiOutlineOfficeBuilding, HiOutlineUpload, HiOutlineSave, HiOutlineGlobeAlt, HiOutlineKey } from 'react-icons/hi';
 
 function CompanySettingsPage() {
+  // --- ESTADOS SRI ---
+  const [sriFile, setSriFile] = useState(null);
+  const [sriPassword, setSriPassword] = useState("");
+  const [sriEnv, setSriEnv] = useState("1"); // 1=Pruebas, 2=Producción
+  const sriInputRef = useRef(null);
+  // -------------------
+
   const [settings, setSettings] = useState({
     name: '',
     ruc: '',
@@ -122,6 +129,35 @@ function CompanySettingsPage() {
       setIsSaving(false);
     }
   };
+
+  // --- FUNCIÓN: GUARDAR CONFIGURACIÓN SRI ---
+  const handleSriSubmit = async (e) => {
+    e.preventDefault();
+    if (!sriFile && !sriPassword) {
+      return setMsg({ type: 'error', text: 'Selecciona un archivo .p12 y escribe la contraseña.' });
+    }
+
+    const formData = new FormData();
+    if (sriFile) formData.append('file', sriFile);
+    formData.append('password', sriPassword);
+    formData.append('env', sriEnv);
+
+    setIsSaving(true);
+    try {
+      // Usamos el endpoint especial que creamos en main.py
+      await apiClient.post('/company/sri-signature', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      setMsg({ type: 'success', text: 'Firma electrónica y ambiente configurados correctamente.' });
+      setSriPassword(""); // Limpiar la clave por seguridad visual
+    } catch (error) {
+      console.error("Error SRI:", error);
+      setMsg({ type: 'error', text: 'Error al guardar la firma. Verifica el archivo.' });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+  // ------------------------------------------
 
   if (isLoading) return <div className="p-8 text-center">Cargando datos de empresa...</div>;
 
@@ -332,6 +368,107 @@ function CompanySettingsPage() {
                   </div>
                 </div>
                 {/* ------------------------------------------- */}
+
+                {/* --- NUEVA SECCIÓN: FACTURACIÓN ELECTRÓNICA (SRI) --- */}
+                <div className="md:col-span-2 mt-6 pt-6 border-t border-gray-200">
+                  <h3 className="text-md font-bold text-gray-800 mb-3 flex items-center gap-2">
+                    <HiOutlineKey className="w-5 h-5 text-purple-600" />
+                    Facturación Electrónica (SRI Ecuador)
+                  </h3>
+                  
+                  <div className="bg-purple-50 border border-purple-100 rounded-lg p-5">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      
+                      {/* 1. Subir Archivo .p12 */}
+                      <div>
+                        <label className="block text-sm font-semibold text-purple-900 mb-1">
+                          Firma Electrónica (.p12)
+                        </label>
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => sriInputRef.current.click()}
+                            className="flex-1 px-3 py-2 bg-white border border-purple-300 rounded text-sm text-purple-700 hover:bg-purple-100 transition text-left truncate"
+                          >
+                            {sriFile ? sriFile.name : "📂 Seleccionar archivo..."}
+                          </button>
+                          <input 
+                            type="file" 
+                            ref={sriInputRef} 
+                            className="hidden" 
+                            accept=".p12" // Solo aceptamos firmas
+                            onChange={(e) => setSriFile(e.target.files[0])}
+                          />
+                        </div>
+                        <p className="text-[10px] text-purple-600 mt-1">
+                          Sube tu archivo de firma válido.
+                        </p>
+                      </div>
+
+                      {/* 2. Contraseña de la Firma */}
+                      <div>
+                        <label className="block text-sm font-semibold text-purple-900 mb-1">
+                          Contraseña de la Firma
+                        </label>
+                        <input
+                          type="password"
+                          value={sriPassword}
+                          onChange={(e) => setSriPassword(e.target.value)}
+                          className="w-full p-2 border border-purple-300 rounded focus:ring-2 focus:ring-purple-500 outline-none"
+                          placeholder="••••••••"
+                        />
+                      </div>
+
+                      {/* 3. Selector de Ambiente */}
+                      <div className="md:col-span-2">
+                        <label className="block text-sm font-semibold text-purple-900 mb-2">
+                          Ambiente de Emisión
+                        </label>
+                        <div className="flex gap-4">
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input 
+                              type="radio" 
+                              name="sriEnv" 
+                              value="1" 
+                              checked={sriEnv === "1"} 
+                              onChange={(e) => setSriEnv(e.target.value)}
+                              className="text-purple-600 focus:ring-purple-500"
+                            />
+                            <span className="text-sm font-medium text-gray-700">🧪 Pruebas</span>
+                          </label>
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input 
+                              type="radio" 
+                              name="sriEnv" 
+                              value="2" 
+                              checked={sriEnv === "2"} 
+                              onChange={(e) => setSriEnv(e.target.value)}
+                              className="text-purple-600 focus:ring-purple-500"
+                            />
+                            <span className="text-sm font-medium text-gray-700">🚀 Producción (Real)</span>
+                          </label>
+                        </div>
+                        <p className="text-xs text-gray-500 mt-1">
+                          Usa "Pruebas" para verificar. Cambia a "Producción" solo cuando estés listo para declarar impuestos.
+                        </p>
+                      </div>
+
+                      {/* Botón Guardar SRI Específico */}
+                      <div className="md:col-span-2 mt-2">
+                        <button
+                          type="button"
+                          onClick={handleSriSubmit}
+                          disabled={isSaving}
+                          className="w-full md:w-auto px-6 py-2 bg-purple-600 text-white font-bold rounded-lg hover:bg-purple-700 transition shadow-md"
+                        >
+                          Guardar Configuración SRI
+                        </button>
+                      </div>
+
+                    </div>
+                  </div>
+                </div>
+                {/* ---------------------------------------------------- */}
 
               </div>
 

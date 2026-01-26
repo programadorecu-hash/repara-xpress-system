@@ -46,6 +46,11 @@ function PaymentModal({
   
   const [pin, setPin] = useState("");
   const [warrantyTerms, setWarrantyTerms] = useState("");
+  
+  // --- NUEVO: Estado para Facturación Electrónica ---
+  const [issueInvoice, setIssueInvoice] = useState(false);
+  // -------------------------------------------------
+
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -155,6 +160,11 @@ function PaymentModal({
       payment_method: "MIXTO", 
       payment_method_details: null,
       pin: pin,
+      
+      // --- NUEVO: Enviamos la orden de facturar ---
+      issue_electronic_invoice: issueInvoice, 
+      // -------------------------------------------
+
       warranty_terms: warrantyTerms.trim() || null, // Enviamos null si está vacío
       payments: finalPayments.map(p => ({
           method: p.method,
@@ -345,6 +355,18 @@ function PaymentModal({
               placeholder="Ej: 3 meses de garantía en batería. Pantalla sale probada sin garantía."
               className="w-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none h-20 resize-none"
             />
+          </div>
+          {/* ------------------------------------------- */}
+
+          {/* --- INTERRUPTOR FACTURA ELECTRÓNICA SRI --- */}
+          <div className="mb-6 flex items-center justify-between bg-blue-50 p-3 rounded-lg border border-blue-100 hover:bg-blue-100 transition-colors cursor-pointer" onClick={() => setIssueInvoice(!issueInvoice)}>
+            <span className="text-sm font-bold text-blue-800 flex items-center gap-2 select-none">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+              Emitir Factura Electrónica (SRI)
+            </span>
+            <div className={`w-12 h-6 flex items-center bg-gray-300 rounded-full p-1 duration-300 ease-in-out ${issueInvoice ? 'bg-blue-600' : ''}`}>
+              <div className={`bg-white w-4 h-4 rounded-full shadow-md transform duration-300 ease-in-out ${issueInvoice ? 'translate-x-6' : ''}`}></div>
+            </div>
           </div>
           {/* ------------------------------------------- */}
 

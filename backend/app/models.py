@@ -349,6 +349,14 @@ class Sale(Base):
     public_id = Column(String, unique=True, index=True, default=lambda: str(uuid.uuid4()))
     # -----------------------------------------------
 
+    # --- FACTURACIÓN ELECTRÓNICA SRI ---
+    sri_access_key = Column(String, unique=True, index=True, nullable=True) # Clave de 49 dígitos
+    sri_auth_status = Column(String, default="NONE") # NONE, PENDIENTE, RECIBIDA, AUTORIZADO, RECHAZADO
+    sri_auth_date = Column(DateTime(timezone=True), nullable=True)
+    sri_xml_path = Column(String, nullable=True) # Ruta al archivo XML firmado
+    sri_error_message = Column(String, nullable=True) # Por si falla
+    # -----------------------------------
+
     # --- NUEVAS COLUMNAS PARA DATOS DEL CLIENTE ---
     customer_ci = Column(String, index=True, nullable=False) # Cédula/RUC Obligatorio
     customer_name = Column(String, index=True, nullable=False) # Nombre Obligatorio
@@ -565,6 +573,15 @@ class CompanySettings(Base):
     # Mensaje para ÓRDENES DE TRABAJO
     whatsapp_work_order_message = Column(String, default="Hola, actualizamos el estado de su equipo.")
     # ------------------------------------------
+
+    # --- CONFIGURACIÓN SRI (FACTURACIÓN ELECTRÓNICA) ---
+    sri_env = Column(String, default="1") # 1 = Pruebas, 2 = Producción
+    sri_signature_path = Column(String, nullable=True) # Dónde guardamos el archivo .p12
+    sri_signature_password = Column(String, nullable=True) # La clave de la firma (encriptada idealmente)
+    sri_establishment_code = Column(String, default="001") # Ej: 001
+    sri_emission_point_code = Column(String, default="001") # Ej: 001
+    is_electronic_billing_active = Column(Boolean, default=False) # ¿Ya activó facturación?
+    # ---------------------------------------------------
 
     # Configuración actualizada el:
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
