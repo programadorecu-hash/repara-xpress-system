@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
 import Joyride, { STATUS } from "react-joyride"; // <--- IMPORTACIÓN DEL TOUR
 import {
   HiOutlineCurrencyDollar,
@@ -89,9 +90,9 @@ function RegisterTrapModal({ isOpen, onClose }) {
           <div className="bg-white/20 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4 backdrop-blur-md shadow-inner">
             <HiSparkles className="w-8 h-8 text-yellow-300 animate-pulse" />
           </div>
-          <h2 className="text-2xl font-bold mb-2">¡Te ves bien con el control!</h2>
+          <h2 className="text-2xl font-bold mb-2">¡VENDE RÁÍDO, FÁCIL Y MEJOR!</h2>
           <p className="text-blue-100 text-sm">
-            Estás probando la demo. Para gestionar tu dinero real y tus clientes, necesitas tu propio espacio.
+            ORDENES DE TRABAJO, INVENTARIO, REGISTRO DE GASTO, FACTURA ELECTRONICA
           </p>
         </div>
 
@@ -100,7 +101,7 @@ function RegisterTrapModal({ isOpen, onClose }) {
             onClick={() => navigate('/register')}
             className="w-full py-4 px-6 bg-green-500 hover:bg-green-600 text-white font-extrabold text-lg rounded-xl shadow-xl shadow-green-500/30 transition-all transform hover:-translate-y-1 hover:scale-[1.02]"
           >
-            CREAR MI TALLER AHORA
+            CREA UNA CUENTA
           </button>
           <button 
             onClick={onClose}
@@ -166,6 +167,7 @@ const FakeSidebar = ({ onTrap }) => {
 // --- PÁGINA PRINCIPAL ---
 function DemoLandingPage() {
   const navigate = useNavigate();
+  const { user, activeShift } = useAuth(); // <--- Conectamos con el sistema de seguridad
   const [showTrap, setShowTrap] = useState(false);
   
   // --- ESTADO DEL TOUR ---
@@ -191,7 +193,16 @@ function DemoLandingPage() {
     }
   ];
 
-  const handleTrap = () => setShowTrap(true);
+  // --- PORTERO INTELIGENTE ---
+  // Si el usuario ya trabaja aquí (tiene sesión y turno), lo dejamos pasar al Dashboard.
+  // Si es un visitante (o no tiene turno), le mostramos la invitación de registro.
+  const handleTrap = () => {
+    if (user && activeShift) {
+      navigate("/"); // Pase adelante, jefe.
+    } else {
+      setShowTrap(true); // Alto ahí, regístrese primero.
+    }
+  };
 
   // Callback del Tour
   const handleJoyrideCallback = (data) => {
