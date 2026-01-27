@@ -416,9 +416,9 @@ function PublicCatalogPage() {
                 <div className="w-16 h-16 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-2xl flex items-center justify-center mb-6 shadow-lg">
                   <HiLightningBolt className="w-10 h-10 text-white" />
                 </div>
-                <h3 className="text-2xl font-bold text-white mb-2">¿Tienes un Taller?</h3>
+                <h3 className="text-2xl font-bold text-white mb-2">¿VENDES REPUESTOS?</h3>
                 <p className="text-slate-300 mb-6 leading-relaxed">
-                  Deja de usar cuadernos. Organiza tus órdenes, inventario y caja con el sistema #1 del Ecuador.
+                  <strong>GANA DINERO</strong> vendidendo tus repuestos nuevos o de medio uso <strong>AQUÍ</strong>.
                 </p>
                 <div className="space-y-3">
                   <button 
@@ -486,10 +486,10 @@ function PublicCatalogPage() {
             
             <div className="relative z-10">
               <h2 className="text-3xl md:text-4xl font-black text-white mb-6">
-                Tu Taller Merece un Sistema Profesional
+                Deja de perder dinero.
               </h2>
               <p className="text-blue-100 text-lg md:text-xl max-w-2xl mx-auto mb-10 leading-relaxed">
-                Repara Xpress no es solo una lista de precios. Es un software completo para gestionar tus órdenes de trabajo, controlar tu stock y emitir recibos profesionales.
+                Con <strong>REPARASOFT®</strong> sabes qué tienes, cuanto vendes, y si te estás <strong>AUTO-ROBANDO</strong> por no llevar control de tu mercadería y ventas.<br/><br/> También haces <strong>ORDENES DE TRABAJO, FACTURAS ELECTRÓNICAS SRI, MANEJO DE SUCURSALES</strong>
               </p>
               
               <div className="flex flex-col sm:flex-row justify-center gap-4">
@@ -497,13 +497,13 @@ function PublicCatalogPage() {
                   onClick={() => navigate('/register')}
                   className="bg-white text-blue-700 font-bold py-4 px-10 rounded-xl hover:bg-blue-50 transition-all shadow-xl transform hover:-translate-y-1"
                 >
-                  Registrar mi Taller Gratis
+                  Registrate Gratis
                 </button>
                 <button 
-                  onClick={() => window.open('https://wa.me/+593999999999', '_blank')} // Tu número real aquí
+                  onClick={() => window.open('https://wa.me/+593984959401', '_blank')} // Tu número real aquí
                   className="bg-blue-800 text-white font-bold py-4 px-10 rounded-xl hover:bg-blue-900 transition-all border border-blue-500"
                 >
-                  Agendar Demo
+                  Habla con alguién
                 </button>
               </div>
             </div>
