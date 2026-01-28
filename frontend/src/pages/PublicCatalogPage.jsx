@@ -3,10 +3,11 @@ import { useNavigate } from "react-router-dom";
 import { 
   HiSearch, HiOutlineChatAlt2, HiStar, HiOutlineStar, HiX, 
   HiOfficeBuilding, HiUserCircle, HiZoomIn, HiPhotograph, 
-  HiLightningBolt, HiCheckCircle 
+  HiLightningBolt, HiCheckCircle, HiArrowDown, HiArrowLeft 
 } from "react-icons/hi";
 import apiClient, { getCompanyPublicProfile, submitCompanyReview } from "../services/api";
 import { useAuth } from "../context/AuthContext";
+import ProductForm from "../components/ProductForm"; // Importamos el formulario
 
 // --- COMPONENTE 1: VISOR DE IMAGEN (ZOOM MODAL) - ESTILO DARKROOM ---
 function ImagePreviewModal({ imageUrl, productName, onClose }) {
@@ -216,7 +217,8 @@ function ProductCard({ item, onOpenPreview, onOpenProfile, onWhatsAppClick }) {
 
       {/* --- Visor Imagen --- */}
       <div 
-        className="relative h-64 bg-slate-50 flex items-center justify-center p-6 cursor-zoom-in overflow-hidden group-hover:bg-slate-100 transition-colors"
+        // CAMBIO: Altura h-52 en celular, h-64 en PC para ver más contenido sin tanto scroll
+        className="relative h-52 sm:h-64 bg-slate-50 flex items-center justify-center p-6 cursor-zoom-in overflow-hidden group-hover:bg-slate-100 transition-colors"
         onClick={() => onOpenPreview(currentImage || placeholderImage, item.product_name)}
       >
         {currentImage ? (
@@ -265,46 +267,62 @@ function ProductCard({ item, onOpenPreview, onOpenProfile, onWhatsAppClick }) {
       {/* --- Información --- */}
       <div className="p-5 flex-1 flex flex-col bg-white">
         <div className="flex-1">
-          {/* Categoría o Marca (Ficticio/Extraído del nombre) */}
-          <p className="text-xs text-slate-400 font-bold uppercase tracking-wider mb-1">Repuesto</p>
+          {/* Categoría o Marca */}
+          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-2">Repuesto</p>
           
           <h3 
-            className="font-bold text-slate-800 text-lg leading-snug mb-3 line-clamp-2 group-hover:text-blue-600 transition-colors cursor-pointer"
+            className="font-bold text-slate-900 text-lg leading-tight mb-3 line-clamp-2 group-hover:text-blue-600 transition-colors cursor-pointer"
             onClick={() => onOpenPreview(currentImage || placeholderImage, item.product_name)}
           >
             {item.product_name}
           </h3>
           
-          {/* Vendedor Pill */}
+          {/* Vendedor y Reseñas (DISEÑO SUPER VISIBLE) */}
           <div 
             onClick={(e) => { e.stopPropagation(); onOpenProfile(item.company_id); }}
-            className="inline-flex items-center gap-2 px-3 py-1.5 bg-slate-50 hover:bg-blue-50 border border-slate-100 hover:border-blue-100 rounded-lg cursor-pointer transition-colors group/seller mb-4"
+            // CAMBIO: Fondo suave (bg-slate-50), borde y padding para destacar el bloque del vendedor
+            className="flex flex-col mb-5 cursor-pointer group/seller bg-slate-50 p-3 rounded-xl border border-slate-100 hover:border-blue-300 hover:bg-blue-50/30 transition-all shadow-sm"
           >
-            <div className="w-5 h-5 rounded-full bg-slate-200 flex items-center justify-center text-slate-500">
-              <HiOfficeBuilding className="w-3 h-3" />
+            <div className="flex items-center gap-2 mb-1.5">
+              <div className="bg-white p-1.5 rounded-full shadow-sm text-blue-500">
+                 <HiOfficeBuilding className="w-4 h-4" />
+              </div>
+              {/* CAMBIO: Texto más grande (text-base) y negrita extra (font-black) */}
+              <span className="font-black text-slate-800 text-base group-hover/seller:text-blue-700 transition-colors truncate tracking-tight">
+                {item.company_name}
+              </span>
             </div>
-            <span className="text-xs font-semibold text-slate-600 group-hover/seller:text-blue-700 truncate max-w-[150px]">
-              {item.company_name}
-            </span>
+            
+            {/* Visualización de Confianza (Estrellas Grandes) */}
+            <div className="flex items-center justify-between pl-1">
+               <div className="flex text-yellow-400 filter drop-shadow-sm">
+                 {/* CAMBIO: Estrellas más grandes (w-5 h-5) */}
+                 {[1, 2, 3, 4, 5].map((star) => (
+                   <HiStar key={star} className="w-5 h-5" />
+                 ))}
+               </div>
+               <span className="text-[10px] font-bold text-blue-600 bg-blue-100 px-2 py-1 rounded-md uppercase tracking-wider group-hover/seller:bg-blue-600 group-hover/seller:text-white transition-colors">
+                 Ver Reseñas
+               </span>
+            </div>
           </div>
         </div>
 
-        {/* Precio y CTA */}
-        <div className="mt-auto pt-4 border-t border-slate-100 flex items-center justify-between">
-          <div className="flex flex-col">
-            <span className="text-[10px] text-slate-400 font-bold uppercase">Precio Distribuidor</span>
-            <div className="flex items-baseline gap-1">
-              <span className="text-lg font-bold text-slate-400">$</span>
-              <span className="text-3xl font-black text-slate-800 tracking-tight">{item.price.toFixed(2)}</span>
-            </div>
+        {/* Precio y CTA (NUEVO BOTÓN WHASTAPP EXPLÍCITO) */}
+        <div className="mt-auto pt-4 border-t border-slate-100 flex flex-col gap-3">
+          <div className="flex items-baseline gap-1">
+             <span className="text-xs font-bold text-slate-400 uppercase mr-1">Precio:</span>
+             <span className="text-lg font-bold text-slate-400">$</span>
+             <span className="text-3xl font-black text-slate-800 tracking-tight">{item.price.toFixed(2)}</span>
           </div>
 
           <button
             onClick={(e) => { e.stopPropagation(); onWhatsAppClick(item); }}
-            className="bg-emerald-500 hover:bg-emerald-600 text-white p-3 rounded-xl shadow-lg shadow-emerald-500/30 transition-transform active:scale-95 flex items-center justify-center"
+            className="w-full bg-emerald-500 hover:bg-emerald-600 text-white py-3 px-4 rounded-xl shadow-lg shadow-emerald-500/20 transition-transform active:scale-95 flex items-center justify-center gap-2 group/btn"
             title="Contactar por WhatsApp"
           >
-            <HiOutlineChatAlt2 className="w-6 h-6" />
+            <HiOutlineChatAlt2 className="w-5 h-5 group-hover/btn:animate-bounce" />
+            <span className="font-bold tracking-wide text-sm">WHATSAPP</span>
           </button>
         </div>
       </div>
@@ -314,7 +332,8 @@ function ProductCard({ item, onOpenPreview, onOpenProfile, onWhatsAppClick }) {
 
 // --- PÁGINA PRINCIPAL ---
 function PublicCatalogPage() {
-  const { user } = useAuth();
+  // CAMBIO: Traemos activeShift para saber si está trabajando
+  const { user, activeShift } = useAuth();
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState("");
   const [results, setResults] = useState([]);
@@ -324,15 +343,26 @@ function PublicCatalogPage() {
   // Modales
   const [selectedCompanyId, setSelectedCompanyId] = useState(null);
   const [previewImage, setPreviewImage] = useState(null);
+  // CAMBIO: Estado para mostrar el modal de creación rápida de producto
+  const [showProductForm, setShowProductForm] = useState(false);
+  // Estado para la flecha de "Scrollear"
+  const [showScrollHint, setShowScrollHint] = useState(false);
 
   const handleSearch = async (e) => {
     e.preventDefault();
     if (searchTerm.length < 3) return;
     setLoading(true);
     setHasSearched(true);
+    // Ocultamos la flecha al iniciar nueva búsqueda para resetear
+    setShowScrollHint(false); 
     try {
       const response = await apiClient.get("/public/search/parts", { params: { q: searchTerm } });
       setResults(response.data);
+      // CAMBIO: Si hay resultados, mostramos la flecha y la quitamos en 5 seg
+      if (response.data.length > 0) {
+        setShowScrollHint(true);
+        setTimeout(() => setShowScrollHint(false), 5000);
+      }
     } catch (error) {
       console.error("Error buscando:", error);
       setResults([]);
@@ -341,7 +371,31 @@ function PublicCatalogPage() {
     }
   };
 
-  const handleSellClick = () => user ? navigate("/products") : navigate("/register");
+  // CAMBIO: Lógica inteligente de redirección
+  const handleSellClick = () => {
+    if (activeShift) {
+      // CORRECCIÓN: Si tiene turno activo, vamos al Home/Dashboard (Ruta raíz)
+      navigate("/");
+    } else if (user) {
+      // Si es usuario pero no tiene turno, vamos a productos
+      navigate("/products");
+    } else {
+      // Si es nuevo, registro
+      navigate("/register");
+    }
+  };
+
+  // CAMBIO: Función para guardar producto desde el modal público
+  const handleSaveQuickProduct = async (productData) => {
+    try {
+      await apiClient.post("/products/", productData);
+      alert("¡Producto publicado exitosamente!");
+      setShowProductForm(false);
+    } catch (error) {
+      console.error(error);
+      alert("Error al guardar el producto. Verifica los datos.");
+    }
+  };
 
   const handleWhatsAppClick = (product) => {
     if (!product.company_phone) return alert("El proveedor no tiene WhatsApp configurado.");
@@ -358,13 +412,38 @@ function PublicCatalogPage() {
       
       {/* --- HERO SECTION (Estilo Landing SaaS) --- */}
       <div className="bg-slate-900 relative overflow-hidden">
+        
+        {/* CAMBIO: Navbar Superior (Solo visible si NO está logueado) */}
+        {!user && (
+          // AJUSTE: p-4 en móvil (antes p-6), flex-row para asegurar línea, items-center
+          <nav className="absolute top-0 right-0 z-50 p-4 sm:p-6 flex flex-row items-center gap-2 sm:gap-4 animate-fadeIn w-full justify-end pointer-events-none">
+            {/* pointer-events-auto en los botones para que sean clickeables aunque el nav sea passthrough */}
+            <button 
+              onClick={() => navigate('/login')}
+              // AJUSTE: Texto más pequeño en móvil (text-xs) y padding reducido
+              className="pointer-events-auto text-white/90 hover:text-white font-bold text-xs sm:text-sm transition-colors uppercase tracking-wider px-2 py-2 sm:px-4"
+            >
+              Ingresar
+            </button>
+            <button 
+              onClick={() => navigate('/register')}
+              // AJUSTE: Botón compacto en móvil (py-2 px-4), texto minúsculo (text-[10px]), sin saltos de línea (whitespace-nowrap)
+              className="pointer-events-auto bg-white text-blue-900 hover:bg-blue-50 font-black py-2 px-4 sm:py-2.5 sm:px-6 rounded-full shadow-xl hover:shadow-white/20 transition-all transform hover:-translate-y-0.5 active:scale-95 text-[10px] sm:text-xs sm:text-sm uppercase tracking-wide whitespace-nowrap"
+            >
+              Registrarme
+            </button>
+          </nav>
+        )}
+
         {/* Background Effects */}
         <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-20"></div>
         <div className="absolute -top-24 -left-24 w-96 h-96 bg-blue-600 rounded-full blur-[100px] opacity-30"></div>
         <div className="absolute bottom-0 right-0 w-[500px] h-[500px] bg-indigo-600 rounded-full blur-[120px] opacity-20"></div>
 
-        <div className="max-w-7xl mx-auto px-6 py-24 relative z-10">
-          <div className="flex flex-col lg:flex-row items-center justify-between gap-16">
+        {/* CAMBIO: Padding vertical reducido (py-12) y horizontal ajustado para ganar espacio */}
+        {/* AJUSTE: Aumentamos mucho el padding superior (pt-32) SOLO en celular para bajar el texto y librar los botones */}
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-20 pb-12 sm:py-24 relative z-10">
+          <div className="flex flex-col lg:flex-row items-center justify-between gap-8 lg:gap-16">
             
             {/* Texto Principal */}
             <div className="flex-1 text-center lg:text-left">
@@ -376,33 +455,39 @@ function PublicCatalogPage() {
                 <span className="text-blue-200 text-xs font-bold uppercase tracking-wider">Red de Técnicos Ecuador</span>
               </div>
               
-              <h1 className="text-5xl lg:text-7xl font-extrabold text-white tracking-tight leading-tight mb-6">
+              {/* CAMBIO: Texto un poco más pequeño en celular (4xl) para evitar saltos de línea excesivos */}
+              <h1 className="text-4xl sm:text-5xl lg:text-7xl font-extrabold text-white tracking-tight leading-tight mb-6">
                 Busca. Encuentra. <br/>
                 <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-cyan-400 to-emerald-400">
                   Repara más Rápido.
                 </span>
               </h1>
               
-              <p className="text-slate-400 text-xl mb-10 max-w-2xl mx-auto lg:mx-0 leading-relaxed">
-                Accede al inventario en tiempo real de los mayores importadores y distribuidores del país. Compara precios y contacta directo.
+              {/* CAMBIO: Texto base (más pequeño) en móvil y padding lateral (px-4) para evitar desbordes */}
+              <p className="text-slate-400 text-base sm:text-xl mb-8 sm:mb-10 max-w-2xl mx-auto lg:mx-0 leading-relaxed px-4 sm:px-0">
+                Accede al inventario en tiempo real de los mayores importadores y distribuidores del país.
               </p>
 
               {/* BUSCADOR FLOTANTE */}
-              <form onSubmit={handleSearch} className="relative max-w-2xl mx-auto lg:mx-0 group">
+              {/* CAMBIO: mx-10 para separar aún más de los bordes en celular */}
+              <form onSubmit={handleSearch} className="relative max-w-2xl mx-10 sm:mx-auto lg:mx-0 group">
                 <div className="absolute -inset-1 bg-gradient-to-r from-blue-600 to-cyan-500 rounded-2xl blur opacity-30 group-hover:opacity-70 transition duration-1000 group-hover:duration-200"></div>
-                <div className="relative flex items-center bg-white p-2 rounded-2xl shadow-2xl">
-                  <HiSearch className="w-6 h-6 text-slate-400 ml-4" />
+                {/* CAMBIO: Padding del contenedor reducido (p-1) */}
+                <div className="relative flex items-center bg-white p-1 sm:p-2 rounded-2xl shadow-2xl">
+                  <HiSearch className="w-5 h-5 sm:w-6 sm:h-6 text-slate-400 ml-3 sm:ml-4" />
                   <input 
                     type="text" 
-                    className="flex-1 bg-transparent px-4 py-4 text-lg text-slate-800 placeholder-slate-400 outline-none font-medium"
-                    placeholder="Ej: Display Samsung A32, Pin Carga..."
+                    // CAMBIO: Input más compacto en celular
+                    className="flex-1 bg-transparent px-3 py-3 sm:px-4 sm:py-4 text-base sm:text-lg text-slate-800 placeholder-slate-400 outline-none font-medium"
+                    placeholder="Ej: Display Samsung A32..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     autoFocus
                   />
                   <button 
                     type="submit"
-                    className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 px-8 rounded-xl transition-all shadow-lg shadow-blue-600/30 transform hover:scale-105"
+                    // CAMBIO: Botón más compacto en celular
+                    className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 sm:py-4 sm:px-8 rounded-xl transition-all shadow-lg shadow-blue-600/30 transform hover:scale-105"
                   >
                     Buscar
                   </button>
@@ -410,32 +495,44 @@ function PublicCatalogPage() {
               </form>
             </div>
 
-            {/* Tarjeta de Publicidad (El Gancho Visual) */}
-            <div className="hidden lg:block w-96">
-              <div className="bg-white/5 backdrop-blur-xl border border-white/10 p-8 rounded-3xl shadow-2xl transform rotate-3 hover:rotate-0 transition-transform duration-500">
-                <div className="w-16 h-16 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-2xl flex items-center justify-center mb-6 shadow-lg">
-                  <HiLightningBolt className="w-10 h-10 text-white" />
+            {/* Tarjeta de Publicidad Inteligente (Se encoge al buscar) */}
+            <div className={`w-full ${hasSearched ? 'max-w-xs' : 'max-w-sm lg:w-96'} mt-12 lg:mt-0 mx-auto lg:mx-0 transition-all duration-500`}>
+              {!hasSearched ? (
+                // --- MODO TARJETA GRANDE (ANTES DE BUSCAR) ---
+                <div className="bg-white/5 backdrop-blur-xl border border-white/10 p-8 rounded-3xl shadow-2xl transform lg:rotate-3 lg:hover:rotate-0 transition-transform duration-500">
+                  <div className="w-16 h-16 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-2xl flex items-center justify-center mb-6 shadow-lg">
+                    <HiLightningBolt className="w-10 h-10 text-white" />
+                  </div>
+                  <h3 className="text-2xl font-bold text-white mb-2">¿VENDES REPUESTOS?</h3>
+                  <p className="text-slate-300 mb-6 leading-relaxed">
+                    <strong>GANA DINERO</strong> vendidendo tus repuestos nuevos o de medio uso <strong>AQUÍ</strong>.
+                  </p>
+                  <div className="space-y-3">
+                    <button 
+                      onClick={handleSellClick}
+                      className="w-full bg-white text-slate-900 font-bold py-3.5 rounded-xl hover:bg-slate-100 transition-colors shadow-xl flex items-center justify-center gap-2"
+                    >
+                      <HiOfficeBuilding className="w-5 h-5 text-blue-600" />
+                      Únete como Proveedor
+                    </button>
+                    <a 
+                      href="/register" 
+                      className="block text-center text-slate-400 hover:text-white text-sm font-medium transition-colors"
+                    >
+                      Crear cuenta gratis →
+                    </a>
+                  </div>
                 </div>
-                <h3 className="text-2xl font-bold text-white mb-2">¿VENDES REPUESTOS?</h3>
-                <p className="text-slate-300 mb-6 leading-relaxed">
-                  <strong>GANA DINERO</strong> vendidendo tus repuestos nuevos o de medio uso <strong>AQUÍ</strong>.
-                </p>
-                <div className="space-y-3">
-                  <button 
-                    onClick={handleSellClick}
-                    className="w-full bg-white text-slate-900 font-bold py-3.5 rounded-xl hover:bg-slate-100 transition-colors shadow-xl flex items-center justify-center gap-2"
-                  >
-                    <HiOfficeBuilding className="w-5 h-5 text-blue-600" />
-                    Únete como Proveedor
-                  </button>
-                  <a 
-                    href="/register" 
-                    className="block text-center text-slate-400 hover:text-white text-sm font-medium transition-colors"
-                  >
-                    Crear cuenta gratis →
-                  </a>
-                </div>
-              </div>
+              ) : (
+                // --- MODO BOTÓN COMPACTO (AL REALIZAR UNA BÚSQUEDA) ---
+                <button 
+                  onClick={handleSellClick}
+                  className="w-full bg-gradient-to-r from-yellow-400 to-orange-500 text-white font-bold py-4 rounded-xl shadow-2xl hover:shadow-orange-500/50 transform hover:scale-105 transition-all flex items-center justify-center gap-3 border-2 border-white/20"
+                >
+                   <HiLightningBolt className="w-6 h-6 animate-pulse" />
+                   VENDE TUS REPUESTOS
+                </button>
+              )}
             </div>
 
           </div>
@@ -443,7 +540,7 @@ function PublicCatalogPage() {
       </div>
 
       {/* --- RESULTADOS --- */}
-      <div className="max-w-7xl mx-auto px-6 -mt-10 relative z-20">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 -mt-10 relative z-20">
         
         {loading && (
           <div className="bg-white rounded-3xl p-12 text-center shadow-xl border border-slate-100">
@@ -463,7 +560,8 @@ function PublicCatalogPage() {
         )}
 
         {results.length > 0 && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
+          // CAMBIO: Gap reducido en celular (gap-4) y padding horizontal menor
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-8">
             {results.map((item, index) => (
               <ProductCard 
                 key={index}
@@ -494,7 +592,8 @@ function PublicCatalogPage() {
               
               <div className="flex flex-col sm:flex-row justify-center gap-4">
                 <button 
-                  onClick={() => navigate('/register')}
+                  // CAMBIO: Usamos handleSellClick para redirección inteligente (Si tiene turno -> Home)
+                  onClick={handleSellClick}
                   className="bg-white text-blue-700 font-bold py-4 px-10 rounded-xl hover:bg-blue-50 transition-all shadow-xl transform hover:-translate-y-1"
                 >
                   Registrate Gratis
@@ -515,10 +614,43 @@ function PublicCatalogPage() {
         </div>
       )}
 
+      {/* --- BOTÓN FLOTANTE: REGRESAR AL SISTEMA (SOLO SI HAY TURNO) --- */}
+      {activeShift && (
+        <button
+          onClick={() => navigate('/')} // CORRECCIÓN: Navegar a la raíz "/"
+          // CAMBIO: Color Azul Vibrante + Sombra Brillante para que se vea MUCHO más
+          className="fixed top-4 left-4 z-[60] bg-blue-600 text-white pl-3 pr-6 py-3 rounded-full shadow-lg shadow-blue-500/50 hover:bg-blue-700 transition-all flex items-center gap-2 font-black text-xs sm:text-sm border-2 border-white/20 hover:scale-105 active:scale-95 animate-fadeIn"
+        >
+          <div className="bg-white/20 p-1.5 rounded-full">
+             <HiArrowLeft className="w-5 h-5" />
+          </div>
+          REGRESAR AL SISTEMA
+        </button>
+      )}
+
       {/* --- MODALES --- */}
       {selectedCompanyId && <CompanyProfileModal companyId={selectedCompanyId} onClose={() => setSelectedCompanyId(null)} />}
       {previewImage && <ImagePreviewModal imageUrl={previewImage.url} productName={previewImage.name} onClose={() => setPreviewImage(null)} />}
+      
+      {/* CAMBIO: Modal de Creación Rápida de Producto */}
+      {showProductForm && (
+        <ProductForm 
+          onClose={() => setShowProductForm(false)} 
+          onSave={handleSaveQuickProduct} 
+        />
+      )}
     
+      {/* CAMBIO: Flecha discreta indicando scroll (Flotante) */}
+      {showScrollHint && (
+        <div className="fixed bottom-8 left-1/2 transform -translate-x-1/2 z-50 animate-bounce transition-opacity duration-1000">
+          {/* CAMBIO: Color azul intenso, un poco más grande (px-5 py-2.5) y sombra azul brillante para que destaque */}
+          <div className="bg-blue-600/95 backdrop-blur text-white px-5 py-2.5 rounded-full shadow-lg shadow-blue-500/50 border border-blue-400/50 flex items-center gap-2">
+            <span className="text-sm font-bold tracking-wide">Ver resultados</span>
+            <HiArrowDown className="w-5 h-5" />
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

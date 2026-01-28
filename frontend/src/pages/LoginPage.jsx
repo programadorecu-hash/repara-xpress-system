@@ -167,6 +167,17 @@ function LoginPage() {
             >
                 <span>🧪</span> Probar Demo (Acceso Rápido)
             </button>
+
+            
+
+            {/* Botón Registrarse (Más Evidente) */}
+            <button
+                type="button"
+                onClick={() => navigate("/register")}
+                className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-3.5 rounded-xl transition duration-300 shadow-md transform active:scale-95 text-sm uppercase tracking-wide"
+            >
+                Crear Cuenta Gratis
+            </button>
             </form>
 
             {/* --- SECCIÓN PÚBLICA --- */}

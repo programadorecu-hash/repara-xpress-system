@@ -120,7 +120,7 @@ function RegisterPage() {
              {isVerifying ? "Verificación" : "Crear Cuenta"}
             </h2>
             <p className="text-gray-500 text-sm mt-1">
-                {isVerifying ? "Revisa tu correo electrónico" : "¿Sabes cunato dinero pierdes por no llevar inventario?"}
+                {isVerifying ? "Revisa tu correo electrónico" : "¿Sabes cuanto dinero pierdes por no llevar inventario?"}
             </p>
         </div>
 

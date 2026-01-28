@@ -17,6 +17,7 @@ import {
   HiOutlineCash, // <-- Ícono para "Gasto"
   HiOutlineArchive, // <-- Ícono para "Bodega"
   HiOutlineExclamationCircle,
+  HiSearch, // <-- NUEVO: Ícono para buscar repuesto
 } from "react-icons/hi";
 // --- AÑADIMOS EL NUEVO FORMULARIO DE GASTO ---
 import ExpenseModal from "../components/ExpenseModal.jsx";
@@ -280,6 +281,17 @@ function DashboardPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* --- COLUMNA IZQUIERDA --- */}
         <div className="space-y-6">
+          
+          {/* NUEVO: Botón Visible y Elegante para Buscar Repuestos Externos */}
+          <Link 
+            to="/catalogo-repuestos" 
+            // CAMBIO: Fondo azul muy claro, borde visible, texto azul corporativo y un poco más grande (text-xs)
+            className="w-full mb-4 py-3 text-xs font-bold uppercase tracking-wider text-blue-600 bg-blue-50/50 border border-blue-200 hover:bg-blue-100 hover:border-blue-300 hover:shadow-md transition-all rounded-xl flex justify-center items-center gap-2 shadow-sm"
+          >
+            <HiSearch className="w-4 h-4" />
+            BUSCAR REPUESTO - ECUADOR
+          </Link>
+
           {/* 1. Botones de Acción (MODIFICADO) */}
           <div className="grid grid-cols-2 gap-4">
             <ActionButton
