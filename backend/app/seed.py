@@ -1,117 +1,106 @@
 # backend/app/seed.py
-# Esta es nuestra "lista de tareas" para crear los datos iniciales.
-
 import logging
-from app.database import SessionLocal, engine
-from app.models import Base, User, Location
+from app.database import SessionLocal
+from app.models import User, Location, Company, CompanySettings, CashAccount, ExpenseCategory
 from app.security import get_password_hash
 
-# Configuración básica para ver mensajes en la terminal
+# Configuración de mensajes en consola
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# --- CONTRASEÑA TEMPORAL ---
-# Todos usarán esta contraseña para empezar. ¡Deben cambiarla después!
-TEMPORAL_PASSWORD = "repara123"
-
-# --- 1. Definir Sucursales (Oficinas Principales) ---
-# Aquí listamos las 4 sucursales que mencionaste.
-sucursales_data = [
-    {"name": "Sucursal Matriz Nueva Aurora", "description": "Sucursal principal"},
-    {"name": "Sucursal 1 El Conde", "description": "Sucursal en el sector de El Conde"},
-    {"name": "Sucursal 2 La Jota", "description": "Sucursal en el sector de La Jota"},
-    {"name": "Sucursal 3 Conocoto", "description": "Sucursal en el Valle de los Chillos"},
-]
-
-# --- 2. Definir Usuarios (Equipo) ---
-# Aquí creamos los 3 pases de identidad.
-users_data = [
-    {
-        "email": "erick@reparaxpress.com",
-        "role": "admin", # El "dueño"
-        "password": TEMPORAL_PASSWORD
-    },
-    {
-        "email": "nathaly@reparaxpress.com",
-        "role": "inventory_manager", # "administradora de bodega"
-        "password": TEMPORAL_PASSWORD
-    },
-    {
-        "email": "estefano@reparaxpress.com",
-        "role": "warehouse_operator", # "empleado"
-        "password": TEMPORAL_PASSWORD
-    },
-]
+# --- CONFIGURACIÓN DE TU PRIMER ACCESO ---
+ADMIN_EMAIL = "programador.ecu@gmail.com" # <--- CAMBIA ESTO POR TU CORREO REAL
+ADMIN_PASSWORD = "NoOlvido4734*.1"     # <--- CAMBIA ESTO POR UNA CLAVE REAL
+ADMIN_PIN = "4734"                     # <--- TU PIN DE SEGURIDAD
 
 def seed_data():
-    # Abrimos una "conversación" con la base de datos
     db = SessionLocal()
     try:
-        # --- PASO A: CREAR SUCURSALES Y BODEGAS ---
-        logger.info("Creando sucursales y bodegas...")
+        logger.info("🚀 Iniciando mudanza de datos para el lanzamiento...")
 
-        for data in sucursales_data:
-            # Revisar si ya existe la sucursal
-            exists = db.query(Location).filter_by(name=data["name"]).first()
+        # 1. CREAR LA EMPRESA (El Edificio)
+        main_company = db.query(Company).filter_by(name="Repara Xpress").first()
+        if not main_company:
+            main_company = Company(
+                name="Repara Xpress",
+                plan_type="ANNUAL", # Plan Pro para el dueño
+                is_active=True,
+                modules={"pos": True, "inventory": True, "work_orders": True, "expenses": True} # Todos los poderes
+            )
+            db.add(main_company)
+            db.flush() # Para obtener el ID de la empresa
             
-            if not exists:
-                # 1. Crear la sucursal (la "oficina")
-                db_sucursal = Location(
-                    name=data["name"],
-                    description=data["description"],
-                    parent_id=None # Es una oficina principal, no tiene "jefe"
-                )
-                db.add(db_sucursal)
-                
-                # Hacemos un "pre-guardado" para que la base de datos nos dé el ID
-                db.flush() 
-                
-                # 2. Crear su bodega (el "cuarto de almacenamiento")
-                db_bodega = Location(
-                    name=f"Bodega - {data['name']}",
-                    description=f"Almacén en {data['name']}",
-                    parent_id=db_sucursal.id # La "conectamos" a la oficina
-                )
-                db.add(db_bodega)
-                logger.info(f"Creada: {db_sucursal.name} y su bodega.")
-            else:
-                 logger.warning(f"Ya existe: {data['name']}. Saltando.")
+            # Crear configuración visual de la empresa
+            settings = CompanySettings(
+                company_id=main_company.id,
+                name="Repara Xpress Matriz",
+                ruc="1799999999001",
+                footer_message="¡Gracias por confiar en el mejor servicio técnico!"
+            )
+            db.add(settings)
+            logger.info("✅ Empresa 'Repara Xpress' creada.")
 
-        # Guardamos todos los cambios de este paso
+        # 2. CREAR TU USUARIO SUPER ADMIN (El Dueño)
+        admin_user = db.query(User).filter_by(email=ADMIN_EMAIL).first()
+        if not admin_user:
+            admin_user = User(
+                email=ADMIN_EMAIL,
+                hashed_password=get_password_hash(ADMIN_PASSWORD),
+                hashed_pin=get_password_hash(ADMIN_PIN),
+                full_name="Erick Administrador",
+                role="super_admin", # Rango máximo
+                is_active=True,
+                company_id=main_company.id # Vinculado a tu empresa
+            )
+            db.add(admin_user)
+            logger.info(f"✅ Super Admin creado: {ADMIN_EMAIL}")
+
+        # 3. CREAR SUCURSAL Y BODEGA DEMO
+        demo_location = db.query(Location).filter_by(name="Sucursal Nueva Aurora", company_id=main_company.id).first()
+        if not demo_location:
+            # La Oficina
+            new_aurora = Location(
+                name="Sucursal Nueva Aurora",
+                address="Quito, Sector Sur",
+                company_id=main_company.id
+            )
+            db.add(new_aurora)
+            db.flush()
+
+            # La Bodega de esa oficina
+            bodega_aurora = Location(
+                name="Bodega Matriz",
+                parent_id=new_aurora.id,
+                company_id=main_company.id
+            )
+            db.add(bodega_aurora)
+            
+            # Crear una Caja de Efectivo para empezar a vender
+            main_cash = CashAccount(
+                name="Caja Principal Efectivo",
+                account_type="EFECTIVO",
+                location_id=new_aurora.id,
+                company_id=main_company.id
+            )
+            db.add(main_cash)
+            
+            # Crear categorías de gastos básicas
+            basic_expense = ExpenseCategory(
+                name="Repuestos y Suministros",
+                company_id=main_company.id
+            )
+            db.add(basic_expense)
+
+            logger.info("✅ Sucursal, Bodega, Caja y Categorías iniciales creadas.")
+
         db.commit()
-
-        # --- PASO B: CREAR USUARIOS ---
-        logger.info("Creando usuarios...")
-        
-        for data in users_data:
-            # Revisar si ya existe el email
-            exists = db.query(User).filter_by(email=data["email"]).first()
-            if not exists:
-                # Obtenemos la contraseña "encriptada"
-                hashed_password = get_password_hash(data["password"])
-                db_user = User(
-                    email=data["email"],
-                    hashed_password=hashed_password,
-                    role=data["role"],
-                    is_active=True
-                )
-                db.add(db_user)
-                logger.info(f"Creado usuario: {db_user.email} (Rol: {db_user.role})")
-            else:
-                logger.warning(f"Ya existe: {data['email']}. Saltando.")
-        
-        # Guardamos los usuarios
-        db.commit()
-
-        logger.info("¡Datos iniciales creados con éxito!")
+        logger.info("✨ ¡PROCESO COMPLETADO! Ya puedes borrar la base de datos con confianza.")
 
     except Exception as e:
-        logger.error(f"Error al crear datos: {e}")
-        db.rollback() # Si algo falla, deshacemos todo
+        logger.error(f"❌ Error en la semilla: {e}")
+        db.rollback()
     finally:
-        db.close() # Cerramos la "conversación"
+        db.close()
 
-# Esto hace que el script se pueda ejecutar
 if __name__ == "__main__":
-    logger.info("Iniciando el proceso de 'sembrado' de datos...")
     seed_data()
