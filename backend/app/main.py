@@ -636,10 +636,18 @@ class ImportItem(BaseModel):
     average_cost: float
     quantity: int
     category: str | None = None
+    
     action_to_take: str # "CREATE", "UPDATE", "SKIP"
+    
+    # --- NUEVO: ¿Qué hacemos con el stock? ---
+    # "REPLACE": El stock del Excel sobrescribe al sistema (Corrección de inventario)
+    # "ADD": El stock del Excel se suma al sistema (Entrada de mercadería)
+    # "KEEP_SYSTEM": Ignoramos el Excel y dejamos lo que tiene el sistema
+    stock_action: str | None = "ADD" # Por defecto sumar
 
 class BulkImportRequest(BaseModel):
     items: List[ImportItem]
+    target_location_id: int | None = None # <--- NUEVO CAMPO OPCIONAL
 
 # 2. Endpoint: Descargar Plantilla CON EJEMPLOS
 @app.get("/products/template/excel")
@@ -701,6 +709,7 @@ def download_inventory_template(
 @app.post("/products/import/excel")
 async def upload_inventory_excel(
     file: UploadFile = File(...),
+    target_location_id: int = Form(...), # <--- RECIBIMOS LA BODEGA ESPECÍFICA
     db: Session = Depends(get_db),
     current_user: models.User = Depends(security.get_current_user),
     # SEGURIDAD: Solo Jefes pueden usar la aspiradora
@@ -708,12 +717,14 @@ async def upload_inventory_excel(
 ):
     """
     Analiza el Excel y devuelve qué productos son nuevos y cuáles repetidos.
+    Calcula el stock basándose únicamente en la BODEGA DE DESTINO.
     """
     if not file.filename.endswith(('.xlsx', '.xls')):
         raise HTTPException(status_code=400, detail="Solo se permiten archivos Excel (.xlsx)")
         
     contents = await file.read()
-    result = import_service.process_excel_file(contents, db, current_user.company_id)
+    # Pasamos el target_location_id al servicio
+    result = import_service.process_excel_file(contents, db, current_user.company_id, target_location_id)
     
     if result["status"] == "error":
         raise HTTPException(status_code=400, detail=result["message"])
@@ -731,33 +742,35 @@ def confirm_batch_import(
 ):
     """
     Recibe la lista aprobada por el usuario y ejecuta los cambios en la BD.
-    El stock se carga en la BODEGA de la sucursal donde el usuario tiene el turno activo.
+    Aplica lógica inteligente de stock (Sumar, Reemplazar o Ignorar).
     """
     if not current_user.company_id:
         raise HTTPException(status_code=400, detail="Usuario sin empresa.")
 
-    # --- LÓGICA DE UBICACIÓN (NUEVA) ---
-    # 1. Buscamos dónde está trabajando el jefe AHORA MISMO
-    active_shift = crud.get_active_shift_for_user(db, user_id=current_user.id)
-    if not active_shift:
-        raise HTTPException(status_code=400, detail="Debes INICIAR TURNO en una sucursal para saber dónde cargar el inventario.")
-
-    # 2. Buscamos la BODEGA asociada a esa sucursal
-    # (Si estoy en 'Local Centro', busco 'Bodega - Local Centro')
-    bodega = crud.get_primary_bodega_for_location(db, location_id=active_shift.location_id)
-    
-    # 3. Definimos el destino final
-    if bodega:
-        target_location_id = bodega.id
+    # --- LÓGICA DE UBICACIÓN HÍBRIDA ---
+    # 1. Si el usuario eligió una bodega explícita en el modal, usamos esa.
+    if request.target_location_id:
+        target_location_id = request.target_location_id
+        
+        # Validación de seguridad: ¿Esa bodega es mía?
+        # (Aunque el frontend solo muestra las mías, validamos por si acaso)
+        check_loc = crud.get_location(db, location_id=target_location_id)
+        if not check_loc or check_loc.company_id != current_user.company_id:
+             raise HTTPException(status_code=403, detail="La bodega seleccionada no pertenece a tu empresa.")
+             
     else:
-        # Si no tiene bodega hija, usamos la ubicación actual (fallback)
-        target_location_id = active_shift.location_id
+        # 2. Fallback: Si no eligió nada, usamos la lógica de "Turno Activo"
+        active_shift = crud.get_active_shift_for_user(db, user_id=current_user.id)
+        if not active_shift:
+            raise HTTPException(status_code=400, detail="Debes seleccionar una bodega de destino o tener un turno activo.")
+
+        bodega = crud.get_primary_bodega_for_location(db, location_id=active_shift.location_id)
+        target_location_id = bodega.id if bodega else active_shift.location_id
     # -----------------------------------
 
     processed_count = 0
     updated_count = 0
     
-    # Pre-cargar categorías para no buscar 1000 veces
     existing_cats = db.query(models.Category).filter(models.Category.company_id == current_user.company_id).all()
     cat_map = {c.name.upper(): c.id for c in existing_cats}
 
@@ -772,31 +785,24 @@ def confirm_batch_import(
             if cat_name_upper in cat_map:
                 cat_id = cat_map[cat_name_upper]
             else:
-                # Crear categoría nueva al vuelo
                 new_cat = models.Category(name=item.category.strip(), company_id=current_user.company_id)
                 db.add(new_cat)
-                db.flush() # Para obtener ID
+                db.flush()
                 cat_id = new_cat.id
-                cat_map[cat_name_upper] = cat_id # Actualizar mapa
+                cat_map[cat_name_upper] = cat_id
 
-        # 2. Procesar Producto
-        # 2. Procesar Producto
+        # 2. CREACIÓN (NUEVO PRODUCTO)
         if item.action_to_take == "CREATE":
-            # Crear producto
             new_prod = models.Product(
                 sku=item.sku,
                 name=item.name,
                 description=item.description,
-                
-                # --- GUARDAMOS EL ADN ---
                 product_type=item.product_type,
                 brand=item.brand,
                 model=item.model,
                 color=item.color,
                 compatibility=item.compatibility,
                 condition=item.condition,
-                # ------------------------
-
                 price_1=item.price_1,
                 price_2=item.price_2,
                 price_3=item.price_3,
@@ -806,50 +812,81 @@ def confirm_batch_import(
                 is_active=True
             )
             db.add(new_prod)
-            db.flush() # ID necesario para stock
+            db.flush() 
             
-            # Stock Inicial
-            if item.quantity > 0 and target_location_id:
-                # Creamos movimiento de carga inicial
+            # Stock Inicial (Siempre es una entrada si es nuevo)
+            if item.quantity > 0:
                 crud.create_inventory_movement(db, schemas.InventoryMovementCreate(
                     product_id=new_prod.id,
                     location_id=target_location_id,
                     quantity_change=item.quantity,
                     movement_type="CARGA_INICIAL_EXCEL",
                     reference_id="IMPORT",
-                    pin="" # Bypass del pin porque lo llamamos directo
+                    pin=""
                 ), user_id=current_user.id)
                 
             processed_count += 1
 
+        # 3. ACTUALIZACIÓN (PRODUCTO EXISTENTE)
         elif item.action_to_take == "UPDATE":
-            # Buscar y actualizar
             prod = db.query(models.Product).filter(
                 models.Product.sku == item.sku, 
                 models.Product.company_id == current_user.company_id
             ).first()
             
             if prod:
+                # Actualizar ficha técnica
                 prod.name = item.name
                 prod.description = item.description
-                
-                # --- ACTUALIZAMOS EL ADN ---
                 prod.product_type = item.product_type
                 prod.brand = item.brand
                 prod.model = item.model
                 prod.color = item.color
                 prod.compatibility = item.compatibility
                 prod.condition = item.condition
-                # ---------------------------
-
                 prod.price_1 = item.price_1
                 prod.price_2 = item.price_2
                 prod.price_3 = item.price_3
                 prod.average_cost = item.average_cost
                 if cat_id: prod.category_id = cat_id
                 
-                # NOTA: En actualización masiva NO tocamos el stock para no descuadrar inventarios reales.
-                # Solo actualizamos la ficha técnica del producto.
+                # --- MATEMÁTICA DE STOCK INTELIGENTE ---
+                # Solo si el usuario decidió tocar el stock (es decir, no eligió "Mantener Sistema")
+                if item.stock_action != "KEEP_SYSTEM":
+                    
+                    # Buscamos el stock ACTUAL en ESTA bodega específica
+                    current_stock_entry = db.query(models.Stock).filter(
+                        models.Stock.product_id == prod.id,
+                        models.Stock.location_id == target_location_id
+                    ).first()
+                    current_qty = current_stock_entry.quantity if current_stock_entry else 0
+                    
+                    final_qty_change = 0
+                    movement_type = "AJUSTE_IMPORTACION"
+
+                    if item.stock_action == "REPLACE":
+                        # Queremos que el final sea X.
+                        # Cambio = X - Actual
+                        final_qty_change = item.quantity - current_qty
+                        movement_type = "CORRECCION_INVENTARIO"
+
+                    elif item.stock_action == "ADD":
+                        # Queremos sumar X.
+                        # Cambio = X
+                        final_qty_change = item.quantity
+                        movement_type = "ENTRADA_MERCADERIA"
+                    
+                    # Solo creamos movimiento si hay diferencia real
+                    if final_qty_change != 0:
+                        crud.create_inventory_movement(db, schemas.InventoryMovementCreate(
+                            product_id=prod.id,
+                            location_id=target_location_id,
+                            quantity_change=final_qty_change,
+                            movement_type=movement_type,
+                            reference_id="IMPORT_UPDATE",
+                            pin=""
+                        ), user_id=current_user.id)
+
                 updated_count += 1
 
     db.commit()

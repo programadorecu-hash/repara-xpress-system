@@ -3,7 +3,7 @@ import io
 import random
 import string
 import unicodedata
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from . import models, crud
 
 # --- DICCIONARIO DE COLUMNAS (TU NUEVA PLANTILLA OFICIAL) ---
@@ -23,8 +23,6 @@ EXPECTED_COLUMNS = {
 }
 
 # --- INTELIGENCIA ARTIFICIAL (BÁSICA) PARA INTERPRETAR CONDICIONES ---
-# Si el usuario escribe "AAA", el sistema entiende "GENERICO".
-# Si escribe "100% Original", entiende "ORIGINAL".
 CONDITION_MAP = {
     "NUEVO": "NUEVO", "NEW": "NUEVO", "NUEVA": "NUEVO",
     "USADO": "USADO", "USED": "USADO", "SEMI": "USADO", "SEMINUEVO": "USADO", "SEMI-NUEVO": "USADO",
@@ -35,34 +33,20 @@ CONDITION_MAP = {
 ALLOWED_CONDITIONS = ["NUEVO", "USADO", "GENERICO", "ORIGINAL"]
 
 def normalize_text(text):
-    """Limpia tildes y espacios extra para comparaciones robustas"""
     if not text: return ""
     text = str(text).strip().upper()
     return ''.join(c for c in unicodedata.normalize('NFD', text) if unicodedata.category(c) != 'Mn')
 
 def interpret_condition(raw_condition):
-    """
-    Intenta adivinar qué quiso decir el usuario.
-    Retorna la condición válida o None si no entiende.
-    """
     clean = normalize_text(raw_condition)
-    
-    # 1. Búsqueda exacta en el mapa
     if clean in CONDITION_MAP:
         return CONDITION_MAP[clean]
-    
-    # 2. Búsqueda parcial (ej: "PANTALLA ORIGINAL")
     for key, val in CONDITION_MAP.items():
         if key in clean:
             return val
-            
-    return None # No entendimos
+    return None
 
 def generate_auto_sku(tipo, marca, modelo):
-    """
-    Genera un SKU automático: 3 letras Tipo + 3 letras Marca + 3 letras Modelo + 4 números azar
-    Ej: PAN-SAM-A32-8492
-    """
     t = normalize_text(tipo)
     b = normalize_text(marca)
     m = normalize_text(modelo)
@@ -74,12 +58,7 @@ def generate_auto_sku(tipo, marca, modelo):
     return f"{p1}-{p2}-{p3}-{rand}"
 
 def generate_auto_name(tipo, marca, modelo, color, compatibilidad, condicion):
-    """
-    Construye el nombre automáticamente juntando las piezas.
-    Ej: PANTALLA SAMSUNG A32 NEGRO (A325M) - ORIGINAL
-    """
     parts = [tipo, marca, modelo, color]
-    # Filtramos los que estén vacíos
     clean_parts = [str(p).strip().upper() for p in parts if p and str(p).lower() != "nan"]
     
     name = " ".join(clean_parts)
@@ -87,13 +66,12 @@ def generate_auto_name(tipo, marca, modelo, color, compatibilidad, condicion):
     if compatibilidad and str(compatibilidad).lower() != "nan":
         name += f" ({str(compatibilidad).upper()})"
     
-    # Agregar condición al nombre si no es Nuevo (para diferenciar en el buscador)
     if condicion and condicion != "NUEVO":
         name += f" - {condicion}"
         
     return name
 
-def process_excel_file(file_content: bytes, db: Session, company_id: int):
+def process_excel_file(file_content: bytes, db: Session, company_id: int, target_location_id: int):
     try:
         df = pd.read_excel(io.BytesIO(file_content))
         # Limpieza de encabezados
@@ -102,7 +80,6 @@ def process_excel_file(file_content: bytes, db: Session, company_id: int):
         preview_data = []
         stats = {"nuevos": 0, "existentes": 0, "errores": 0}
         
-        # Validación de columnas críticas
         missing_cols = [col for col in EXPECTED_COLUMNS.keys() if col not in df.columns]
         if missing_cols:
             return {
@@ -110,10 +87,17 @@ def process_excel_file(file_content: bytes, db: Session, company_id: int):
                 "message": f"Plantilla inválida. Faltan las columnas: {', '.join(missing_cols)}"
             }
 
-        for index, row in df.iterrows():
-            row_errors = [] # Lista para acumular quejas de esta fila
+        # --- PRE-CARGAR PRODUCTOS EXISTENTES (Optimización) ---
+        # Traemos productos y cargamos SUS STOCKS de una vez para no hacer 1000 consultas
+        existing_products = db.query(models.Product).options(
+            joinedload(models.Product.stock_entries)
+        ).filter(models.Product.company_id == company_id).all()
+        # Mapa por NOMBRE generado (para detectar duplicados exactos)
+        product_map = {p.name: p for p in existing_products}
 
-            # 1. Extraer y Limpiar Textos
+        for index, row in df.iterrows():
+            row_errors = []
+
             def clean_str(val):
                 return str(val).strip().upper() if not pd.isna(val) else ""
 
@@ -121,35 +105,29 @@ def process_excel_file(file_content: bytes, db: Session, company_id: int):
             marca = clean_str(row.get("MARCA", ""))
             modelo = clean_str(row.get("MODELO", ""))
             
-            # --- VALIDACIÓN: DATOS OBLIGATORIOS ---
             if not tipo or not marca or not modelo or tipo == "NAN":
-                if not tipo and not marca: continue # Fila vacía, ignorar
+                if not tipo and not marca: continue
                 row_errors.append("Falta TIPO, MARCA o MODELO.")
 
-            # --- VALIDACIÓN: SÍMBOLOS RAROS ---
             forbidden_chars = ["@", "*", "#", "$", "%", "!", "?"]
             full_text = f"{tipo} {marca} {modelo}"
             for char in forbidden_chars:
                 if char in full_text:
                     row_errors.append(f"No use el símbolo '{char}' en los nombres.")
-                    break # Con uno basta para regañar
+                    break
 
-            # --- VALIDACIÓN: CONDICIÓN ---
             raw_cond = str(row.get("CONDICION", "NUEVO"))
             condicion = interpret_condition(raw_cond)
             if not condicion:
-                row_errors.append(f"Condición '{raw_cond}' no válida. Use: NUEVO, USADO, GENERICO, ORIGINAL.")
+                row_errors.append(f"Condición '{raw_cond}' no válida.")
 
-            # --- VALIDACIÓN: PRECIOS Y NÚMEROS ---
             def validate_price(val, field_name):
-                if pd.isna(val) or str(val).strip() == "":
-                    return 0.0
+                if pd.isna(val) or str(val).strip() == "": return 0.0
                 try:
-                    # Quitamos $ y , por si acaso el usuario los puso
                     clean_val = str(val).replace("$", "").replace(",", "").strip()
                     return float(clean_val)
                 except ValueError:
-                    row_errors.append(f"Precio inválido en '{field_name}': '{val}'. Use punto decimal (ej: 10.50).")
+                    row_errors.append(f"Precio inválido en '{field_name}': '{val}'. Use punto decimal.")
                     return 0.0
 
             p_pvp = validate_price(row.get("PRECIO_PVP"), "PVP")
@@ -165,7 +143,6 @@ def process_excel_file(file_content: bytes, db: Session, company_id: int):
             except:
                 row_errors.append(f"Stock '{row.get('STOCK_INICIAL')}' no es un número entero.")
 
-            # SI HUBO ERRORES, REPORTAMOS Y SALTAMOS LA FILA
             if row_errors:
                 stats["errores"] += 1
                 preview_data.append({
@@ -176,30 +153,39 @@ def process_excel_file(file_content: bytes, db: Session, company_id: int):
                 })
                 continue
 
-            # 2. Generación Automática (Si todo salió bien)
             color = clean_str(row.get("COLOR"))
             compat = clean_str(row.get("COMPATIBILIDAD"))
             categoria = clean_str(row.get("CATEGORIA")) or "GENERAL"
 
             auto_name = generate_auto_name(tipo, marca, modelo, color, compat, condicion)
             
-            existing_product = db.query(models.Product).filter(
-                models.Product.name == auto_name,
-                models.Product.company_id == company_id
-            ).first()
+            # Buscamos en el mapa precargado
+            existing_product = product_map.get(auto_name)
 
             row_status = "NUEVO"
             final_sku = ""
             conflict_details = None
 
+            # --- NUEVO: Stock Actual del Sistema ---
+            current_system_stock = 0
+
             if existing_product:
                 row_status = "EXISTE"
                 final_sku = existing_product.sku
                 stats["existentes"] += 1
+                
+                # --- CORRECCIÓN DE STOCK ---
+                # Buscamos el stock SOLO en la bodega destino seleccionada
+                stock_entry = next((s for s in existing_product.stock_entries if s.location_id == target_location_id), None)
+                current_system_stock = stock_entry.quantity if stock_entry else 0
+                # ---------------------------
+
                 conflict_details = {
                     "db_name": existing_product.name,
-                    "db_price": existing_product.price_1,
-                    "excel_price": p_pvp
+                    "db_price": existing_product.price_1, # P1 es PVP
+                    "excel_price": p_pvp,
+                    "db_stock": current_system_stock,     # <--- DATO CLAVE
+                    "excel_stock": qty
                 }
             else:
                 stats["nuevos"] += 1
