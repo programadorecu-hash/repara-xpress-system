@@ -547,9 +547,9 @@ def search_global_parts(db: Session, query: str, limit: int = 50):
 
         results.append(schemas.PublicProductSearchResult(
             product_name=p.name,
-            # REGLA DE ORO: En la web pública se muestra el PRECIO DISTRIBUIDOR (Price 1).
-            # Si no tiene precio distribuidor (0), usamos el Price 3 (PVP) como fallback.
-            price=p.price_1 if p.price_1 > 0 else p.price_3, 
+            # REGLA DE ORO: En la web pública se muestra el PRECIO DISTRIBUIDOR (Price 3).
+            # Si no tiene precio distribuidor (0), usamos el Price 1 (PVP) como fallback.
+            price=p.price_3 if p.price_3 > 0 else p.price_1, 
             stock_status=stock_status,
             company_name=display_name, 
             company_address=address,
@@ -2085,15 +2085,20 @@ def get_inventory_audit(db: Session, start_date: date | None = None, end_date: d
 
     return query.order_by(models.InventoryMovement.timestamp.desc()).all()
 
-# --- INICIO DE NUESTRO CÓDIGO (Buscador de Productos Escasos - CORREGIDO) ---
+# --- INICIO DE NUESTRO CÓDIGO (Buscador de Productos Escasos - BLINDADO) ---
 def get_low_stock_items(db: Session, user: models.User, threshold: int = 5):
     """
-    Busca productos con stock igual o menor al límite.
+    Busca productos con stock igual o menor al límite DE MI EMPRESA.
     - Admins: Ven todo, agrupado por bodega.
     - Empleados: Ven lo de la BODEGA de su sucursal actual.
     """
     # 1. Base de la consulta: Stock + Producto + Ubicación
     query = db.query(models.Stock).join(models.Product).join(models.Location)
+
+    # --- FILTRO DE SEGURIDAD (CRÍTICO) ---
+    # Solo mostramos productos que pertenezcan a la empresa del usuario
+    query = query.filter(models.Product.company_id == user.company_id)
+    # -------------------------------------
 
     # 2. Filtro de cantidad
     query = query.filter(models.Stock.quantity <= threshold)

@@ -238,9 +238,9 @@ function POSPage() {
           price_2: itemToAdd.price_2,
           price_3: itemToAdd.price_3,
           
-          // CAMBIO: El Nivel 1 es el default, y corresponde al PVP (price_3)
+          // CAMBIO: El Nivel 1 es el default, y corresponde al PVP (price_1)
           selected_price_level: 1, 
-          unit_price: itemToAdd.price_3, 
+          unit_price: itemToAdd.price_1,
           // --- FIN ---
         };
 
@@ -368,12 +368,10 @@ function POSPage() {
         [1, 2, 3].includes(newLevel)
       ) {
         let newPrice;
-        // AQUÍ HACEMOS EL CAMBIO DE LÓGICA:
-        // Nivel 1 (Botón P1) -> Carga price_3 (PVP / Alto)
-        // Nivel 3 (Botón P3) -> Carga price_1 (Distribuidor / Bajo)
-        if (newLevel === 1) newPrice = item.price_3;      // P1 = PVP
+        // LÓGICA CORREGIDA (P1 = PVP, P3 = DISTRIBUIDOR):
+        if (newLevel === 1) newPrice = item.price_1;      // P1 = PVP (Alto)
         else if (newLevel === 2) newPrice = item.price_2; // P2 = Descuento
-        else if (newLevel === 3) newPrice = item.price_1; // P3 = Frecuente
+        else if (newLevel === 3) newPrice = item.price_3; // P3 = Distribuidor (Bajo)
 
         return {
           ...item,
@@ -394,10 +392,10 @@ function POSPage() {
     const updatedCart = cart.map((item) => {
       if (!item.isWorkOrder) {
         let newPrice;
-        // MISMA LÓGICA INVERTIDA
-        if (newLevel === 1) newPrice = item.price_3;      // P1 = PVP
+        // LÓGICA CORREGIDA (P1 = PVP, P3 = DISTRIBUIDOR)
+        if (newLevel === 1) newPrice = item.price_1;      // P1 = PVP
         else if (newLevel === 2) newPrice = item.price_2; // P2
-        else if (newLevel === 3) newPrice = item.price_1; // P3 = Frecuente
+        else if (newLevel === 3) newPrice = item.price_3; // P3
 
         return {
           ...item,
@@ -702,8 +700,9 @@ ${publicLink}`;
                           )}
                           
                           <div className="mt-auto flex items-center justify-between">
-                             <span className="text-lg font-black text-secondary">${product.price_3.toFixed(2)}</span>
-                             <button 
+                             {/* CORRECCIÓN: Mostramos Price 1 (PVP) en la tarjeta del buscador */}
+                             <span className="text-lg font-black text-secondary">${product.price_1.toFixed(2)}</span>
+                             <button
                                 className="bg-gray-100 text-accent hover:bg-accent hover:text-white p-2 rounded-full transition-colors shadow-sm"
                                 onClick={(e) => { e.stopPropagation(); handleAddToCart(product); }}
                              >

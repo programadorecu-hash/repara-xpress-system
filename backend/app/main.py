@@ -641,22 +641,60 @@ class ImportItem(BaseModel):
 class BulkImportRequest(BaseModel):
     items: List[ImportItem]
 
-# 2. Endpoint: Descargar Plantilla
+# 2. Endpoint: Descargar Plantilla CON EJEMPLOS
 @app.get("/products/template/excel")
 def download_inventory_template(
     current_user: models.User = Depends(security.get_current_user)
 ):
     """
-    Descarga la hoja vacía (Plantilla) para que el cliente la llene.
+    Descarga la plantilla Excel con 4 productos de ejemplo para guiar al usuario.
     """
+    # Definimos 4 productos de muestra variados
+    sample_data = [
+        {
+            "TIPO": "PANTALLA", "MARCA": "SAMSUNG", "MODELO": "A32", "COLOR": "NEGRO", 
+            "COMPATIBILIDAD": "A325M", "CONDICION": "ORIGINAL", 
+            "PRECIO_PVP": 45.00, "PRECIO_DESCUENTO": 40.00, "PRECIO_WEB": 35.00, 
+            "COSTO_PROMEDIO": 25.00, "CATEGORIA": "REPUESTOS", "STOCK_INICIAL": 10
+        },
+        {
+            "TIPO": "CABLE", "MARCA": "APPLE", "MODELO": "IPHONE", "COLOR": "BLANCO", 
+            "COMPATIBILIDAD": "LIGHTNING", "CONDICION": "GENERICO", 
+            "PRECIO_PVP": 5.00, "PRECIO_DESCUENTO": 3.50, "PRECIO_WEB": 2.50, 
+            "COSTO_PROMEDIO": 1.00, "CATEGORIA": "ACCESORIOS", "STOCK_INICIAL": 50
+        },
+        {
+            "TIPO": "PIN DE CARGA", "MARCA": "XIAOMI", "MODELO": "NOTE 11", "COLOR": "", 
+            "COMPATIBILIDAD": "TYPE-C", "CONDICION": "NUEVO", 
+            "PRECIO_PVP": 8.00, "PRECIO_DESCUENTO": 6.00, "PRECIO_WEB": 4.00, 
+            "COSTO_PROMEDIO": 0.50, "CATEGORIA": "REPUESTOS", "STOCK_INICIAL": 20
+        },
+        {
+            "TIPO": "MICA DE VIDRIO", "MARCA": "GENERAL", "MODELO": "UNIVERSAL", "COLOR": "TRANSPARENTE", 
+            "COMPATIBILIDAD": "5.5 PULGADAS", "CONDICION": "NUEVO", 
+            "PRECIO_PVP": 3.00, "PRECIO_DESCUENTO": 2.00, "PRECIO_WEB": 1.00, 
+            "COSTO_PROMEDIO": 0.25, "CATEGORIA": "MICAS", "STOCK_INICIAL": 100
+        }
+    ]
+
     columns = list(import_service.EXPECTED_COLUMNS.keys())
-    df = pd.DataFrame(columns=columns)
+    
+    # Creamos el DataFrame con los datos de muestra
+    df = pd.DataFrame(sample_data, columns=columns)
+    
     output = BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
         df.to_excel(writer, index=False, sheet_name="Plantilla Carga")
+        
+        # Ajuste cosmético: Intentamos auto-ajustar el ancho de las columnas (opcional pero nice)
+        worksheet = writer.sheets['Plantilla Carga']
+        for idx, col in enumerate(df.columns):
+            max_len = max(df[col].astype(str).map(len).max(), len(col)) + 2
+            worksheet.column_dimensions[chr(65 + idx)].width = max_len
+
     output.seek(0)
     
-    headers = {'Content-Disposition': 'attachment; filename="Plantilla_Productos.xlsx"'}
+    headers = {'Content-Disposition': 'attachment; filename="Plantilla_Productos_Ejemplo.xlsx"'}
     return StreamingResponse(output, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers=headers)
 
 # 3. Endpoint: Subir Excel (Vista Previa)
@@ -664,7 +702,9 @@ def download_inventory_template(
 async def upload_inventory_excel(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(security.get_current_user)
+    current_user: models.User = Depends(security.get_current_user),
+    # SEGURIDAD: Solo Jefes pueden usar la aspiradora
+    _role_check: None = Depends(security.require_role(required_roles=["super_admin", "admin", "inventory_manager"]))
 ):
     """
     Analiza el Excel y devuelve qué productos son nuevos y cuáles repetidos.
@@ -685,31 +725,41 @@ async def upload_inventory_excel(
 def confirm_batch_import(
     request: BulkImportRequest,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(security.get_current_user)
+    current_user: models.User = Depends(security.get_current_user),
+    # SEGURIDAD: Solo Jefes pueden confirmar la carga
+    _role_check: None = Depends(security.require_role(required_roles=["super_admin", "admin", "inventory_manager"]))
 ):
     """
     Recibe la lista aprobada por el usuario y ejecuta los cambios en la BD.
+    El stock se carga en la BODEGA de la sucursal donde el usuario tiene el turno activo.
     """
     if not current_user.company_id:
         raise HTTPException(status_code=400, detail="Usuario sin empresa.")
+
+    # --- LÓGICA DE UBICACIÓN (NUEVA) ---
+    # 1. Buscamos dónde está trabajando el jefe AHORA MISMO
+    active_shift = crud.get_active_shift_for_user(db, user_id=current_user.id)
+    if not active_shift:
+        raise HTTPException(status_code=400, detail="Debes INICIAR TURNO en una sucursal para saber dónde cargar el inventario.")
+
+    # 2. Buscamos la BODEGA asociada a esa sucursal
+    # (Si estoy en 'Local Centro', busco 'Bodega - Local Centro')
+    bodega = crud.get_primary_bodega_for_location(db, location_id=active_shift.location_id)
+    
+    # 3. Definimos el destino final
+    if bodega:
+        target_location_id = bodega.id
+    else:
+        # Si no tiene bodega hija, usamos la ubicación actual (fallback)
+        target_location_id = active_shift.location_id
+    # -----------------------------------
 
     processed_count = 0
     updated_count = 0
     
     # Pre-cargar categorías para no buscar 1000 veces
-    # Mapa: { "NOMBRE_CATEGORIA": category_id }
     existing_cats = db.query(models.Category).filter(models.Category.company_id == current_user.company_id).all()
     cat_map = {c.name.upper(): c.id for c in existing_cats}
-
-    # Ubicación para el stock inicial (Bodega de la empresa)
-    # Por defecto buscamos la primera bodega disponible
-    bodegas = crud.get_bodegas(db, current_user.company_id)
-    target_location_id = bodegas[0].id if bodegas else None
-    
-    if not target_location_id:
-        # Si no hay bodegas, intentamos con la sucursal del admin (no ideal, pero fallback)
-        locs = crud.get_locations(db, current_user.company_id)
-        if locs: target_location_id = locs[0].id
 
     for item in request.items:
         if item.action_to_take == "SKIP":

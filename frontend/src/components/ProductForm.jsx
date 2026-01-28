@@ -548,8 +548,9 @@ function ProductForm({ productToEdit, onSave, onClose }) {
                        <div className="relative">
                             <select name="condition" value={product.condition || "NUEVO"} onChange={handleChange} className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-sm appearance-none shadow-sm cursor-pointer">
                                 <option value="NUEVO">✨ NUEVO</option>
-                                <option value="USADO">🔄 USADO / SEMI</option>
-                                <option value="GENERICO">📦 GENÉRICO</option>
+                                <option value="USADO">🔄 USADO</option>
+                                <option value="GENERICO">📦 GENERICO</option>
+                                <option value="ORIGINAL">📦 ORIGINAL</option>
                             </select>
                             <div className="absolute inset-y-0 right-0 flex items-center px-3 pointer-events-none text-gray-500">
                                 <svg className="w-4 h-4 fill-current" viewBox="0 0 20 20"><path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" fillRule="evenodd"></path></svg>
@@ -575,14 +576,14 @@ function ProductForm({ productToEdit, onSave, onClose }) {
                  </div>
 
                  <div className="bg-green-50/50 p-6 rounded-2xl border border-green-100 shadow-sm grid grid-cols-1 md:grid-cols-3 gap-6">
-                    {/* PVP (EL IMPORTANTE) */}
+                    {/* PVP (EL IMPORTANTE - AHORA ES P1) */}
                     <div className="relative group">
                         <label className="block text-xs font-bold text-green-700 uppercase mb-1.5 ml-1">Precio Público (PVP)</label>
                         <div className="relative">
                             <span className="absolute left-4 top-1/2 -translate-y-1/2 text-green-600 font-bold text-lg">$</span>
                             <input 
-                                type="number" step="0.01" name="price_3" 
-                                value={product.price_3 === 0 ? "" : product.price_3} 
+                                type="number" step="0.01" name="price_1" 
+                                value={product.price_1 === 0 ? "" : product.price_1} 
                                 onChange={handleChange} 
                                 className="w-full pl-8 pr-4 py-3 bg-white border border-green-300 rounded-xl focus:ring-4 focus:ring-green-100 focus:border-green-500 outline-none font-bold text-2xl text-green-800 placeholder-green-200/50 shadow-sm transition-all" 
                                 placeholder="0.00" 
@@ -606,13 +607,13 @@ function ProductForm({ productToEdit, onSave, onClose }) {
                                 </div>
                             </div>
                             <div>
-                                <label className="block text-xs font-bold text-blue-500 uppercase mb-1.5 ml-1">DISTRIBUIDOR</label>
+                                <label className="block text-xs font-bold text-blue-500 uppercase mb-1.5 ml-1">PRECIO DISTRIBUIDOR</label>
                                 <div className="relative">
                                     <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">$</span>
                                     <input 
-                                        type="number" step="0.01" name="price_1" 
-                                        value={product.price_1 === 0 ? "" : product.price_1} 
-                                        onChange={handleChange} 
+                                        type="number" step="0.01" name="price_3" 
+                                        value={product.price_3 === 0 ? "" : product.price_3} 
+                                        onChange={handleChange}
                                         className="w-full pl-8 pr-4 py-3 bg-white border border-blue-200 rounded-xl focus:ring-2 focus:ring-blue-100 outline-none text-blue-800 font-semibold placeholder-gray-300 transition-all shadow-sm" 
                                         placeholder="0.00" 
                                     />

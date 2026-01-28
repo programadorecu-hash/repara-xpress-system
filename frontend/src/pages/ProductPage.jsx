@@ -399,7 +399,7 @@ function ProductPage() {
                   className="py-3 px-4 text-right font-semibold cursor-pointer hover:text-blue-600 hover:bg-blue-50 transition-colors"
                   title="Click para ver detalles"
                 >
-                  ${product.price_3.toFixed(2)}
+                  ${product.price_1.toFixed(2)}
                 </td>
                 {isLoggedIn && (
                   <td className="py-3 px-4 text-center space-x-4">

@@ -97,19 +97,53 @@ function ExcelImportModal({ onClose, onSuccess }) {
           )}
 
           {step === 1 && (
-            <div className="text-center space-y-8 py-8">
-              <div className="space-y-2">
+            <div className="space-y-8 py-4">
+              
+              {/* --- ZONA DE GUÍA DE FORMATO (ESTILO PROFESIONAL) --- */}
+              <div className="bg-gray-50 border border-gray-200 p-5 rounded-xl text-sm text-gray-600 shadow-sm">
+                <h4 className="font-bold text-gray-800 mb-3 border-b border-gray-200 pb-2">
+                   📋 REGLAS PARA LA IMPORTACIÓN
+                </h4>
+                <ul className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-2">
+                  <li className="flex gap-2 items-start">
+                    <span className="text-blue-500 font-bold">·</span> 
+                    <span>Mantener los encabezados de la plantilla.</span>
+                  </li>
+                  <li className="flex gap-2 items-start">
+                    <span className="text-blue-500 font-bold">·</span> 
+                    <span>No usar fórmulas ni insertar imágenes.</span>
+                  </li>
+                  <li className="flex gap-2 items-start">
+                    <span className="text-blue-500 font-bold">·</span> 
+                    <span>Usar <strong>punto (.)</strong> para decimales (Ej: 10.50).</span>
+                  </li>
+                  <li className="flex gap-2 items-start">
+                    <span className="text-blue-500 font-bold">·</span> 
+                    <span>Campos Clave: Tipo, Marca y Modelo.</span>
+                  </li>
+                  <li className="flex gap-2 items-start">
+                    <span className="text-blue-500 font-bold">·</span> 
+                    <span>Evitar símbolos especiales (@, #, *).</span>
+                  </li>
+                  <li className="flex gap-2 items-start">
+                    <span className="text-blue-500 font-bold">·</span> 
+                    <span>Condición: Nuevo, Usado, Genérico, Original.</span>
+                  </li>
+                </ul>
+              </div>
+
+              <div className="text-center space-y-2">
                 <h3 className="text-lg font-semibold">1. Descarga la Plantilla Oficial</h3>
-                <p className="text-gray-500">Usa este archivo para llenar tus datos correctamente.</p>
+                <p className="text-gray-500">Contiene ejemplos reales para guiarte.</p>
                 <button 
                   onClick={handleDownloadTemplate}
-                  className="px-6 py-2 bg-blue-50 text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-100 font-semibold transition"
+                  className="px-6 py-2 bg-blue-50 text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-100 font-semibold transition flex items-center gap-2 mx-auto"
                 >
-                  📥 Descargar Plantilla Excel
+                  <FaFileExcel /> Descargar Plantilla con Ejemplos
                 </button>
               </div>
 
-              <div className="border-t pt-8 space-y-4">
+              <div className="border-t pt-8 space-y-4 text-center">
                 <h3 className="text-lg font-semibold">2. Sube tu Archivo Completo</h3>
                 
                 <div 
