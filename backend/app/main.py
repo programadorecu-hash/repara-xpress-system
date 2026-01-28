@@ -4,6 +4,7 @@ from fastapi import FastAPI, Depends, HTTPException, status, Form
 from fastapi.security import OAuth2PasswordRequestForm
 from typing import List
 from sqlalchemy.orm import Session
+from pydantic import BaseModel
 
 from fastapi import File, UploadFile
 
@@ -91,7 +92,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
 from . import pdf_utils
 
-from . import models, schemas, crud, security
+from . import models, schemas, crud, security, import_service
 from .database import get_db
 
 app = FastAPI(title="API de Inventarios de Repara Xpress")
@@ -609,6 +610,200 @@ def export_inventory_excel(
 
     return StreamingResponse(output, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers=headers)
 # --- FIN EXPORTAR EXCEL ---
+
+# ===================================================================
+# --- ASPIRADORA DE EXCEL (IMPORTACIÓN MASIVA) ---
+# ===================================================================
+
+# 1. Definimos los "carritos" para recibir los datos confirmados desde el Frontend
+class ImportItem(BaseModel):
+    sku: str
+    name: str
+    description: str | None = None
+    
+    # --- NUEVOS CAMPOS DEL ADN DEL PRODUCTO ---
+    product_type: str
+    brand: str
+    model: str
+    color: str | None = None
+    compatibility: str | None = None
+    condition: str | None = None
+    # ------------------------------------------
+
+    price_1: float # PVP
+    price_2: float # Descuento
+    price_3: float # Web
+    average_cost: float
+    quantity: int
+    category: str | None = None
+    action_to_take: str # "CREATE", "UPDATE", "SKIP"
+
+class BulkImportRequest(BaseModel):
+    items: List[ImportItem]
+
+# 2. Endpoint: Descargar Plantilla
+@app.get("/products/template/excel")
+def download_inventory_template(
+    current_user: models.User = Depends(security.get_current_user)
+):
+    """
+    Descarga la hoja vacía (Plantilla) para que el cliente la llene.
+    """
+    columns = list(import_service.EXPECTED_COLUMNS.keys())
+    df = pd.DataFrame(columns=columns)
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df.to_excel(writer, index=False, sheet_name="Plantilla Carga")
+    output.seek(0)
+    
+    headers = {'Content-Disposition': 'attachment; filename="Plantilla_Productos.xlsx"'}
+    return StreamingResponse(output, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers=headers)
+
+# 3. Endpoint: Subir Excel (Vista Previa)
+@app.post("/products/import/excel")
+async def upload_inventory_excel(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(security.get_current_user)
+):
+    """
+    Analiza el Excel y devuelve qué productos son nuevos y cuáles repetidos.
+    """
+    if not file.filename.endswith(('.xlsx', '.xls')):
+        raise HTTPException(status_code=400, detail="Solo se permiten archivos Excel (.xlsx)")
+        
+    contents = await file.read()
+    result = import_service.process_excel_file(contents, db, current_user.company_id)
+    
+    if result["status"] == "error":
+        raise HTTPException(status_code=400, detail=result["message"])
+        
+    return result
+
+# 4. Endpoint: Confirmar y Guardar (El botón "Procesar")
+@app.post("/products/import/confirm")
+def confirm_batch_import(
+    request: BulkImportRequest,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(security.get_current_user)
+):
+    """
+    Recibe la lista aprobada por el usuario y ejecuta los cambios en la BD.
+    """
+    if not current_user.company_id:
+        raise HTTPException(status_code=400, detail="Usuario sin empresa.")
+
+    processed_count = 0
+    updated_count = 0
+    
+    # Pre-cargar categorías para no buscar 1000 veces
+    # Mapa: { "NOMBRE_CATEGORIA": category_id }
+    existing_cats = db.query(models.Category).filter(models.Category.company_id == current_user.company_id).all()
+    cat_map = {c.name.upper(): c.id for c in existing_cats}
+
+    # Ubicación para el stock inicial (Bodega de la empresa)
+    # Por defecto buscamos la primera bodega disponible
+    bodegas = crud.get_bodegas(db, current_user.company_id)
+    target_location_id = bodegas[0].id if bodegas else None
+    
+    if not target_location_id:
+        # Si no hay bodegas, intentamos con la sucursal del admin (no ideal, pero fallback)
+        locs = crud.get_locations(db, current_user.company_id)
+        if locs: target_location_id = locs[0].id
+
+    for item in request.items:
+        if item.action_to_take == "SKIP":
+            continue
+
+        # 1. Resolver Categoría
+        cat_id = None
+        if item.category:
+            cat_name_upper = item.category.strip().upper()
+            if cat_name_upper in cat_map:
+                cat_id = cat_map[cat_name_upper]
+            else:
+                # Crear categoría nueva al vuelo
+                new_cat = models.Category(name=item.category.strip(), company_id=current_user.company_id)
+                db.add(new_cat)
+                db.flush() # Para obtener ID
+                cat_id = new_cat.id
+                cat_map[cat_name_upper] = cat_id # Actualizar mapa
+
+        # 2. Procesar Producto
+        # 2. Procesar Producto
+        if item.action_to_take == "CREATE":
+            # Crear producto
+            new_prod = models.Product(
+                sku=item.sku,
+                name=item.name,
+                description=item.description,
+                
+                # --- GUARDAMOS EL ADN ---
+                product_type=item.product_type,
+                brand=item.brand,
+                model=item.model,
+                color=item.color,
+                compatibility=item.compatibility,
+                condition=item.condition,
+                # ------------------------
+
+                price_1=item.price_1,
+                price_2=item.price_2,
+                price_3=item.price_3,
+                average_cost=item.average_cost,
+                category_id=cat_id,
+                company_id=current_user.company_id,
+                is_active=True
+            )
+            db.add(new_prod)
+            db.flush() # ID necesario para stock
+            
+            # Stock Inicial
+            if item.quantity > 0 and target_location_id:
+                # Creamos movimiento de carga inicial
+                crud.create_inventory_movement(db, schemas.InventoryMovementCreate(
+                    product_id=new_prod.id,
+                    location_id=target_location_id,
+                    quantity_change=item.quantity,
+                    movement_type="CARGA_INICIAL_EXCEL",
+                    reference_id="IMPORT",
+                    pin="" # Bypass del pin porque lo llamamos directo
+                ), user_id=current_user.id)
+                
+            processed_count += 1
+
+        elif item.action_to_take == "UPDATE":
+            # Buscar y actualizar
+            prod = db.query(models.Product).filter(
+                models.Product.sku == item.sku, 
+                models.Product.company_id == current_user.company_id
+            ).first()
+            
+            if prod:
+                prod.name = item.name
+                prod.description = item.description
+                
+                # --- ACTUALIZAMOS EL ADN ---
+                prod.product_type = item.product_type
+                prod.brand = item.brand
+                prod.model = item.model
+                prod.color = item.color
+                prod.compatibility = item.compatibility
+                prod.condition = item.condition
+                # ---------------------------
+
+                prod.price_1 = item.price_1
+                prod.price_2 = item.price_2
+                prod.price_3 = item.price_3
+                prod.average_cost = item.average_cost
+                if cat_id: prod.category_id = cat_id
+                
+                # NOTA: En actualización masiva NO tocamos el stock para no descuadrar inventarios reales.
+                # Solo actualizamos la ficha técnica del producto.
+                updated_count += 1
+
+    db.commit()
+    return {"message": f"Proceso completado. Creados: {processed_count}, Actualizados: {updated_count}"}
 
 @limiter.limit("10/minute")  # Subidas acotadas para evitar abuso/picos
 @app.post("/products/{product_id}/upload-image/", response_model=schemas.Product)

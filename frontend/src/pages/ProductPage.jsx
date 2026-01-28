@@ -5,6 +5,7 @@ import { AuthContext } from "../context/AuthContext.jsx";
 import ProductDetails from "../components/ProductDetails.jsx";
 import ProductForm from "../components/ProductForm.jsx";
 import InventoryAdjustmentForm from "../components/InventoryAdjustmentForm.jsx";
+import ExcelImportModal from "../components/ExcelImportModal.jsx";
 
 function ProductPage() {
   const [products, setProducts] = useState([]);
@@ -15,6 +16,7 @@ function ProductPage() {
   const [productToEdit, setProductToEdit] = useState(null);
   const [isAdjustmentFormOpen, setIsAdjustmentFormOpen] = useState(false);
   const [productForAdjustment, setProductForAdjustment] = useState(null);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const { user } = useContext(AuthContext);
 
   // --- ESTADO DEL BUSCADOR ---
@@ -258,15 +260,26 @@ function ProductPage() {
             )}
 
             {canManageProducts && (
-            <button
-                onClick={() => {
-                setProductToEdit(null);
-                setIsFormOpen(true);
-                }}
-                className="bg-accent text-white font-bold py-2 px-4 rounded-lg hover:bg-teal-600"
-            >
-                + Nuevo Producto
-            </button>
+              <>
+                {/* BOTÓN IMPORTAR EXCEL */}
+                <button
+                    onClick={() => setIsImportModalOpen(true)}
+                    className="bg-green-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-700 flex items-center gap-2"
+                    title="Carga Masiva"
+                >
+                    <FaFileExcel /> Importar
+                </button>
+
+                <button
+                    onClick={() => {
+                    setProductToEdit(null);
+                    setIsFormOpen(true);
+                    }}
+                    className="bg-accent text-white font-bold py-2 px-4 rounded-lg hover:bg-teal-600"
+                >
+                    + Nuevo Producto
+                </button>
+              </>
             )}
         </div>
       </div>
@@ -511,6 +524,16 @@ function ProductPage() {
                 </div>
             </div>
         </div>
+      )}
+
+      {/* MODAL DE IMPORTACIÓN */}
+      {isImportModalOpen && (
+        <ExcelImportModal
+          onClose={() => setIsImportModalOpen(false)}
+          onSuccess={() => {
+            fetchProducts(); // Recargar la lista al terminar
+          }}
+        />
       )}
     </div>
   );
