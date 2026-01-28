@@ -25,7 +25,7 @@ def seed_data():
         logger.info("🚀 Preparando el sistema para el gran lanzamiento...")
 
         # ========== SECCIÓN: TU EMPRESA REAL ==========
-        main_company = db.query(Company).filter_by(name="Repara Xpress").first()
+        main_company = db.query(Company).filter_by(name="ReparaSoft®").first()
         if not main_company:
             main_company = Company(
                 name="Repara Xpress",
