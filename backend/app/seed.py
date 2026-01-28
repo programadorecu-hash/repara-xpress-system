@@ -8,96 +8,83 @@ from app.security import get_password_hash
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# --- CONFIGURACIÓN DE TU PRIMER ACCESO ---
-ADMIN_EMAIL = "programador.ecu@gmail.com" # <--- CAMBIA ESTO POR TU CORREO REAL
-ADMIN_PASSWORD = "NoOlvido4734*.1"     # <--- CAMBIA ESTO POR UNA CLAVE REAL
-ADMIN_PIN = "4734"                     # <--- TU PIN DE SEGURIDAD
+# --- 1. CONFIGURACIÓN DE TU ACCESO REAL (DUEÑO) ---
+ADMIN_EMAIL = "programador.ecu@gmail.com" 
+ADMIN_PASSWORD = "NoOlvido4734*.1"     # <--- PON TU CLAVE REAL AQUÍ
+ADMIN_PIN = "4734"                     # <--- PON TU PIN REAL AQUÍ
+
+# --- 2. CONFIGURACIÓN DE LA EMPRESA DEMO ---
+DEMO_NAME = "DEMOSTRACIÓN"
+DEMO_EMAIL = "demo"           # <--- USA ESTE CORREO PARA ENTRAR A LA DEMO
+DEMO_PASS = "demo"
+DEMO_PIN = "1234"
 
 def seed_data():
     db = SessionLocal()
     try:
-        logger.info("🚀 Iniciando mudanza de datos para el lanzamiento...")
+        logger.info("🚀 Preparando el sistema para el gran lanzamiento...")
 
-        # 1. CREAR LA EMPRESA (El Edificio)
+        # ========== SECCIÓN: TU EMPRESA REAL ==========
         main_company = db.query(Company).filter_by(name="Repara Xpress").first()
         if not main_company:
             main_company = Company(
                 name="Repara Xpress",
-                plan_type="ANNUAL", # Plan Pro para el dueño
+                plan_type="ANNUAL",
                 is_active=True,
-                modules={"pos": True, "inventory": True, "work_orders": True, "expenses": True} # Todos los poderes
+                modules={"pos": True, "inventory": True, "work_orders": True, "expenses": True}
             )
             db.add(main_company)
-            db.flush() # Para obtener el ID de la empresa
+            db.flush()
             
-            # Crear configuración visual de la empresa
-            settings = CompanySettings(
-                company_id=main_company.id,
-                name="Repara Xpress Matriz",
-                ruc="1799999999001",
-                footer_message="¡Gracias por confiar en el mejor servicio técnico!"
-            )
-            db.add(settings)
-            logger.info("✅ Empresa 'Repara Xpress' creada.")
-
-        # 2. CREAR TU USUARIO SUPER ADMIN (El Dueño)
-        admin_user = db.query(User).filter_by(email=ADMIN_EMAIL).first()
-        if not admin_user:
-            admin_user = User(
+            db.add(CompanySettings(company_id=main_company.id, name="Repara Xpress Matriz"))
+            
+            # Aquí te creamos directamente como SUPER ADMIN
+            db.add(User(
                 email=ADMIN_EMAIL,
                 hashed_password=get_password_hash(ADMIN_PASSWORD),
                 hashed_pin=get_password_hash(ADMIN_PIN),
                 full_name="Erick Administrador",
-                role="super_admin", # Rango máximo
+                role="super_admin", # 👑 Rol máximo otorgado
                 is_active=True,
-                company_id=main_company.id # Vinculado a tu empresa
-            )
-            db.add(admin_user)
-            logger.info(f"✅ Super Admin creado: {ADMIN_EMAIL}")
-
-        # 3. CREAR SUCURSAL Y BODEGA DEMO
-        demo_location = db.query(Location).filter_by(name="Sucursal Nueva Aurora", company_id=main_company.id).first()
-        if not demo_location:
-            # La Oficina
-            new_aurora = Location(
-                name="Sucursal Nueva Aurora",
-                address="Quito, Sector Sur",
                 company_id=main_company.id
+            ))
+            logger.info(f"✅ Empresa Real y Super Admin ({ADMIN_EMAIL}) listos.")
+
+        # ========== SECCIÓN: EMPRESA DEMO ==========
+        demo_company = db.query(Company).filter_by(name=DEMO_NAME).first()
+        if not demo_company:
+            demo_company = Company(
+                name=DEMO_NAME,
+                plan_type="FREE",
+                is_active=True,
+                modules={"pos": True, "inventory": True, "work_orders": True, "expenses": True}
             )
-            db.add(new_aurora)
+            db.add(demo_company)
             db.flush()
 
-            # La Bodega de esa oficina
-            bodega_aurora = Location(
-                name="Bodega Matriz",
-                parent_id=new_aurora.id,
-                company_id=main_company.id
-            )
-            db.add(bodega_aurora)
-            
-            # Crear una Caja de Efectivo para empezar a vender
-            main_cash = CashAccount(
-                name="Caja Principal Efectivo",
-                account_type="EFECTIVO",
-                location_id=new_aurora.id,
-                company_id=main_company.id
-            )
-            db.add(main_cash)
-            
-            # Crear categorías de gastos básicas
-            basic_expense = ExpenseCategory(
-                name="Repuestos y Suministros",
-                company_id=main_company.id
-            )
-            db.add(basic_expense)
+            db.add(CompanySettings(company_id=demo_company.id, name=DEMO_NAME))
 
-            logger.info("✅ Sucursal, Bodega, Caja y Categorías iniciales creadas.")
+            # Usuario demo/demo
+            db.add(User(
+                email=DEMO_EMAIL,
+                hashed_password=get_password_hash(DEMO_PASS),
+                hashed_pin=get_password_hash(DEMO_PIN),
+                full_name="Usuario de Demostración",
+                role="admin", # Admin de su propia parcela
+                is_active=True,
+                company_id=demo_company.id
+            ))
+
+            # Crear un local básico para que la demo funcione
+            loc_demo = Location(name="Sucursal de Pruebas", company_id=demo_company.id)
+            db.add(loc_demo)
+            logger.info(f"✅ Empresa DEMO y usuario '{DEMO_EMAIL}' listos.")
 
         db.commit()
-        logger.info("✨ ¡PROCESO COMPLETADO! Ya puedes borrar la base de datos con confianza.")
+        logger.info("✨ ¡PROCESO EXITOSO! El sistema está configurado y listo para despegar.")
 
     except Exception as e:
-        logger.error(f"❌ Error en la semilla: {e}")
+        logger.error(f"❌ Error al sembrar datos: {e}")
         db.rollback()
     finally:
         db.close()
